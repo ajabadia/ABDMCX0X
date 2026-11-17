@@ -125,12 +125,12 @@ int main()
         engine.prepare(44100.0);
         McxHardwareBridge bridge(engine);
 
-        // Outbound DR-5 CC & Drum Key NRPNs
-        bridge.setHardwareTarget(McxHardwareTarget::BossDr5);
+        // Outbound DR-5 CC & Drum Key NRPNs via aseptic profile
+        bridge.setProfile(McxHardwareDeviceProfile::makeRolandGs());
         auto& drumPart = engine.part(9); // Track 10
         drumPart.routeMode = McxPartRouteMode::ExternalMidi;
         drumPart.midiChannel = 10;
-        drumPart.isDrumPart = true;
+        drumPart.isDrumKit = true;
         drumPart.drumRemapper.slotToExternal[36] = 36; // Kick
 
         // Route Track Volume (CC7), Pan (CC10), Reverb (CC91)
@@ -169,6 +169,7 @@ int main()
               "Inbound DR-5 GS Drum Pitch NRPN (CC99=24, CC98=36, CC6=70) updates slot pitch to +3.0 semitones");
 
         // Inbound MIDI Parsing: Roland MC-303 sends Cutoff NRPN CC99=1, CC98=32, CC6=64 on Ch 1
+        bridge.setProfile(McxHardwareDeviceProfile::makeRolandMc());
         auto& synthPart = engine.part(0);
         synthPart.midiChannel = 1;
         const std::uint8_t mc303Inbound[] = { 0xB0, 99, 1, 0xB0, 98, 32, 0xB0, 6, 64 };
@@ -184,7 +185,7 @@ int main()
         McxHardwareBridge brA(engA);
         engA.setMachinePersona(McxMachinePersona::RolandMc303);
         engA.setOutputCharacter(McxOutputCharacter::Rompler16Bit);
-        brA.setHardwareTarget(McxHardwareTarget::BossDr5);
+        brA.setProfile(McxHardwareDeviceProfile::makeRolandGs());
         brA.getLatencyCompensator().setLatencyMs(4.5f);
 
         auto& p0 = engA.part(0);

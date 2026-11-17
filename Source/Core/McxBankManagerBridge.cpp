@@ -35,7 +35,7 @@ std::string McxBankManagerBridge::serializeToJson(const McxEngine& engine,
     ss << "  \"name\": \"" << presetName << "\",\n";
     ss << "  \"persona\": " << static_cast<int>(engine.getPersonaSpec().persona) << ",\n";
     ss << "  \"dacCharacter\": " << static_cast<int>(engine.getOutputCharacter()) << ",\n";
-    ss << "  \"hardwareTarget\": " << static_cast<int>(bridge.getHardwareTarget()) << ",\n";
+    ss << "  \"hardwareProfile\": \"" << bridge.getProfile().profileId << "\",\n";
     ss << "  \"latencyMs\": " << floatToStr(bridge.getLatencyCompensator().getLatencyMs()) << ",\n";
     ss << "  \"parts\": [\n";
 
@@ -46,7 +46,7 @@ std::string McxBankManagerBridge::serializeToJson(const McxEngine& engine,
         ss << "      \"index\": " << pIdx << ",\n";
         ss << "      \"midiChannel\": " << static_cast<int>(p.midiChannel) << ",\n";
         ss << "      \"routeMode\": " << static_cast<int>(p.routeMode) << ",\n";
-        ss << "      \"isDrumPart\": " << (p.isDrumPart ? "true" : "false") << ",\n";
+        ss << "      \"isDrumKit\": " << (p.isDrumKit ? "true" : "false") << ",\n";
         ss << "      \"structureMode\": " << static_cast<int>(p.structureMode) << ",\n";
         ss << "      \"vectorX\": " << floatToStr(p.vectorX) << ",\n";
         ss << "      \"vectorY\": " << floatToStr(p.vectorY) << ",\n";
@@ -98,6 +98,17 @@ int findInt(const std::string& str, const std::string& key, float defaultVal)
 {
     return static_cast<int>(findFloat(str, key, defaultVal));
 }
+
+std::string findString(const std::string& str, const std::string& key, const std::string& defaultVal)
+{
+    const std::string needle = "\"" + key + "\": \"";
+    auto pos = str.find(needle);
+    if (pos == std::string::npos)
+        return defaultVal;
+    pos += needle.length();
+    auto endQuote = str.find('"', pos);
+    return (endQuote != std::string::npos) ? str.substr(pos, endQuote - pos) : defaultVal;
+}
 } // namespace
 
 bool McxBankManagerBridge::deserializeFromJson(McxEngine& engine,
@@ -113,8 +124,8 @@ bool McxBankManagerBridge::deserializeFromJson(McxEngine& engine,
     const int dac = findInt(jsonString, "dacCharacter", 0);
     engine.setOutputCharacter(static_cast<McxOutputCharacter>(dac));
 
-    const int hwTarget = findInt(jsonString, "hardwareTarget", 1);
-    bridge.setHardwareTarget(static_cast<McxHardwareTarget>(hwTarget));
+    const std::string hwProfile = findString(jsonString, "hardwareProfile", "roland_gs");
+    bridge.setProfileById(hwProfile);
 
     const float latency = findFloat(jsonString, "latencyMs", 0.0f);
     bridge.getLatencyCompensator().setLatencyMs(latency);
@@ -134,6 +145,7 @@ bool McxBankManagerBridge::deserializeFromJson(McxEngine& engine,
         auto& p = engine.part(static_cast<std::size_t>(pIdx));
         p.midiChannel = static_cast<std::uint8_t>(findInt(partChunk, "midiChannel", p.midiChannel));
         p.routeMode = static_cast<McxPartRouteMode>(findInt(partChunk, "routeMode", static_cast<int>(p.routeMode)));
+        p.isDrumKit = (partChunk.find("\"isDrumKit\": true") != std::string::npos);
         p.structureMode = static_cast<McxStructureMode>(findInt(partChunk, "structureMode", 0));
         p.vectorX = findFloat(partChunk, "vectorX", 0.0f);
         p.vectorY = findFloat(partChunk, "vectorY", 0.0f);

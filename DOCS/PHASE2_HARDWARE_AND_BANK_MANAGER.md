@@ -28,20 +28,23 @@ Dispositivos objetivo inmediatos:
 - Permite retrasar la señal de audio interna generada por `McxEngine` para alinearla al microsegundo con la latencia física de transmisión MIDI y respuesta de firmware de las máquinas hardware externas (evitando desfases y filtrado peine en modo `BothAB`).
 - Bypass automático de coste cero cuando `delaySamples_ == 0`.
 
-### 2.3. Puente Hardware Bidireccional (`Source/Hardware/McxHardwareBridge.h/.cpp`)
+### 2.3. Puente Hardware Bidireccional Aséptico (`Source/Hardware/McxHardwareBridge.h/.cpp`)
+- **Arquitectura Aséptica Basada en Contratos (`McxHardwareDeviceProfile`)**:
+  - **Cero código hardcodeado por sintetizador**: La lógica del puente no bifurca por modelos de hardware (`no if(target == BossDr5)` ni enums rígidos).
+  - Toda la asignación de mensajes se rige por un perfil de datos (`McxHardwareDeviceProfile` y `McxParamControlMap`), configurable mediante presets o contratos JSON (`boss_dr5.json`, `roland_mc303.json`, etc.).
+  - Cada control (volumen, panorama, filtros, envolventes, afinación y niveles de drum kit) define su método (`MidiCc` o `Nrpn7Bit`), número de controlador, subnúmero y rango min/max.
 - **Enrutamiento por Parte (`McxPartRouteMode`)**:
   - `Internal`: Dispara voces y altera parámetros del motor DSP `McxEngine`.
   - `ExternalMidi`: Omite asignación de voces internas y encola notas/controladores en `McxMidiOutQueue`.
   - `BothAB`: Dispara voces internas y encola simultáneamente eventos MIDI salientes.
 - **Transmisión de Parámetros Salientes**:
   - Orden estricto Roland para NRPN: `CC99 (MSB) -> CC98 (LSB) -> CC6 (Data Entry MSB)`.
-  - Formateo directo de Drum Key NRPN según `boss_dr5.json` (Pitch Coarse 24, Level 26, Pan 28, Reverb 29).
-  - Formateo de TVF Cutoff/Resonance y TVA Attack/Decay/Release para `roland_mc303.json`.
+  - Mapeo dinámico de Drum Key NRPN según el perfil activo (Pitch Coarse, Level, Pan, Reverb).
+  - Mapeo dinámico de TVF Cutoff/Resonancia y envolventes según el método configurado en el perfil (CC o NRPN).
 - **Recepción y Parsing MIDI Entrante**:
   - Máquina de estados para NRPN entrantes sobre CC99, CC98 y CC6.
-  - Al completar un NRPN en canal de batería, actualiza inmediatamente el pitch, volumen, panorama o envío de reverb del drum slot correspondiente a la nota en `McxEngine`.
-  - Al recibir NRPN de sintetizador, actualiza los filtros o envolventes de los parciales de la parte.
-  - Soporte de CCs estándar: 7 (Volumen), 10 (Panorama), 91 (Reverb), 74 (Brillo/Cutoff), 71 (Resonancia).
+  - Al completar un NRPN en canal de batería (`isDrumKit`), consulta el perfil activo y actualiza inmediatamente el pitch, volumen, panorama o envío de reverb del drum slot en `McxEngine`.
+  - Al recibir NRPN o CC de sintetizador, actualiza los filtros o envolventes de los parciales según el mapa del perfil.
 - **Despacho Seguro**:
   - Función `drainOutboundQueue(MidiByteSink)` para vaciar la cola hacia el backend hardware sin esperas activas ni bloqueos.
 

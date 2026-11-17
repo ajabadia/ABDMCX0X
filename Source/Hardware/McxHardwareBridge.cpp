@@ -6,31 +6,79 @@
 namespace abdmcx
 {
 
+McxHardwareDeviceProfile McxHardwareDeviceProfile::makeGeneric() noexcept
+{
+    McxHardwareDeviceProfile p;
+    p.profileId = "generic_midi";
+    p.displayName = "Generic MIDI Device";
+    p.sysexDeviceId = 0x10;
+    p.sysexModelId = 0x00;
+    p.useRolandChecksum = false;
+    return p;
+}
+
+McxHardwareDeviceProfile McxHardwareDeviceProfile::makeRolandGs() noexcept
+{
+    McxHardwareDeviceProfile p;
+    p.profileId = "roland_gs";
+    p.displayName = "Roland GS / Boss DR-5";
+    p.sysexDeviceId = 0x10;
+    p.sysexModelId = 0x42;
+    p.useRolandChecksum = true;
+
+    p.partVolume = { McxControlMethod::MidiCc, 7, 0, 0.0f, 127.0f, 100.0f };
+    p.partPan = { McxControlMethod::MidiCc, 10, 0, 0.0f, 127.0f, 64.0f };
+    p.partReverb = { McxControlMethod::MidiCc, 91, 0, 0.0f, 127.0f, 0.0f };
+    p.partChorus = { McxControlMethod::MidiCc, 93, 0, 0.0f, 127.0f, 0.0f };
+
+    p.filterCutoff = { McxControlMethod::MidiCc, 74, 0, 0.0f, 127.0f, 64.0f };
+    p.filterResonance = { McxControlMethod::MidiCc, 71, 0, 0.0f, 127.0f, 64.0f };
+
+    p.drumPitchNrpnMsb = 24;
+    p.drumLevelNrpnMsb = 26;
+    p.drumPanNrpnMsb = 28;
+    p.drumReverbNrpnMsb = 29;
+    p.drumChorusNrpnMsb = 30;
+    return p;
+}
+
+McxHardwareDeviceProfile McxHardwareDeviceProfile::makeRolandMc() noexcept
+{
+    McxHardwareDeviceProfile p = makeRolandGs();
+    p.profileId = "roland_mc";
+    p.displayName = "Roland MC Groovebox";
+    p.sysexDeviceId = 0x10;
+    p.sysexModelId = 0x03;
+
+    // MC-303 TVF NRPNs (Cutoff 1/32, Res 1/33 in range 14..114)
+    p.filterCutoff = { McxControlMethod::Nrpn7Bit, 1, 32, 14.0f, 114.0f, 64.0f };
+    p.filterResonance = { McxControlMethod::Nrpn7Bit, 1, 33, 14.0f, 114.0f, 64.0f };
+
+    // MC-303 TVA Env NRPNs (Attack 1/99, Decay 1/100, Release 1/102 in range 14..114)
+    p.envAttack = { McxControlMethod::Nrpn7Bit, 1, 99, 14.0f, 114.0f, 64.0f };
+    p.envDecay = { McxControlMethod::Nrpn7Bit, 1, 100, 14.0f, 114.0f, 64.0f };
+    p.envRelease = { McxControlMethod::Nrpn7Bit, 1, 102, 14.0f, 114.0f, 64.0f };
+    return p;
+}
+
 McxHardwareBridge::McxHardwareBridge(McxEngine& engine) noexcept
-    : engine_(engine)
+    : engine_(engine), profile_(McxHardwareDeviceProfile::makeRolandGs())
 {
-    setHardwareTarget(McxHardwareTarget::BossDr5);
 }
 
-void McxHardwareBridge::setHardwareTarget(McxHardwareTarget target) noexcept
+void McxHardwareBridge::setProfile(const McxHardwareDeviceProfile& profile) noexcept
 {
-    target_ = target;
+    profile_ = profile;
 }
 
-void McxHardwareBridge::setHardwareTargetById(const std::string& profileId) noexcept
+void McxHardwareBridge::setProfileById(const std::string& profileId) noexcept
 {
-    if (profileId == "boss_dr5" || profileId == "boss-dr5" || profileId == "dr5")
-        target_ = McxHardwareTarget::BossDr5;
-    else if (profileId == "roland_mc303" || profileId == "roland-mc303" || profileId == "mc303")
-        target_ = McxHardwareTarget::RolandMc303;
-    else if (profileId == "roland_d2" || profileId == "roland-d2" || profileId == "d2")
-        target_ = McxHardwareTarget::RolandD2;
-    else if (profileId == "roland_sc55" || profileId == "roland-sc55" || profileId == "sc55")
-        target_ = McxHardwareTarget::RolandSc55;
-    else if (profileId == "abd_mcx0x" || profileId == "abdmcx0x")
-        target_ = McxHardwareTarget::AbdMcx0x;
+    if (profileId.find("mc303") != std::string::npos || profileId.find("mc") != std::string::npos)
+        setProfile(McxHardwareDeviceProfile::makeRolandMc());
+    else if (profileId.find("dr5") != std::string::npos || profileId.find("gs") != std::string::npos || profileId.find("sc55") != std::string::npos)
+        setProfile(McxHardwareDeviceProfile::makeRolandGs());
     else
-        target_ = McxHardwareTarget::GenericMidi;
+        setProfile(McxHardwareDeviceProfile::makeGeneric());
 }
 
 void McxHardwareBridge::sendCc(std::uint8_t ch1to16, std::uint8_t cc, std::uint8_t val) noexcept
@@ -52,6 +100,20 @@ void McxHardwareBridge::sendNrpn(std::uint8_t ch1to16, std::uint8_t msb, std::ui
     sendCc(ch1to16, 6, val);
 }
 
+void McxHardwareBridge::dispatchMappedControl(std::uint8_t ch, const McxParamControlMap& map, float normalizedVal) noexcept
+{
+    if (map.method == McxControlMethod::None)
+        return;
+
+    const float scaled = map.minVal + std::clamp(normalizedVal, 0.0f, 1.0f) * (map.maxVal - map.minVal);
+    const std::uint8_t byteVal = static_cast<std::uint8_t>(std::clamp(static_cast<int>(std::round(scaled)), 0, 127));
+
+    if (map.method == McxControlMethod::MidiCc)
+        sendCc(ch, map.controlNumber, byteVal);
+    else if (map.method == McxControlMethod::Nrpn7Bit)
+        sendNrpn(ch, map.controlNumber, map.subNumber, byteVal);
+}
+
 void McxHardwareBridge::routeNoteOn(std::uint8_t partIdx, std::uint8_t note, float velocity, std::int32_t sampleOffset) noexcept
 {
     if (partIdx >= 16)
@@ -65,7 +127,7 @@ void McxHardwareBridge::routeNoteOn(std::uint8_t partIdx, std::uint8_t note, flo
 
     if (HardwareMirrorRouter::routesToExternal(p.routeMode))
     {
-        const std::uint8_t outNote = p.isDrumPart ? p.drumRemapper.slotToExternal[note & 0x7Fu] : note;
+        const std::uint8_t outNote = p.isDrumKit ? p.drumRemapper.slotToExternal[note & 0x7Fu] : note;
         const std::uint8_t ch = static_cast<std::uint8_t>(std::clamp<int>(p.midiChannel, 1, 16) - 1);
         const std::uint8_t velByte = static_cast<std::uint8_t>(std::clamp<int>(static_cast<int>(velocity * 127.0f), 1, 127));
 
@@ -92,7 +154,7 @@ void McxHardwareBridge::routeNoteOff(std::uint8_t partIdx, std::uint8_t note, st
 
     if (HardwareMirrorRouter::routesToExternal(p.routeMode))
     {
-        const std::uint8_t outNote = p.isDrumPart ? p.drumRemapper.slotToExternal[note & 0x7Fu] : note;
+        const std::uint8_t outNote = p.isDrumKit ? p.drumRemapper.slotToExternal[note & 0x7Fu] : note;
         const std::uint8_t ch = static_cast<std::uint8_t>(std::clamp<int>(p.midiChannel, 1, 16) - 1);
 
         McxMidiOutMessage msg {};
@@ -115,10 +177,7 @@ void McxHardwareBridge::routePartVolume(std::uint8_t partIdx, float normalizedLe
         p.level = std::clamp(normalizedLevel, 0.0f, 1.0f);
 
     if (HardwareMirrorRouter::routesToExternal(p.routeMode))
-    {
-        const std::uint8_t val = static_cast<std::uint8_t>(std::clamp(static_cast<int>(normalizedLevel * 127.0f), 0, 127));
-        sendCc(p.midiChannel, 7, val);
-    }
+        dispatchMappedControl(p.midiChannel, profile_.partVolume, normalizedLevel);
 }
 
 void McxHardwareBridge::routePartPan(std::uint8_t partIdx, float normalizedPan) noexcept
@@ -131,10 +190,7 @@ void McxHardwareBridge::routePartPan(std::uint8_t partIdx, float normalizedPan) 
         p.pan = std::clamp(normalizedPan, -1.0f, 1.0f);
 
     if (HardwareMirrorRouter::routesToExternal(p.routeMode))
-    {
-        const int midiPan = static_cast<int>(std::round((normalizedPan + 1.0f) * 63.5f));
-        sendCc(p.midiChannel, 10, static_cast<std::uint8_t>(std::clamp(midiPan, 0, 127)));
-    }
+        dispatchMappedControl(p.midiChannel, profile_.partPan, (normalizedPan + 1.0f) * 0.5f);
 }
 
 void McxHardwareBridge::routePartReverb(std::uint8_t partIdx, float normalizedReverb) noexcept
@@ -147,10 +203,7 @@ void McxHardwareBridge::routePartReverb(std::uint8_t partIdx, float normalizedRe
         p.reverbSend = std::clamp(normalizedReverb, 0.0f, 1.0f);
 
     if (HardwareMirrorRouter::routesToExternal(p.routeMode))
-    {
-        const std::uint8_t val = static_cast<std::uint8_t>(std::clamp(static_cast<int>(normalizedReverb * 127.0f), 0, 127));
-        sendCc(p.midiChannel, 91, val);
-    }
+        dispatchMappedControl(p.midiChannel, profile_.partReverb, normalizedReverb);
 }
 
 void McxHardwareBridge::routeDrumSlotParam(std::uint8_t partIdx,
@@ -181,13 +234,11 @@ void McxHardwareBridge::routeDrumSlotParam(std::uint8_t partIdx,
         const std::uint8_t drumKey = p.drumRemapper.slotToExternal[slotIdx];
         const std::uint8_t valByte = static_cast<std::uint8_t>(std::clamp(static_cast<int>(normalizedValue * 127.0f), 0, 127));
 
-        // GS Drum Kit NRPNs:
-        // Pitch: MSB=24 (0x18), Level: MSB=26 (0x1A), Pan: MSB=28 (0x1C), Reverb: MSB=29 (0x1D)
-        std::uint8_t nrpnMsb = 26;
-        if (paramKind == 0) nrpnMsb = 24;
-        else if (paramKind == 1) nrpnMsb = 26;
-        else if (paramKind == 2) nrpnMsb = 28;
-        else if (paramKind == 3) nrpnMsb = 29;
+        std::uint8_t nrpnMsb = profile_.drumLevelNrpnMsb;
+        if (paramKind == 0) nrpnMsb = profile_.drumPitchNrpnMsb;
+        else if (paramKind == 1) nrpnMsb = profile_.drumLevelNrpnMsb;
+        else if (paramKind == 2) nrpnMsb = profile_.drumPanNrpnMsb;
+        else if (paramKind == 3) nrpnMsb = profile_.drumReverbNrpnMsb;
 
         sendNrpn(p.midiChannel, nrpnMsb, drumKey, valByte);
     }
@@ -210,19 +261,8 @@ void McxHardwareBridge::routeSynthFilter(std::uint8_t partIdx, float cutoffNorm,
 
     if (HardwareMirrorRouter::routesToExternal(p.routeMode))
     {
-        if (target_ == McxHardwareTarget::RolandMc303 || target_ == McxHardwareTarget::RolandD2)
-        {
-            // MC-303 TVF NRPN MSB=1, LSB=32 (Cutoff 14..114), LSB=33 (Resonance 14..114)
-            const std::uint8_t cVal = static_cast<std::uint8_t>(std::clamp(14 + static_cast<int>(cutoffNorm * 100.0f), 14, 114));
-            const std::uint8_t rVal = static_cast<std::uint8_t>(std::clamp(14 + static_cast<int>(resNorm * 100.0f), 14, 114));
-            sendNrpn(p.midiChannel, 1, 32, cVal);
-            sendNrpn(p.midiChannel, 1, 33, rVal);
-        }
-        else
-        {
-            sendCc(p.midiChannel, 74, static_cast<std::uint8_t>(std::clamp(static_cast<int>(cutoffNorm * 127.0f), 0, 127)));
-            sendCc(p.midiChannel, 71, static_cast<std::uint8_t>(std::clamp(static_cast<int>(resNorm * 127.0f), 0, 127)));
-        }
+        dispatchMappedControl(p.midiChannel, profile_.filterCutoff, cutoffNorm);
+        dispatchMappedControl(p.midiChannel, profile_.filterResonance, resNorm);
     }
 }
 
@@ -244,22 +284,9 @@ void McxHardwareBridge::routeSynthEnvelope(std::uint8_t partIdx, float aNorm, fl
 
     if (HardwareMirrorRouter::routesToExternal(p.routeMode))
     {
-        if (target_ == McxHardwareTarget::RolandMc303 || target_ == McxHardwareTarget::RolandD2)
-        {
-            // MC-303 TVA Envelope NRPN MSB=1: LSB=99 (Attack), LSB=100 (Decay), LSB=102 (Release)
-            const std::uint8_t aVal = static_cast<std::uint8_t>(std::clamp(14 + static_cast<int>(aNorm * 100.0f), 14, 114));
-            const std::uint8_t dVal = static_cast<std::uint8_t>(std::clamp(14 + static_cast<int>(dNorm * 100.0f), 14, 114));
-            const std::uint8_t rVal = static_cast<std::uint8_t>(std::clamp(14 + static_cast<int>(rNorm * 100.0f), 14, 114));
-            sendNrpn(p.midiChannel, 1, 99, aVal);
-            sendNrpn(p.midiChannel, 1, 100, dVal);
-            sendNrpn(p.midiChannel, 1, 102, rVal);
-        }
-        else
-        {
-            sendCc(p.midiChannel, 73, static_cast<std::uint8_t>(std::clamp(static_cast<int>(aNorm * 127.0f), 0, 127)));
-            sendCc(p.midiChannel, 75, static_cast<std::uint8_t>(std::clamp(static_cast<int>(dNorm * 127.0f), 0, 127)));
-            sendCc(p.midiChannel, 72, static_cast<std::uint8_t>(std::clamp(static_cast<int>(rNorm * 127.0f), 0, 127)));
-        }
+        dispatchMappedControl(p.midiChannel, profile_.envAttack, aNorm);
+        dispatchMappedControl(p.midiChannel, profile_.envDecay, dNorm);
+        dispatchMappedControl(p.midiChannel, profile_.envRelease, rNorm);
     }
 }
 
@@ -286,35 +313,34 @@ bool McxHardwareBridge::processInboundCc(std::uint8_t ch1to16, std::uint8_t cc, 
         }
     }
 
-    // Direct CC handling
     for (int i = 0; i < 16; ++i)
     {
         auto& p = engine_.part(static_cast<std::size_t>(i));
         if (p.midiChannel == ch1to16)
         {
-            if (cc == 7)
+            if (profile_.partVolume.method == McxControlMethod::MidiCc && profile_.partVolume.controlNumber == cc)
             {
                 p.level = static_cast<float>(val) / 127.0f;
                 return true;
             }
-            if (cc == 10)
+            if (profile_.partPan.method == McxControlMethod::MidiCc && profile_.partPan.controlNumber == cc)
             {
                 p.pan = (static_cast<float>(val) - 64.0f) / 64.0f;
                 return true;
             }
-            if (cc == 91)
+            if (profile_.partReverb.method == McxControlMethod::MidiCc && profile_.partReverb.controlNumber == cc)
             {
                 p.reverbSend = static_cast<float>(val) / 127.0f;
                 return true;
             }
-            if (cc == 74)
+            if (profile_.filterCutoff.method == McxControlMethod::MidiCc && profile_.filterCutoff.controlNumber == cc)
             {
                 const float cutNorm = static_cast<float>(val) / 127.0f;
                 for (auto& part : p.partials)
                     part.cutoffHz = 20.0f * std::pow(1000.0f, cutNorm);
                 return true;
             }
-            if (cc == 71)
+            if (profile_.filterResonance.method == McxControlMethod::MidiCc && profile_.filterResonance.controlNumber == cc)
             {
                 const float resNorm = static_cast<float>(val) / 127.0f;
                 for (auto& part : p.partials)
@@ -328,60 +354,43 @@ bool McxHardwareBridge::processInboundCc(std::uint8_t ch1to16, std::uint8_t cc, 
 
 void McxHardwareBridge::handleCompleteInboundNrpn(int channel, int msb, int lsb, int dataVal) noexcept
 {
-    // Find target part
     for (int i = 0; i < 16; ++i)
     {
         auto& p = engine_.part(static_cast<std::size_t>(i));
         if (p.midiChannel == channel)
         {
-            if (p.isDrumPart)
+            if (p.isDrumKit)
             {
-                // GS Drum Key NRPN: LSB is drum note
                 const std::uint8_t drumNote = static_cast<std::uint8_t>(lsb & 0x7F);
                 const std::uint8_t slotIdx = p.drumRemapper.inputToSlot[drumNote];
                 auto& slot = p.drumSlots[slotIdx];
 
-                if (msb == 24) // Drum Pitch Coarse (center 64)
+                if (msb == profile_.drumPitchNrpnMsb)
                     slot.pitchKeyTrack = (static_cast<float>(dataVal - 64)) * 0.5f;
-                else if (msb == 26) // Drum TVA Level
+                else if (msb == profile_.drumLevelNrpnMsb)
                     slot.level = static_cast<float>(dataVal) / 127.0f;
-                else if (msb == 28) // Drum Panpot (center 64)
+                else if (msb == profile_.drumPanNrpnMsb)
                     slot.pan = static_cast<float>(dataVal - 64) / 64.0f;
-                else if (msb == 29) // Drum Reverb Send
+                else if (msb == profile_.drumReverbNrpnMsb)
                     slot.reverbSend = static_cast<float>(dataVal) / 127.0f;
             }
             else
             {
-                // Roland MC-303 Synth NRPNs
-                if (msb == 1 && lsb == 32) // Cutoff (14..114)
+                if (profile_.filterCutoff.method == McxControlMethod::Nrpn7Bit &&
+                    profile_.filterCutoff.controlNumber == msb && profile_.filterCutoff.subNumber == lsb)
                 {
-                    const float norm = std::clamp((static_cast<float>(dataVal - 14)) / 100.0f, 0.0f, 1.0f);
+                    const float norm = std::clamp((static_cast<float>(dataVal) - profile_.filterCutoff.minVal) /
+                                                  (profile_.filterCutoff.maxVal - profile_.filterCutoff.minVal), 0.0f, 1.0f);
                     for (auto& part : p.partials)
                         part.cutoffHz = 20.0f * std::pow(1000.0f, norm);
                 }
-                else if (msb == 1 && lsb == 33) // Resonance (14..114)
+                else if (profile_.filterResonance.method == McxControlMethod::Nrpn7Bit &&
+                         profile_.filterResonance.controlNumber == msb && profile_.filterResonance.subNumber == lsb)
                 {
-                    const float norm = std::clamp((static_cast<float>(dataVal - 14)) / 100.0f, 0.0f, 1.0f);
+                    const float norm = std::clamp((static_cast<float>(dataVal) - profile_.filterResonance.minVal) /
+                                                  (profile_.filterResonance.maxVal - profile_.filterResonance.minVal), 0.0f, 1.0f);
                     for (auto& part : p.partials)
                         part.resonance = norm;
-                }
-                else if (msb == 1 && lsb == 99) // Amp Attack
-                {
-                    const float norm = std::clamp((static_cast<float>(dataVal - 14)) / 100.0f, 0.0f, 1.0f);
-                    for (auto& part : p.partials)
-                        part.ampEnv.t1Ms = 1.0f + norm * 2000.0f;
-                }
-                else if (msb == 1 && lsb == 100) // Amp Decay
-                {
-                    const float norm = std::clamp((static_cast<float>(dataVal - 14)) / 100.0f, 0.0f, 1.0f);
-                    for (auto& part : p.partials)
-                        part.ampEnv.t2Ms = 5.0f + norm * 3000.0f;
-                }
-                else if (msb == 1 && lsb == 102) // Amp Release
-                {
-                    const float norm = std::clamp((static_cast<float>(dataVal - 14)) / 100.0f, 0.0f, 1.0f);
-                    for (auto& part : p.partials)
-                        part.ampEnv.t4Ms = 5.0f + norm * 4000.0f;
                 }
             }
         }
@@ -390,10 +399,10 @@ void McxHardwareBridge::handleCompleteInboundNrpn(int channel, int msb, int lsb,
 
 void McxHardwareBridge::processInboundMidiByte(std::uint8_t b) noexcept
 {
-    if (b >= 0xF8) // Realtime clock/active-sensing bypass
+    if (b >= 0xF8)
         return;
 
-    if (b >= 0x80) // Status byte
+    if (b >= 0x80)
     {
         runningStatus_ = b;
         msgPendingLen_ = 0;
@@ -408,12 +417,12 @@ void McxHardwareBridge::processInboundMidiByte(std::uint8_t b) noexcept
     const std::uint8_t msgType = runningStatus_ & 0xF0;
     const std::uint8_t ch = static_cast<std::uint8_t>((runningStatus_ & 0x0F) + 1);
 
-    if (msgType == 0xB0 && msgPendingLen_ == 2) // Control Change
+    if (msgType == 0xB0 && msgPendingLen_ == 2)
     {
         processInboundCc(ch, msgPending_[0], msgPending_[1]);
         msgPendingLen_ = 0;
     }
-    else if ((msgType == 0x90 || msgType == 0x80) && msgPendingLen_ == 2) // Note On / Off
+    else if ((msgType == 0x90 || msgType == 0x80) && msgPendingLen_ == 2)
     {
         if (msgType == 0x90 && msgPending_[1] > 0)
         {

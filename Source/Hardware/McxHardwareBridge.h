@@ -14,14 +14,59 @@
 namespace abdmcx
 {
 
-enum class McxHardwareTarget : std::uint8_t
+enum class McxControlMethod : std::uint8_t
 {
-    GenericMidi = 0,
-    BossDr5,
-    RolandMc303,
-    RolandD2,
-    RolandSc55,
-    AbdMcx0x
+    None = 0,
+    MidiCc,
+    Nrpn7Bit,
+    Nrpn14Bit
+};
+
+struct McxParamControlMap
+{
+    McxControlMethod method { McxControlMethod::None };
+    std::uint8_t controlNumber { 0 }; // CC number or NRPN MSB
+    std::uint8_t subNumber { 0 };     // NRPN LSB
+    float minVal { 0.0f };
+    float maxVal { 127.0f };
+    float defaultVal { 64.0f };
+};
+
+/**
+ * @brief Data-driven hardware profile parsed from contract JSON.
+ * Avoids any hardcoded synth-specific branching in engine or bridge logic.
+ */
+struct McxHardwareDeviceProfile
+{
+    std::string profileId { "generic_midi" };
+    std::string displayName { "Generic MIDI Device" };
+    std::uint8_t sysexDeviceId { 0x10 };
+    std::uint8_t sysexModelId { 0x42 };
+    bool useRolandChecksum { true };
+
+    // Standard Multitimbral Part Controls
+    McxParamControlMap partVolume { McxControlMethod::MidiCc, 7, 0, 0.0f, 127.0f, 100.0f };
+    McxParamControlMap partPan { McxControlMethod::MidiCc, 10, 0, 0.0f, 127.0f, 64.0f };
+    McxParamControlMap partReverb { McxControlMethod::MidiCc, 91, 0, 0.0f, 127.0f, 0.0f };
+    McxParamControlMap partChorus { McxControlMethod::MidiCc, 93, 0, 0.0f, 127.0f, 0.0f };
+
+    // Tone Synth Controls
+    McxParamControlMap filterCutoff { McxControlMethod::MidiCc, 74, 0, 0.0f, 127.0f, 64.0f };
+    McxParamControlMap filterResonance { McxControlMethod::MidiCc, 71, 0, 0.0f, 127.0f, 64.0f };
+    McxParamControlMap envAttack { McxControlMethod::MidiCc, 73, 0, 0.0f, 127.0f, 64.0f };
+    McxParamControlMap envDecay { McxControlMethod::MidiCc, 75, 0, 0.0f, 127.0f, 64.0f };
+    McxParamControlMap envRelease { McxControlMethod::MidiCc, 72, 0, 0.0f, 127.0f, 64.0f };
+
+    // Per-Key Drum NRPNs (GS standard or contract-defined)
+    std::uint8_t drumPitchNrpnMsb { 24 };
+    std::uint8_t drumLevelNrpnMsb { 26 };
+    std::uint8_t drumPanNrpnMsb { 28 };
+    std::uint8_t drumReverbNrpnMsb { 29 };
+    std::uint8_t drumChorusNrpnMsb { 30 };
+
+    static McxHardwareDeviceProfile makeGeneric() noexcept;
+    static McxHardwareDeviceProfile makeRolandGs() noexcept;
+    static McxHardwareDeviceProfile makeRolandMc() noexcept;
 };
 
 struct McxInboundNrpnState
@@ -38,9 +83,8 @@ struct McxInboundNrpnState
 };
 
 /**
- * @brief Live Hardware A/B Bridge and MIDI controller router.
- * Connects McxEngine to external hardware (Boss DR-5, Roland MC-303, etc.)
- * with sample-accurate latency compensation, strict Roland NRPN order, and bidirectional sync.
+ * @brief Aseptic Live Hardware A/B Bridge and MIDI controller router.
+ * Operates purely on McxHardwareDeviceProfile contracts without hardcoded synth models.
  */
 class McxHardwareBridge
 {
@@ -50,10 +94,10 @@ public:
     explicit McxHardwareBridge(McxEngine& engine) noexcept;
     ~McxHardwareBridge() = default;
 
-    // --- Target Profile Selection ---
-    void setHardwareTarget(McxHardwareTarget target) noexcept;
-    [[nodiscard]] McxHardwareTarget getHardwareTarget() const noexcept { return target_; }
-    void setHardwareTargetById(const std::string& profileId) noexcept;
+    // --- Contract & Profile ---
+    void setProfile(const McxHardwareDeviceProfile& profile) noexcept;
+    [[nodiscard]] const McxHardwareDeviceProfile& getProfile() const noexcept { return profile_; }
+    void setProfileById(const std::string& profileId) noexcept;
 
     // --- Outbound Queue & Latency Compensation ---
     [[nodiscard]] McxMidiOutQueue<1024>& getOutboundQueue() noexcept { return outQueue_; }
@@ -89,15 +133,15 @@ public:
 private:
     void sendCc(std::uint8_t ch1to16, std::uint8_t cc, std::uint8_t val) noexcept;
     void sendNrpn(std::uint8_t ch1to16, std::uint8_t msb, std::uint8_t lsb, std::uint8_t val) noexcept;
+    void dispatchMappedControl(std::uint8_t ch, const McxParamControlMap& map, float normalizedVal) noexcept;
     void handleCompleteInboundNrpn(int channel, int msb, int lsb, int dataVal) noexcept;
 
     McxEngine& engine_;
-    McxHardwareTarget target_ { McxHardwareTarget::BossDr5 };
+    McxHardwareDeviceProfile profile_;
     McxMidiOutQueue<1024> outQueue_;
     McxLatencyCompensator latencyComp_;
     McxInboundNrpnState nrpnState_;
 
-    // Inbound running status parsing state
     std::uint8_t runningStatus_ { 0 };
     std::uint8_t msgPending_[3] {};
     std::size_t msgPendingLen_ { 0 };

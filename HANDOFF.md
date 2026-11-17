@@ -47,3 +47,10 @@
    - Suite de pruebas unitarias `Tests/McxPhase2Tests.cpp` integrada en `CMakeLists.txt` y `DspSources.cmake`.
    - **El usuario ejecutará manualmente** la compilación CMake, `McxPhase2Tests.exe` y los commits a GitHub.
 2. En **Fase 3**: montar la WebUI con `ABDShared/Code/MidiKeyboard` (`@abdsynths/midi-keyb` + alta en `host-strip-height.test.js`) y `ABDShared/Code/Scope` (`ABDShared::ScopeCore` + `createScope()`) para inspección SPSC en vivo e instrumentación A/B hardware vs DSP en host JUCE 9 + WebView2 estático + WASM.
+3. **Componentes clave de UI y Síntesis identificados para Fases 3–5:**
+   - **Deck Desplegable "Nuke / Groove Deck"** (de `ABDAxionikVS`): panel deslizante superior que no cubre el teclado inferior, con 4 perillas Macro rápidas, Vector Stick 2D y selector de voces.
+   - **Ruedas con barras LED & Aftertouch** (de `ABDEep`): Pitch Bend con LED verde/rosa y lectura numérica exacta de semitonos (`+2.00` / `-2.00`), Mod Wheel azul (`0..100%`) y Aftertouch naranja.
+   - **Hilera de LEDs de Voces Activas** (de `ABDEep`): monitorización en tiempo real del uso y robo de voces (16, 28, 64 voces).
+   - **Motor de Acordes (Chord Memory & Poly Chord)** (de `ABDEep`): captura interactiva y presets armónicos expandidos con *strum delay*.
+   - **Vitaminado Virtual Analógico (VA) desde `_Deprecados/ABDSharedCode/DspCore`:** reactivar `DspMoogLadder.h`, `DspJunoVCF.h` + `DspJunoHPF.h`, `DspKorgMS20.h` y `OscVcoCa72.h` para que los 4 parciales estéreo puedan operar tanto como rompler PCM des-horneado como sintetizador analógico virtual con modulación cruzada.
+   - **Módulos a migrar a `ABDShared` previamente:** `StickPlayer.h` (`ABDAxionikVS`), `LCDMenuFormatter.h` (`ABDMS2000`) y `VelocitySensitivityCurves.h` (`ABDCZ101`).

@@ -49,6 +49,10 @@
   - **Superficie de Control & Navegación:** `SynthNavBar`, `FitStage` (escalado responsivo en DAW), `MidiLearn` (`midiLearnDrawer.js`, `midiLearnStore.js`) y `ABDBankManager`.
   - **Pantalla & Serigrafía Industrial:** `LcdDisplay` (`LcdMachine.js`, `LcdPanel.js`, `SevenSegmentDisplay.js`) + fuentes `SevenSegment.ttf` y `REGISTER.TTF` de `ABDShared/Assets/fonts/`.
   - **Marcas & Logos Vectoriales:** `Assets/brands/` (`boss-logo.svg`, `roland-logo.svg`, `yamaha-logo.svg`, `korg-logo.svg`).
+  - **Deck Superior Desplegable "Nuke / Groove Deck":** (Inspirado en `ABDAxionikVS/WebUI/src/ui/NukeDrawer.ts`): panel deslizante que no cubre el teclado inferior, con 4 perillas Macro de actuación rápida (Cutoff, Reso, Env Speed, Vector Mix), Stick Vectorial 2D central, selector de voces activas y controles físicos de interpretación (Aftertouch, Mod Wheel Depth, Expression).
+  - **Ruedas con LEDs & Indicadores Bipolares:** (Inspirado en `ABDEep/WebUI/js/script_controllers_wheels.js` y `Components/Controls/Wheel.js`): Pitch Bend bipolar con barra LED verde/rosa y lectura numérica exacta de semitonos (`+2.00` / `-2.00`), Mod Wheel azul (`0..100%`) y Aftertouch naranja.
+  - **Monitor de Voces con Hilera de LEDs:** (Inspirado en `ABDEep/WebUI/js/script_controllers_leds.js`): hilera de LEDs para monitorizar en tiempo real el encendido, liberación y robo (*voice stealing*) de las voces según la Machine Persona activa (16, 28 o 64 voces).
+  - **Motor de Acordes Expandido (Chord Memory & Poly Chord):** (Inspirado en `ABDEep/WebUI/js/keyboard_chord_memory.js`): captura en vivo del acorde pulsado en keybed + 12 acordes prefijados, vitaminado con rasgueo (*strum delay* en ms) y cuantización armónica.
   - **Controles Rítmicos y Morphing:** `stepMatrix.js` (matriz de 16 pasos estilo groovebox) y `trajectoryStick2D.js` / `xypad.js` (Morphing Vectorial 4-Partial).
   - **Envolventes & Medición:** `EnvelopeCurve.js` / `multiStageShaperPad.js` (curvas 4T4L interactivas) y `rotaryLedKnob.js` / `ledLadder.js` / `PeakLED.js` / `vuMeter.js`.
   - **Monitor A/B Hardware:** `LiveSysExInspector.js` (inspección de tráfico MIDI/NRPN en vivo contra hardware físico).
@@ -64,6 +68,9 @@
 ### Fase 4 y 5: Ecosistema `ABDNeuModMakr` / `ABDAudioLab`, Telemetría A/B y Formato Propietario Expandido
 - [ ] Exportador/Empaquetador en `ABDNeuModMakr`: ingesta offline de samples externos y exportación al **formato propietario expandido `abd_structured_rompler.schema.json`** (`.abdrompler.json` / `.abdbank`).
 - [ ] **Consumo Exclusivo del Formato Propietario en `ABDMCX0X`:** El sintetizador consume únicamente cápsulas y bancos en formato `abd_structured_rompler` (ondas des-horneadas, parámetros multirítmicos de 4 parciales estéreo y drum racks), con validación de integridad SHA256 y bounds de memoria.
+- [ ] **Vitaminado Virtual Analógico (VA) rescatado de `_Deprecados/ABDSharedCode/DspCore`:**
+  - Migración a `ABDShared::DspCore` de filtros analógicos para enriquecer los parciales: `DspMoogLadder.h` (Ladder VCF 24dB), `DspJunoVCF.h` + `DspJunoHPF.h` (Roland IR3109 VCF + OTA HPF) y `DspKorgMS20.h` (Sallen-Key ácido).
+  - Oscilador analógico enriquecido: `OscVcoCa72.h` (núcleo analógico CEM3340 Curtis) con modulación PWM y modulación cruzada Sync/RingMod entre parciales híbridos (muestra + analógico virtual).
 - [ ] Ajuste de curvas `LutDSP` reales tras medir físicamente **MC-303**, **D-2**, **SC-55** y **Rave-O-Lution 309** con `ABDAudioLab`.
 - [ ] **Comparación Objetiva A/B en Vivo:** Conectar `ABDShared/Code/AudioComparator` (`AudioABComparator.cpp`, `AudioABVerdictEngine.cpp`) para alineación temporal automática y correlación espectral objetiva entre el motor DSP interno y el hardware físico (**Boss DR-5**, **MC-303**).
 - [ ] Verificación final de `ABDShared/Code/MidiKeyboard` (`host-strip-height.test.js` con entrada `ABDMCX0X`) y `ABDShared/Code/Scope` (comparación visual A/B en vivo Hardware vs DSP + comprobación en WebView2 real).

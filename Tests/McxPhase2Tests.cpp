@@ -96,6 +96,7 @@ int main()
               "External Note-On matches Channel 2 (0x91) and scaled velocity 114");
 
         // Part 2: Both A/B
+        engine.part(2).enabled = true;
         engine.part(2).routeMode = McxPartRouteMode::BothAB;
         engine.part(2).midiChannel = 3;
         const int voicesBeforeBoth = engine.getActiveVoiceCount();

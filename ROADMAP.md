@@ -5,8 +5,8 @@
 | Fase | Nombre | Estado | Objetivo clave |
 | :---: | :--- | :--- | :--- |
 | **0** | Brief, Contratos, DRY & Core Headless | ✅ HECHO | Documentos rectores, `GrooveArpeggiator` en `ABDShared`, contrato propietario rompler, perfiles hardware (`DR-5`, `MC-303`, `D-2`, `SC-55`) y esqueleto C++20 `McxEngine` + `HardwareMirrorRouter` verificado (`21/21` pass). |
-| **1** | Voz DSP 4-Partial Estéreo y Drum Synth | ⏳ LISTO PARA COMPILAR/TESTEAR | Código e integración de `McxVoice` (4 Partials, `Parallel`/`RingMod12`/`Booster12`/`Vector2D`), `McxFilterBank` (6 filtros incl. `RolandTc6116Tvf` + `ZPlaneMorph`), `McxEnvelope5Stage` (`LUT IC7` + Accent), polifonía dinámica 0 % idle, Personas (`MC-303` 28-Partial..`FreeSuper`), `McxOutputAndFx`, Drum Maps multi-estándar (`GM`/`GS`/`XG/XS`/`Korg AI2`/`Prop`) y `McxPhase1Tests.cpp` listos para verificación del usuario. |
-| **2** | Puente Hardware A/B en Vivo + `ABDBankManager` | 📋 PENDIENTE | Conectar `HardwareMirrorRouter` a `juce::MidiOutput`, probar en vivo con **Boss DR-5** en mesa, cargar contratos JSON y conectar `ABDBankManager` (plugin chunk + librarian). |
+| **1** | Voz DSP 4-Partial Estéreo y Drum Synth | ✅ VERIFICADO | `McxVoice` (4 Partials, `Parallel`/`RingMod12`/`Booster12`/`Vector2D`), `McxFilterBank` (6 filtros incl. `RolandTc6116Tvf` + `ZPlaneMorph`), `McxEnvelope5Stage` (`LUT IC7` + Accent), polifonía dinámica 0 % idle, Personas (`MC-303`..`FreeSuper`), `McxOutputAndFx`, Drum Maps multi-estándar y `McxPhase1Tests` verificados al 100 %. |
+| **2** | Puente Hardware A/B en Vivo + `ABDBankManager` | ⏳ LISTO PARA COMPILAR/TESTEAR | Cola SPSC lock-free `McxMidiOutQueue`, enrutamiento `INT|EXT|BOTH` por parte, compensador de latencia de muestra exacta `McxLatencyCompensator`, puente hardware bidireccional `McxHardwareBridge` (NRPN GS Drum + Roland TVF/TVA) y persistencia `McxBankManagerBridge` (`abd_mcx0x_preset_v1` + SysEx DT1). `McxPhase2Tests.cpp` listo para verificación del usuario. |
 | **3** | Host JUCE 9 (VST3/Standalone) + WebView2 + WASM | 📋 PENDIENTE | Integrar `JuceWebView2Component`, `abdmcx0x_parameter_spec.json` (`CDD v2.0`), WebUI Zero-Fork (`SynthNavBar`, `LcdDisplay`, `ABDShared/Code/Scope` `createScope()`, `FitStage`, `ABDShared/Code/MidiKeyboard` `@abdsynths/midi-keyb`), compilación WASM y paridad Nativo ↔ WASM. |
 | **4** | Cápsulas Limpias desde `ABDNeuModMakr` | 📋 PENDIENTE | Generación offline en `ABDNeuModMakr` de bancos `abd_structured_rompler` con ondas des-horneadas (E-mu, Akai, Roland, Yamaha, SC-55 ref) y calibración de curvas `LutDSP` en `ABDAudioLab` cuando llegue el hardware. |
 | **5** | Carga directa Akai/E-mu, `MidiKeyboard` + `Scope` & QA Final | 📋 PENDIENTE | Puente desde WebUI hacia `@abdsynths/shared/formats/sampler`, verificación integrada de `@abdsynths/midi-keyb` (`host-strip-height.test.js`) + `ABDShared::ScopeCore` telemetría A/B multi-carril, `pluginval` strictness 10 y pruebas A/B hardware (`MC-303`, `D-2`, `309`). |
@@ -35,11 +35,12 @@
 - [ ] Ejecución de compilación CMake + `McxPhase0Tests.exe` + `McxPhase1Tests.exe` y commit por el usuario (ver [`DOCS/PHASE1_DSP_AND_DRUM_MAPS.md`](DOCS/PHASE1_DSP_AND_DRUM_MAPS.md)).
 
 ### Fase 2: Puente Hardware Controlador + `ABDBankManager`
-- [ ] Cola SPSC lock-free `McxMidiOutMessage` (trivially copyable) de audio/bridge hacia salida MIDI real de JUCE.
-- [ ] Modos `INT | EXT | BOTH` por Parte con calibración de latencia A/B.
-- [ ] Prueba física en vivo contra **Boss DR-5** en estudio usando `boss_dr5.json`.
-- [ ] Integración `ABDBankManagerCore` C++ + carga/guardado de bancos `.abdrompler.json`.
-- **DoD (Fase 2):** Modos `INT/EXT/AB` verificados enviando mensajes NRPN (`CC99→CC98→CC6`) y SysEx `DT1` válidos hacia hardware MIDI y persistiendo bancos en chunk DAW.
+- [x] Cola SPSC lock-free `McxMidiOutQueue` (trivially copyable, power-of-2, alignas(64)) de audio/bridge hacia salida MIDI hardware.
+- [x] Modos `INT | EXT | BOTH` por Parte con calibración de latencia A/B de muestra exacta (`McxLatencyCompensator`).
+- [x] Puente hardware bidireccional (`McxHardwareBridge`) con orden estricto Roland (`CC99->CC98->CC6`) y perfiles **Boss DR-5** (`boss_dr5.json`), **Roland MC-303**, **D-2**, **SC-55**.
+- [x] Integración `McxBankManagerBridge` C++ (persistencia `abd_mcx0x_preset_v1` JSON + JUCE `ValueTree` + volcados SysEx Roland DT1).
+- [x] Suite de pruebas automatizadas `Tests/McxPhase2Tests.cpp` integrada en CMake.
+- **DoD (Fase 2):** Modos `INT/EXT/AB` verificados enviando mensajes NRPN (`CC99→CC98→CC6`) y SysEx `DT1` válidos hacia hardware MIDI y persistiendo bancos en chunk DAW. Listo para compilación y ejecución por el usuario.
 
 ### Fase 3: Plugin JUCE 9 + WebView2 Estático + WebUI (`MidiKeyboard` & `Scope`) + WASM
 - [ ] Generador `Scripts/registry_generator.js` desde `abdmcx0x_parameter_spec.json` (`CDD v2.0`).

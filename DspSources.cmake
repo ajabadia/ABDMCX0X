@@ -10,4 +10,6 @@ set(MCX_CORE_DSP_SOURCES
     Source/DSP/Synth/McxVoice.cpp
     Source/DSP/FX/McxOutputAndFx.cpp
     Source/MIDI/HardwareMirrorRouter.cpp
+    Source/Hardware/McxHardwareBridge.cpp
+    Source/Core/McxBankManagerBridge.cpp
 )

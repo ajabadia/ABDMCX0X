@@ -59,6 +59,10 @@ add_executable(McxPhase1Tests Tests/McxPhase1Tests.cpp)
 target_link_libraries(McxPhase1Tests PRIVATE ABDMCX0X_Core)
 add_test(NAME McxPhase1Tests COMMAND McxPhase1Tests)
 
+add_executable(McxPhase2Tests Tests/McxPhase2Tests.cpp)
+target_link_libraries(McxPhase2Tests PRIVATE ABDMCX0X_Core)
+add_test(NAME McxPhase2Tests COMMAND McxPhase2Tests)
+
 # ==============================================================================
 # Full JUCE 9 + Windows WebView2 Static Linking Plugin Targets (Phase 3+)
 # ==============================================================================

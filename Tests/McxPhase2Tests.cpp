@@ -85,8 +85,9 @@ int main()
         // Part 1: External MIDI only
         engine.part(1).routeMode = McxPartRouteMode::ExternalMidi;
         engine.part(1).midiChannel = 2;
+        const int voicesBeforeExt = engine.getActiveVoiceCount();
         bridge.routeNoteOn(1, 62, 0.9f);
-        check(engine.getActiveVoiceCount() == 0 && bridge.getOutboundQueue().size() == 1,
+        check(engine.getActiveVoiceCount() == voicesBeforeExt && bridge.getOutboundQueue().size() == 1,
               "External mode bypasses voice allocation and queues outbound MIDI message");
 
         McxMidiOutMessage extMsg {};
@@ -97,8 +98,9 @@ int main()
         // Part 2: Both A/B
         engine.part(2).routeMode = McxPartRouteMode::BothAB;
         engine.part(2).midiChannel = 3;
+        const int voicesBeforeBoth = engine.getActiveVoiceCount();
         bridge.routeNoteOn(2, 64, 0.75f);
-        check(engine.getActiveVoiceCount() == 1 && bridge.getOutboundQueue().size() == 1,
+        check(engine.getActiveVoiceCount() == (voicesBeforeBoth + 1) && bridge.getOutboundQueue().size() == 1,
               "BothAB mode triggers internal voice AND pushes outbound MIDI message simultaneously");
     }
 
@@ -219,16 +221,16 @@ int main()
 
         // Roland SysEx DT1 generation test (Boss DR-5 Track Dump)
         const auto syx = McxBankManagerBridge::buildBossDr5TrackDump(0, 100, 64, 40, 0x10);
-        check(syx.size() == 11, "Boss DR-5 Track Dump generates exact 11-byte DT1 SysEx message");
+        check(syx.size() == 13, "Boss DR-5 Track Dump generates exact 13-byte DT1 SysEx message");
         check(syx[0] == 0xF0 && syx[1] == 0x41 && syx[2] == 0x10 && syx[3] == 0x42 && syx[4] == 0x12,
               "SysEx header contains Roland ID (0x41), Device 0x10, DR-5 Model ID (0x42), DT1 command (0x12)");
-        check(syx[10] == 0xF7, "SysEx ends with 0xF7 EOX terminator");
+        check(syx.back() == 0xF7, "SysEx ends with 0xF7 EOX terminator");
 
         // Verify checksum: address { 0x40, 0x00, 0x00 }, data { 100, 64, 40 }
         // sum = 0x40 + 0 + 0 + 100 + 64 + 40 = 64 + 204 = 268 = 0x10C
         // sum & 0x7F = 0x0C = 12
         // (0x80 - 12) & 0x7F = 116 = 0x74
-        check(syx[9] == 0x74, "Roland 7-bit checksum matches exact specification (0x74)");
+        check(syx[syx.size() - 2] == 0x74, "Roland 7-bit checksum matches exact specification (0x74)");
     }
 
     std::printf("\n=== Results: %d passed, %d failed ===\n", gPassed, gFailed);

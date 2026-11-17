@@ -45,15 +45,26 @@
 ### Fase 3: Plugin JUCE 9 + WebView2 Estático + WebUI (`MidiKeyboard` & `Scope`) + WASM
 - [ ] Generador `Scripts/registry_generator.js` desde `abdmcx0x_parameter_spec.json` (`CDD v2.0`).
 - [ ] `PluginProcessor` / `PluginEditor` con `JuceWebView2Component` aislado por PID (`WEBVIEW2_USER_DATA_FOLDER`), input bus opcional/desactivado y telemetría SPSC lock-free conectada a `ABDShared::ScopeCoreHeaders` / `ABDShared::ScopeCore` (`D:\desarrollos\ABDSynths\ABDShared\Code\Scope`).
-- [ ] WebUI en `Vanilla CSS` + componentes Zero-Fork de `ABDShared`:
-  - `SynthNavBar`, `LcdDisplay`, `FitStage`, `ABDBankManager`.
-  - **`D:\desarrollos\ABDSynths\ABDShared\Code\MidiKeyboard`** (`@abdsynths/midi-keyb` / `createKeyboard()`): teclado multitáctil con ruedas Pitch/Mod, Chord Memory, animaciones LED, disparo bidireccional hacia `McxEngine` + `HardwareMirrorRouter` (`INT | EXT | BOTH`), resaltado de las 128 teclas de Drum Kit y franja CSS con altura explícita registrada en `Code/MidiKeyboard/tests/host-strip-height.test.js`.
-  - **`D:\desarrollos\ABDSynths\ABDShared\Code\Scope`** (`@abdsynths/shared/scope` / `createScope()` + `ABDShared::ScopeWebAssets`): osciloscopio multirraíl, espectro FFT, espectrograma y `VuMeterRenderer` para auditar en vivo los 4 Partials Estéreo, el filtro activo y comparaciones A/B contra hardware externo (**Boss DR-5**).
+- [ ] Integración WebUI Zero-Fork con componentes y assets de `ABDShared`:
+  - **Superficie de Control & Navegación:** `SynthNavBar`, `FitStage` (escalado responsivo en DAW), `MidiLearn` (`midiLearnDrawer.js`, `midiLearnStore.js`) y `ABDBankManager`.
+  - **Pantalla & Serigrafía Industrial:** `LcdDisplay` (`LcdMachine.js`, `LcdPanel.js`, `SevenSegmentDisplay.js`) + fuentes `SevenSegment.ttf` y `REGISTER.TTF` de `ABDShared/Assets/fonts/`.
+  - **Marcas & Logos Vectoriales:** `Assets/brands/` (`boss-logo.svg`, `roland-logo.svg`, `yamaha-logo.svg`, `korg-logo.svg`).
+  - **Controles Rítmicos y Morphing:** `stepMatrix.js` (matriz de 16 pasos estilo groovebox) y `trajectoryStick2D.js` / `xypad.js` (Morphing Vectorial 4-Partial).
+  - **Envolventes & Medición:** `EnvelopeCurve.js` / `multiStageShaperPad.js` (curvas 4T4L interactivas) y `rotaryLedKnob.js` / `ledLadder.js` / `PeakLED.js` / `vuMeter.js`.
+  - **Monitor A/B Hardware:** `LiveSysExInspector.js` (inspección de tráfico MIDI/NRPN en vivo contra hardware físico).
+  - **Teclado Multitáctil:** `ABDShared/Code/MidiKeyboard` (`@abdsynths/midi-keyb` / `createKeyboard()`): teclado con ruedas Pitch/Mod, Chord Memory, animaciones LED, disparo bidireccional (`INT | EXT | BOTH`), resaltado de 128 teclas de Drum Kit y registro en `host-strip-height.test.js`.
+  - **Telemetría en Tiempo Real:** `ABDShared/Code/Scope` (`@abdsynths/shared/scope` / `createScope()` + `ABDShared::ScopeWebAssets`): osciloscopio multirraíl, FFT, espectrograma y `VuMeterRenderer`.
+- [ ] **Piezas a migrar a `ABDShared` antes de integrarlas en Fase 3:**
+  - Migrar `D:\desarrollos\ABDSynths\ABDAxionikVS\Source\DSP\StickPlayer.h` → `ABDShared/Code/SynthCore/StickPlayer.h` (motor determinista de reproducción de trayectorias vectoriales en tiempo real para Vector 2D).
+  - Migrar `D:\desarrollos\ABDSynths\ABDMS2000\Source\State\LCDMenuFormatter.h` → `ABDShared/Code/SynthCore/LcdMenuFormatter.h` (formateador de texto y páginas para pantallas alfanuméricas LCD 16x2 / 20x2).
+  - Migrar `D:\desarrollos\ABDSynths\ABDCZ101\Source\DSP\VelocitySensitivityCurves.h` → `ABDShared/Code/SynthCore/VelocitySensitivityCurves.h` (curvas de sensibilidad dinámica percusiva/pad/lead para Drum Rack y partes).
 - [ ] Compilación Emscripten `wasm/build_wasm.bat` compartiendo `DspSources.cmake` + verificación de paridad numérica Nativo ↔ WASM.
 - **DoD (Fase 3):** Compila `Standalone`, `VST3` y `WASM AudioWorklet` mediante `./build.bat`, arranca con HMR de Vite o bundle `BinaryData`, `MidiKeyboard` y `Scope` rinden sin errores de consola y la WebUI mueve todos los controles.
 
-### Fase 4 y 5: Ecosistema `ABDNeuModMakr` / `ABDAudioLab`, Telemetría A/B y Carga Directa Multi-Sampler
-- [ ] Exportador/Empaquetador `.abdrompler.json` en `ABDNeuModMakr` (cápsulas des-horneadas desde WAV/SF2/Akai/E-mu).
+### Fase 4 y 5: Ecosistema `ABDNeuModMakr` / `ABDAudioLab`, Telemetría A/B y Formato Propietario Expandido
+- [ ] Exportador/Empaquetador en `ABDNeuModMakr`: ingesta offline de samples externos y exportación al **formato propietario expandido `abd_structured_rompler.schema.json`** (`.abdrompler.json` / `.abdbank`).
+- [ ] **Consumo Exclusivo del Formato Propietario en `ABDMCX0X`:** El sintetizador consume únicamente cápsulas y bancos en formato `abd_structured_rompler` (ondas des-horneadas, parámetros multirítmicos de 4 parciales estéreo y drum racks), con validación de integridad SHA256 y bounds de memoria.
 - [ ] Ajuste de curvas `LutDSP` reales tras medir físicamente **MC-303**, **D-2**, **SC-55** y **Rave-O-Lution 309** con `ABDAudioLab`.
+- [ ] **Comparación Objetiva A/B en Vivo:** Conectar `ABDShared/Code/AudioComparator` (`AudioABComparator.cpp`, `AudioABVerdictEngine.cpp`) para alineación temporal automática y correlación espectral objetiva entre el motor DSP interno y el hardware físico (**Boss DR-5**, **MC-303**).
 - [ ] Verificación final de `ABDShared/Code/MidiKeyboard` (`host-strip-height.test.js` con entrada `ABDMCX0X`) y `ABDShared/Code/Scope` (comparación visual A/B en vivo Hardware vs DSP + comprobación en WebView2 real).
 - [ ] Validación `pluginval` strictness 10 sin fallos ni memory leaks.

@@ -1,0 +1,44 @@
+# ============================================================================
+# ABDMCX0X — .gitignore
+# ============================================================================
+
+# Build outputs
+build/
+build-*/
+build_headless/
+build_tests/
+out/
+wasm/build/
+wasm/build_wasm/
+WebUI/dist/
+
+# Dependencies & local subtrees
+node_modules/
+/JUCE/
+
+# Generated & synced assets (resolved from ABDShared / ABDBankManager)
+WebUI/src/wasm/
+WebUI/abdbank/
+WebUI/assets/
+
+# Logs, temp & OS
+logs/
+*.log
+*.tmp
+nul
+.vs/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+coverage/
+tmp/
+temp/
+.playwright-mcp/
+
+# Large user-imported soundbanks (AKAI / E-MU / Yamaha / Roland ISO)
+Banks/UserImports/
+*.sf2
+*.iso

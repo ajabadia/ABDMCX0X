@@ -1,0 +1,29 @@
+# Build outputs & binaries
+build/
+**/build/
+build-*/
+build_headless/
+build_tests/
+out/
+wasm/build/
+wasm/build_wasm/
+WebUI/dist/
+**/dist/
+
+# Dependencies
+node_modules/
+**/node_modules/
+.npm/
+package-lock.json
+
+# Caches & logs
+.tsbuildinfo
+**/*.js.map
+*.log
+**/*.log
+nul
+
+# Large user sampler imports
+Banks/UserImports/
+**/*.sf2
+**/*.iso

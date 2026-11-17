@@ -33,10 +33,25 @@ int main()
         McxEngine engine;
         engine.prepare(48000.0);
 
-        check(engine.part(0).enabled && !engine.part(0).isDrumKit, "Part 0 enabled as Melodic Synth");
-        check(engine.part(9).enabled && engine.part(9).isDrumKit && engine.part(9).midiChannel == 10,
+        check(engine.part(0).enabled && !engine.part(0).isDrumKit && engine.part(0).kind == McxPartKind::Chromatic,
+              "Part 0 enabled as Chromatic Synth");
+        check(engine.part(9).enabled && engine.part(9).isDrumKit && engine.part(9).kind == McxPartKind::DrumMap && engine.part(9).midiChannel == 10,
               "Part 9 enabled as Channel 10 Drum Kit");
-        check(!engine.part(1).enabled && !engine.part(15).enabled, "Unused parts default disabled (zero CPU)");
+        check(engine.part(1).enabled && engine.part(15).enabled && engine.getActiveVoiceCount() == 0,
+              "All 16 parts ready with zero idle voices (zero idle CPU)");
+
+        engine.setPartKind(3, McxPartKind::DrumMap);
+        check(engine.part(3).isDrumKit && !engine.part(3).followGlobalTranspose,
+              "Any part switches freely to DrumMap (disabling global transpose)");
+        engine.part(0).mute = true;
+        check(!engine.isPartAudible(0) && engine.isPartAudible(1), "Part mute silences only muted part");
+        engine.part(2).solo = true;
+        check(engine.isPartAudible(2) && !engine.isPartAudible(1), "Part solo isolates soloed parts");
+        engine.part(0).mute = false;
+        engine.part(2).solo = false;
+        engine.setMasterTuneHz(432.0f);
+        check(std::abs(engine.getMasterTuneHz() - 432.0f) < 0.01f, "Master tuning A4 updates accurately");
+        engine.setMasterTuneHz(440.0f);
 
         engine.setFocusedPart(9);
         check(engine.getFocusedPart() == 9, "Focused-Part proxy switches cleanly to Part 9");

@@ -4,6 +4,7 @@
 #include "../FX/McxOutputAndFx.h"
 #include "../Synth/McxVoice.h"
 #include "../../MIDI/HardwareMirrorRouter.h"
+#include "SynthCore/DiagnosticSignalProbe.h"
 #include "SynthCore/GrooveArpeggiator.h"
 
 #include <array>
@@ -16,9 +17,15 @@ namespace abdmcx
 
 struct McxPartState
 {
-    bool enabled { false };
+    bool enabled { true };
     bool isDrumKit { false };
+    McxPartKind kind { McxPartKind::Chromatic };
     std::uint8_t midiChannel { 1 };
+    std::uint8_t keyLow { 0 };
+    std::uint8_t keyHigh { 127 };
+    bool mute { false };
+    bool solo { false };
+    bool followGlobalTranspose { true };
     McxPartRouteMode routeMode { McxPartRouteMode::Internal };
     McxStructureMode structureMode { McxStructureMode::Parallel };
     McxFilterModel filterModel { McxFilterModel::RolandTc6116Tvf };
@@ -79,14 +86,27 @@ public:
 
     void setDiagnosticTestToneEnabled(bool enabled) noexcept
     {
-        diagnosticTestTone_.store(enabled, std::memory_order_release);
+        diagProbe_.setInjectionPoint(enabled ? 2 : 0);
     }
     [[nodiscard]] bool isDiagnosticTestToneEnabled() const noexcept
     {
-        return diagnosticTestTone_.load(std::memory_order_acquire);
+        return diagProbe_.isEnabled();
     }
+    [[nodiscard]] abd::synth::DiagnosticSignalProbe& getDiagnosticProbe() noexcept { return diagProbe_; }
+    [[nodiscard]] const abd::synth::DiagnosticSignalProbe& getDiagnosticProbe() const noexcept { return diagProbe_; }
 
     void setMasterTempoBpm(float bpm) noexcept;
+    void setTempoBpm(double bpm) noexcept { setMasterTempoBpm(static_cast<float>(bpm)); }
+    void setMasterTuneHz(float a4Hz) noexcept;
+    [[nodiscard]] float getMasterTuneHz() const noexcept { return masterTuneHz_; }
+
+    void setPartKind(int partIndex, McxPartKind kind) noexcept;
+    [[nodiscard]] bool isAnyPartSoloed() const noexcept;
+    [[nodiscard]] bool isPartAudible(int partIndex) const noexcept;
+
+    void routeMidiChannelNoteOn(int midiChannel1to16, int midiNote, float velocity, std::int32_t sampleOffset = 0) noexcept;
+    void routeMidiChannelNoteOff(int midiChannel1to16, int midiNote, std::int32_t sampleOffset = 0) noexcept;
+    void allNotesOff() noexcept;
 
     void triggerNote(int partIndex, int midiNote, float velocity, std::int32_t sampleOffset = 0) noexcept;
     void releaseNote(int partIndex, int midiNote, std::int32_t sampleOffset = 0) noexcept;
@@ -98,6 +118,9 @@ public:
 
     [[nodiscard]] HardwareMirrorRouter& getMirrorRouter() noexcept { return mirrorRouter_; }
     [[nodiscard]] const HardwareMirrorRouter& getMirrorRouter() const noexcept { return mirrorRouter_; }
+
+    [[nodiscard]] McxOutputAndFx& getOutputAndFx() noexcept { return outputAndFx_; }
+    [[nodiscard]] const McxOutputAndFx& getOutputAndFx() const noexcept { return outputAndFx_; }
 
     static float quantizeOutputSample(float x, McxOutputCharacter character) noexcept;
 
@@ -118,12 +141,14 @@ private:
     int partialBudget_ { 256 };
     float accentAmount_ { 0.0f };
     float masterGain_ { 0.85f };
+    float masterTuneHz_ { 440.0f };
+    float masterTuneSemitones_ { 0.0f };
     std::uint64_t noteCounter_ { 0 };
     int fxTailSamplesLeft_ { 0 };
 
     McxOutputCharacter outputCharacter_ { McxOutputCharacter::HdStudio };
-    std::atomic<bool> diagnosticTestTone_ { false };
-    double testTonePhase_ { 0.0 };
+    abd::synth::DiagnosticSignalProbe diagProbe_ {};
+    McxFilterBank diagFilter_ {};
 
     std::vector<McxPartState> parts_;
     std::vector<McxVoice> voices_;

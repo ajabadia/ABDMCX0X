@@ -13,7 +13,14 @@ enum class McxOscSourceKind : std::uint8_t
     PcmZone,
     VaOsc,
     Fm2Op,
-    AxionikSurface
+    AxionikSurface,
+    DwgsWavetable
+};
+
+enum class McxPartKind : std::uint8_t
+{
+    Chromatic = 0,
+    DrumMap
 };
 
 enum class McxStructureMode : std::uint8_t
@@ -56,7 +63,8 @@ enum class McxMachinePersona : std::uint8_t
     YamahaCs2x,
     KorgN5,
     EmuOrbit,
-    Quasimidi309
+    Quasimidi309,
+    BossDr5
 };
 
 enum class McxDrumMapMode : std::uint8_t
@@ -122,6 +130,10 @@ struct McxPartialConfig
     McxEnv4T4L ampEnv {};
     McxEnv4T4L filterEnv {};
     McxEnv4T4L pitchEnv {};
+    const float* externalSampleData { nullptr };
+    int externalSampleLength { 0 };
+    int externalLoopStart { 0 };
+    int externalLoopEnd { 0 };
 };
 
 struct McxDrumSlotConfig
@@ -138,6 +150,10 @@ struct McxDrumSlotConfig
     float decayMs { 280.0f };
     float pitchKeyTrack { 0.0f };
     bool activeSounding { false };
+    const float* externalSampleData { nullptr };
+    int externalSampleLength { 0 };
+    int externalLoopStart { 0 };
+    int externalLoopEnd { 0 };
 };
 
 struct McxDrumNoteRemapper
@@ -184,6 +200,8 @@ struct McxMachinePersonaSpec
             return { persona, 2, McxFilterModel::ZPlaneMorph, McxOutputCharacter::Rompler16Bit, 32, 32, false, McxDrumMapMode::HardwareNative, true };
         case McxMachinePersona::Quasimidi309:
             return { persona, 2, McxFilterModel::Ms20Acid, McxOutputCharacter::Rompler16Bit, 32, 32, false, McxDrumMapMode::HardwareNative, true };
+        case McxMachinePersona::BossDr5:
+            return { persona, 2, McxFilterModel::RolandTc6116Tvf, McxOutputCharacter::Rompler16Bit, 19, 19, true, McxDrumMapMode::RolandGsMc, true };
         case McxMachinePersona::FreeSuper:
         default:
             return { McxMachinePersona::FreeSuper, 4, McxFilterModel::RolandTc6116Tvf, McxOutputCharacter::HdStudio, 64, 256, false, McxDrumMapMode::ProprietaryCustom, false };

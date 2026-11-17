@@ -11,5 +11,9 @@ set(MCX_CORE_DSP_SOURCES
     Source/DSP/FX/McxOutputAndFx.cpp
     Source/MIDI/HardwareMirrorRouter.cpp
     Source/Hardware/McxHardwareBridge.cpp
+    Source/Hardware/McxHardwareInbound.cpp
+    Source/Hardware/McxHardwareProfiles.cpp
     Source/Core/McxBankManagerBridge.cpp
+    Source/Core/McxBankLoader.cpp
+    Source/Core/McxFactoryBank.cpp
 )

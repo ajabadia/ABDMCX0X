@@ -40,7 +40,8 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createMcxParameterLay
             "Yamaha CS2x / XG",
             "Korg N5 / AI2",
             "E-mu Orbit / Carnival",
-            "Quasimidi Rave-O-Lution 309"
+            "Quasimidi Rave-O-Lution 309",
+            "Boss DR-5 (19-Voice)"
         },
         0
     ));

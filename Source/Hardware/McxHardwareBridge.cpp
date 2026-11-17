@@ -6,79 +6,9 @@
 namespace abdmcx
 {
 
-McxHardwareDeviceProfile McxHardwareDeviceProfile::makeGeneric() noexcept
+McxHardwareBridge::McxHardwareBridge(McxEngine& engine)
+    : engine_(engine), profile_(abd::synth::HardwareProfileHydrator::makeGenericGmProfile())
 {
-    McxHardwareDeviceProfile p;
-    p.profileId = "generic_midi";
-    p.displayName = "Generic MIDI Device";
-    p.sysexDeviceId = 0x10;
-    p.sysexModelId = 0x00;
-    p.useRolandChecksum = false;
-    return p;
-}
-
-McxHardwareDeviceProfile McxHardwareDeviceProfile::makeRolandGs() noexcept
-{
-    McxHardwareDeviceProfile p;
-    p.profileId = "roland_gs";
-    p.displayName = "Roland GS / Boss DR-5";
-    p.sysexDeviceId = 0x10;
-    p.sysexModelId = 0x42;
-    p.useRolandChecksum = true;
-
-    p.partVolume = { McxControlMethod::MidiCc, 7, 0, 0.0f, 127.0f, 100.0f };
-    p.partPan = { McxControlMethod::MidiCc, 10, 0, 0.0f, 127.0f, 64.0f };
-    p.partReverb = { McxControlMethod::MidiCc, 91, 0, 0.0f, 127.0f, 0.0f };
-    p.partChorus = { McxControlMethod::MidiCc, 93, 0, 0.0f, 127.0f, 0.0f };
-
-    p.filterCutoff = { McxControlMethod::MidiCc, 74, 0, 0.0f, 127.0f, 64.0f };
-    p.filterResonance = { McxControlMethod::MidiCc, 71, 0, 0.0f, 127.0f, 64.0f };
-
-    p.drumPitchNrpnMsb = 24;
-    p.drumLevelNrpnMsb = 26;
-    p.drumPanNrpnMsb = 28;
-    p.drumReverbNrpnMsb = 29;
-    p.drumChorusNrpnMsb = 30;
-    return p;
-}
-
-McxHardwareDeviceProfile McxHardwareDeviceProfile::makeRolandMc() noexcept
-{
-    McxHardwareDeviceProfile p = makeRolandGs();
-    p.profileId = "roland_mc";
-    p.displayName = "Roland MC Groovebox";
-    p.sysexDeviceId = 0x10;
-    p.sysexModelId = 0x03;
-
-    // MC-303 TVF NRPNs (Cutoff 1/32, Res 1/33 in range 14..114)
-    p.filterCutoff = { McxControlMethod::Nrpn7Bit, 1, 32, 14.0f, 114.0f, 64.0f };
-    p.filterResonance = { McxControlMethod::Nrpn7Bit, 1, 33, 14.0f, 114.0f, 64.0f };
-
-    // MC-303 TVA Env NRPNs (Attack 1/99, Decay 1/100, Release 1/102 in range 14..114)
-    p.envAttack = { McxControlMethod::Nrpn7Bit, 1, 99, 14.0f, 114.0f, 64.0f };
-    p.envDecay = { McxControlMethod::Nrpn7Bit, 1, 100, 14.0f, 114.0f, 64.0f };
-    p.envRelease = { McxControlMethod::Nrpn7Bit, 1, 102, 14.0f, 114.0f, 64.0f };
-    return p;
-}
-
-McxHardwareBridge::McxHardwareBridge(McxEngine& engine) noexcept
-    : engine_(engine), profile_(McxHardwareDeviceProfile::makeRolandGs())
-{
-}
-
-void McxHardwareBridge::setProfile(const McxHardwareDeviceProfile& profile) noexcept
-{
-    profile_ = profile;
-}
-
-void McxHardwareBridge::setProfileById(const std::string& profileId) noexcept
-{
-    if (profileId.find("mc303") != std::string::npos || profileId.find("mc") != std::string::npos)
-        setProfile(McxHardwareDeviceProfile::makeRolandMc());
-    else if (profileId.find("dr5") != std::string::npos || profileId.find("gs") != std::string::npos || profileId.find("sc55") != std::string::npos)
-        setProfile(McxHardwareDeviceProfile::makeRolandGs());
-    else
-        setProfile(McxHardwareDeviceProfile::makeGeneric());
 }
 
 void McxHardwareBridge::sendCc(std::uint8_t ch1to16, std::uint8_t cc, std::uint8_t val) noexcept
@@ -100,30 +30,106 @@ void McxHardwareBridge::sendNrpn(std::uint8_t ch1to16, std::uint8_t msb, std::ui
     sendCc(ch1to16, 6, val);
 }
 
-void McxHardwareBridge::dispatchMappedControl(std::uint8_t ch, const McxParamControlMap& map, float normalizedVal) noexcept
+void McxHardwareBridge::dispatchBinding(std::uint8_t ch,
+                                        const abd::synth::SemanticControlBinding& binding,
+                                        float normalizedVal) noexcept
 {
-    if (map.method == McxControlMethod::None)
+    if (binding.method == abd::synth::ControlWireMethod::None ||
+        binding.method == abd::synth::ControlWireMethod::Manual)
+    {
         return;
+    }
 
-    const float scaled = map.minVal + std::clamp(normalizedVal, 0.0f, 1.0f) * (map.maxVal - map.minVal);
+    const float clamped = std::clamp(normalizedVal, 0.0f, 1.0f);
+    const float scaled = binding.wireMin + clamped * (binding.wireMax - binding.wireMin);
     const std::uint8_t byteVal = static_cast<std::uint8_t>(std::clamp(static_cast<int>(std::round(scaled)), 0, 127));
 
-    if (map.method == McxControlMethod::MidiCc)
-        sendCc(ch, map.controlNumber, byteVal);
-    else if (map.method == McxControlMethod::Nrpn7Bit)
-        sendNrpn(ch, map.controlNumber, map.subNumber, byteVal);
+    if (binding.method == abd::synth::ControlWireMethod::MidiCc)
+        sendCc(ch, binding.controlNumber, byteVal);
+    else if (binding.method == abd::synth::ControlWireMethod::Nrpn7Bit ||
+             binding.method == abd::synth::ControlWireMethod::Nrpn14Bit)
+        sendNrpn(ch, binding.controlNumber, binding.subNumber, byteVal);
+}
+
+void McxHardwareBridge::applyInternalSemanticParam(std::uint8_t partIdx,
+                                                   std::uint64_t roleHash,
+                                                   float normalizedVal) noexcept
+{
+    using namespace abd::synth::role;
+    if (partIdx >= 16) return;
+
+    auto& p = engine_.part(partIdx);
+    const float n = std::clamp(normalizedVal, 0.0f, 1.0f);
+
+    if (roleHash == kPartVolume)
+        p.level = n;
+    else if (roleHash == kPartPan)
+        p.pan = std::clamp(n * 2.0f - 1.0f, -1.0f, 1.0f);
+    else if (roleHash == kPartReverbSend)
+        p.reverbSend = n;
+    else if (roleHash == kPartChorusSend)
+        p.chorusSend = n;
+    else if (roleHash == kFilterCutoff)
+    {
+        const float hz = 20.0f * std::pow(1000.0f, n);
+        for (auto& partial : p.partials) partial.cutoffHz = hz;
+    }
+    else if (roleHash == kFilterResonance)
+    {
+        for (auto& partial : p.partials) partial.resonance = n;
+    }
+    else if (roleHash == kAmpEnvAttack)
+    {
+        const float ms = 1.0f + n * 2000.0f;
+        for (auto& partial : p.partials) partial.ampEnv.t1Ms = ms;
+    }
+    else if (roleHash == kAmpEnvDecay)
+    {
+        const float ms = 5.0f + n * 3000.0f;
+        for (auto& partial : p.partials) partial.ampEnv.t2Ms = ms;
+    }
+    else if (roleHash == kAmpEnvRelease)
+    {
+        const float ms = 5.0f + n * 4000.0f;
+        for (auto& partial : p.partials) partial.ampEnv.t4Ms = ms;
+    }
+    else if (roleHash == kVectorJoystickX)
+        p.vectorX = std::clamp(n * 2.0f - 1.0f, -1.0f, 1.0f);
+    else if (roleHash == kVectorJoystickY)
+        p.vectorY = std::clamp(n * 2.0f - 1.0f, -1.0f, 1.0f);
+}
+
+void McxHardwareBridge::applyInternalDrumParam(std::uint8_t partIdx,
+                                               std::uint8_t slotIdx,
+                                               std::uint64_t roleHash,
+                                               float normalizedVal,
+                                               int rawMidiByte) noexcept
+{
+    using namespace abd::synth::role;
+    if (partIdx >= 16 || slotIdx >= 128) return;
+
+    auto& slot = engine_.part(partIdx).drumSlots[slotIdx];
+    const float n = std::clamp(normalizedVal, 0.0f, 1.0f);
+
+    if (roleHash == kDrumKeyPitch)
+        slot.pitchKeyTrack = (rawMidiByte >= 0) ? (static_cast<float>(rawMidiByte - 64) * 0.5f) : ((n - 0.5f) * 24.0f);
+    else if (roleHash == kDrumKeyLevel)
+        slot.level = n;
+    else if (roleHash == kDrumKeyPan)
+        slot.pan = (rawMidiByte >= 0) ? (static_cast<float>(rawMidiByte - 64) / 64.0f) : std::clamp((n - 0.5f) * 2.0f, -1.0f, 1.0f);
+    else if (roleHash == kDrumKeyReverbSend)
+        slot.reverbSend = n;
+    else if (roleHash == kDrumKeyChorusSend)
+        slot.chorusSend = n;
 }
 
 void McxHardwareBridge::routeNoteOn(std::uint8_t partIdx, std::uint8_t note, float velocity, std::int32_t sampleOffset) noexcept
 {
-    if (partIdx >= 16)
-        return;
+    if (partIdx >= 16) return;
 
     auto& p = engine_.part(partIdx);
     if (HardwareMirrorRouter::routesToInternal(p.routeMode))
-    {
         engine_.triggerNote(partIdx, note, velocity);
-    }
 
     if (HardwareMirrorRouter::routesToExternal(p.routeMode))
     {
@@ -143,14 +149,11 @@ void McxHardwareBridge::routeNoteOn(std::uint8_t partIdx, std::uint8_t note, flo
 
 void McxHardwareBridge::routeNoteOff(std::uint8_t partIdx, std::uint8_t note, std::int32_t sampleOffset) noexcept
 {
-    if (partIdx >= 16)
-        return;
+    if (partIdx >= 16) return;
 
     auto& p = engine_.part(partIdx);
     if (HardwareMirrorRouter::routesToInternal(p.routeMode))
-    {
         engine_.releaseNote(partIdx, note);
-    }
 
     if (HardwareMirrorRouter::routesToExternal(p.routeMode))
     {
@@ -167,43 +170,67 @@ void McxHardwareBridge::routeNoteOff(std::uint8_t partIdx, std::uint8_t note, st
     }
 }
 
-void McxHardwareBridge::routePartVolume(std::uint8_t partIdx, float normalizedLevel) noexcept
+void McxHardwareBridge::routeSemanticParam(std::uint8_t partIdx, std::uint64_t roleHash, float normalizedValue) noexcept
 {
-    if (partIdx >= 16)
-        return;
+    if (partIdx >= 16) return;
 
     auto& p = engine_.part(partIdx);
     if (HardwareMirrorRouter::routesToInternal(p.routeMode))
-        p.level = std::clamp(normalizedLevel, 0.0f, 1.0f);
+        applyInternalSemanticParam(partIdx, roleHash, normalizedValue);
 
     if (HardwareMirrorRouter::routesToExternal(p.routeMode))
-        dispatchMappedControl(p.midiChannel, profile_.partVolume, normalizedLevel);
+    {
+        if (const auto* binding = profile_.findByRoleHash(roleHash))
+            dispatchBinding(p.midiChannel, *binding, normalizedValue);
+    }
+}
+
+void McxHardwareBridge::routeDrumSemanticParam(std::uint8_t partIdx,
+                                               std::uint8_t slotIdx,
+                                               std::uint64_t drumRoleHash,
+                                               float normalizedValue) noexcept
+{
+    if (partIdx >= 16 || slotIdx >= 128) return;
+
+    auto& p = engine_.part(partIdx);
+    if (HardwareMirrorRouter::routesToInternal(p.routeMode))
+        applyInternalDrumParam(partIdx, slotIdx, drumRoleHash, normalizedValue, -1);
+
+    if (HardwareMirrorRouter::routesToExternal(p.routeMode))
+    {
+        if (const auto* binding = profile_.findByRoleHash(drumRoleHash))
+        {
+            if (binding->method == abd::synth::ControlWireMethod::Nrpn7Bit ||
+                binding->method == abd::synth::ControlWireMethod::Nrpn14Bit)
+            {
+                const std::uint8_t drumKey = p.drumRemapper.slotToExternal[slotIdx];
+                const float clamped = std::clamp(normalizedValue, 0.0f, 1.0f);
+                const float scaled = binding->wireMin + clamped * (binding->wireMax - binding->wireMin);
+                const std::uint8_t valByte = static_cast<std::uint8_t>(std::clamp(static_cast<int>(scaled), 0, 127));
+                sendNrpn(p.midiChannel, binding->controlNumber, drumKey, valByte);
+            }
+        }
+    }
+}
+
+void McxHardwareBridge::routePartVolume(std::uint8_t partIdx, float normalizedLevel) noexcept
+{
+    routeSemanticParam(partIdx, abd::synth::role::kPartVolume, normalizedLevel);
 }
 
 void McxHardwareBridge::routePartPan(std::uint8_t partIdx, float normalizedPan) noexcept
 {
-    if (partIdx >= 16)
-        return;
-
-    auto& p = engine_.part(partIdx);
-    if (HardwareMirrorRouter::routesToInternal(p.routeMode))
-        p.pan = std::clamp(normalizedPan, -1.0f, 1.0f);
-
-    if (HardwareMirrorRouter::routesToExternal(p.routeMode))
-        dispatchMappedControl(p.midiChannel, profile_.partPan, (normalizedPan + 1.0f) * 0.5f);
+    routeSemanticParam(partIdx, abd::synth::role::kPartPan, (std::clamp(normalizedPan, -1.0f, 1.0f) + 1.0f) * 0.5f);
 }
 
 void McxHardwareBridge::routePartReverb(std::uint8_t partIdx, float normalizedReverb) noexcept
 {
-    if (partIdx >= 16)
-        return;
+    routeSemanticParam(partIdx, abd::synth::role::kPartReverbSend, normalizedReverb);
+}
 
-    auto& p = engine_.part(partIdx);
-    if (HardwareMirrorRouter::routesToInternal(p.routeMode))
-        p.reverbSend = std::clamp(normalizedReverb, 0.0f, 1.0f);
-
-    if (HardwareMirrorRouter::routesToExternal(p.routeMode))
-        dispatchMappedControl(p.midiChannel, profile_.partReverb, normalizedReverb);
+void McxHardwareBridge::routePartChorus(std::uint8_t partIdx, float normalizedChorus) noexcept
+{
+    routeSemanticParam(partIdx, abd::synth::role::kPartChorusSend, normalizedChorus);
 }
 
 void McxHardwareBridge::routeDrumSlotParam(std::uint8_t partIdx,
@@ -211,258 +238,43 @@ void McxHardwareBridge::routeDrumSlotParam(std::uint8_t partIdx,
                                            std::uint8_t paramKind,
                                            float normalizedValue) noexcept
 {
-    if (partIdx >= 16 || slotIdx >= 128)
-        return;
-
-    auto& p = engine_.part(partIdx);
-    auto& slot = p.drumSlots[slotIdx];
-
-    if (HardwareMirrorRouter::routesToInternal(p.routeMode))
+    using namespace abd::synth::role;
+    std::uint64_t drumRole = kDrumKeyLevel;
+    switch (paramKind)
     {
-        switch (paramKind)
-        {
-            case 0: slot.pitchKeyTrack = (normalizedValue - 0.5f) * 24.0f; break;
-            case 1: slot.level = std::clamp(normalizedValue, 0.0f, 1.0f); break;
-            case 2: slot.pan = std::clamp((normalizedValue - 0.5f) * 2.0f, -1.0f, 1.0f); break;
-            case 3: slot.reverbSend = std::clamp(normalizedValue, 0.0f, 1.0f); break;
-            default: break;
-        }
+        case 0: drumRole = kDrumKeyPitch; break;
+        case 1: drumRole = kDrumKeyLevel; break;
+        case 2: drumRole = kDrumKeyPan; break;
+        case 3: drumRole = kDrumKeyReverbSend; break;
+        case 4: drumRole = kDrumKeyChorusSend; break;
+        default: break;
     }
-
-    if (HardwareMirrorRouter::routesToExternal(p.routeMode))
-    {
-        const std::uint8_t drumKey = p.drumRemapper.slotToExternal[slotIdx];
-        const std::uint8_t valByte = static_cast<std::uint8_t>(std::clamp(static_cast<int>(normalizedValue * 127.0f), 0, 127));
-
-        std::uint8_t nrpnMsb = profile_.drumLevelNrpnMsb;
-        if (paramKind == 0) nrpnMsb = profile_.drumPitchNrpnMsb;
-        else if (paramKind == 1) nrpnMsb = profile_.drumLevelNrpnMsb;
-        else if (paramKind == 2) nrpnMsb = profile_.drumPanNrpnMsb;
-        else if (paramKind == 3) nrpnMsb = profile_.drumReverbNrpnMsb;
-
-        sendNrpn(p.midiChannel, nrpnMsb, drumKey, valByte);
-    }
+    routeDrumSemanticParam(partIdx, slotIdx, drumRole, normalizedValue);
 }
 
 void McxHardwareBridge::routeSynthFilter(std::uint8_t partIdx, float cutoffNorm, float resNorm) noexcept
 {
-    if (partIdx >= 16)
-        return;
-
-    auto& p = engine_.part(partIdx);
-    if (HardwareMirrorRouter::routesToInternal(p.routeMode))
-    {
-        for (auto& partial : p.partials)
-        {
-            partial.cutoffHz = 20.0f * std::pow(1000.0f, std::clamp(cutoffNorm, 0.0f, 1.0f));
-            partial.resonance = std::clamp(resNorm, 0.0f, 1.0f);
-        }
-    }
-
-    if (HardwareMirrorRouter::routesToExternal(p.routeMode))
-    {
-        dispatchMappedControl(p.midiChannel, profile_.filterCutoff, cutoffNorm);
-        dispatchMappedControl(p.midiChannel, profile_.filterResonance, resNorm);
-    }
+    routeSemanticParam(partIdx, abd::synth::role::kFilterCutoff, cutoffNorm);
+    routeSemanticParam(partIdx, abd::synth::role::kFilterResonance, resNorm);
 }
 
 void McxHardwareBridge::routeSynthEnvelope(std::uint8_t partIdx, float aNorm, float dNorm, float rNorm) noexcept
 {
-    if (partIdx >= 16)
-        return;
-
-    auto& p = engine_.part(partIdx);
-    if (HardwareMirrorRouter::routesToInternal(p.routeMode))
-    {
-        for (auto& partial : p.partials)
-        {
-            partial.ampEnv.t1Ms = 1.0f + aNorm * 2000.0f;
-            partial.ampEnv.t2Ms = 5.0f + dNorm * 3000.0f;
-            partial.ampEnv.t4Ms = 5.0f + rNorm * 4000.0f;
-        }
-    }
-
-    if (HardwareMirrorRouter::routesToExternal(p.routeMode))
-    {
-        dispatchMappedControl(p.midiChannel, profile_.envAttack, aNorm);
-        dispatchMappedControl(p.midiChannel, profile_.envDecay, dNorm);
-        dispatchMappedControl(p.midiChannel, profile_.envRelease, rNorm);
-    }
-}
-
-bool McxHardwareBridge::processInboundCc(std::uint8_t ch1to16, std::uint8_t cc, std::uint8_t val) noexcept
-{
-    if (cc == 99)
-    {
-        nrpnState_.currentChannel = ch1to16;
-        nrpnState_.nrpnMsb = val & 0x7F;
-        return true;
-    }
-    if (cc == 98)
-    {
-        nrpnState_.currentChannel = ch1to16;
-        nrpnState_.nrpnLsb = val & 0x7F;
-        return true;
-    }
-    if (cc == 6)
-    {
-        if (nrpnState_.nrpnMsb >= 0 && nrpnState_.nrpnLsb >= 0)
-        {
-            handleCompleteInboundNrpn(ch1to16, nrpnState_.nrpnMsb, nrpnState_.nrpnLsb, val & 0x7F);
-            return true;
-        }
-    }
-
-    for (int i = 0; i < 16; ++i)
-    {
-        auto& p = engine_.part(static_cast<std::size_t>(i));
-        if (p.midiChannel == ch1to16)
-        {
-            if (profile_.partVolume.method == McxControlMethod::MidiCc && profile_.partVolume.controlNumber == cc)
-            {
-                p.level = static_cast<float>(val) / 127.0f;
-                return true;
-            }
-            if (profile_.partPan.method == McxControlMethod::MidiCc && profile_.partPan.controlNumber == cc)
-            {
-                p.pan = (static_cast<float>(val) - 64.0f) / 64.0f;
-                return true;
-            }
-            if (profile_.partReverb.method == McxControlMethod::MidiCc && profile_.partReverb.controlNumber == cc)
-            {
-                p.reverbSend = static_cast<float>(val) / 127.0f;
-                return true;
-            }
-            if (profile_.filterCutoff.method == McxControlMethod::MidiCc && profile_.filterCutoff.controlNumber == cc)
-            {
-                const float cutNorm = static_cast<float>(val) / 127.0f;
-                for (auto& part : p.partials)
-                    part.cutoffHz = 20.0f * std::pow(1000.0f, cutNorm);
-                return true;
-            }
-            if (profile_.filterResonance.method == McxControlMethod::MidiCc && profile_.filterResonance.controlNumber == cc)
-            {
-                const float resNorm = static_cast<float>(val) / 127.0f;
-                for (auto& part : p.partials)
-                    part.resonance = resNorm;
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-void McxHardwareBridge::handleCompleteInboundNrpn(int channel, int msb, int lsb, int dataVal) noexcept
-{
-    for (int i = 0; i < 16; ++i)
-    {
-        auto& p = engine_.part(static_cast<std::size_t>(i));
-        if (p.midiChannel == channel)
-        {
-            if (p.isDrumKit)
-            {
-                const std::uint8_t drumNote = static_cast<std::uint8_t>(lsb & 0x7F);
-                const std::uint8_t slotIdx = p.drumRemapper.inputToSlot[drumNote];
-                auto& slot = p.drumSlots[slotIdx];
-
-                if (msb == profile_.drumPitchNrpnMsb)
-                    slot.pitchKeyTrack = (static_cast<float>(dataVal - 64)) * 0.5f;
-                else if (msb == profile_.drumLevelNrpnMsb)
-                    slot.level = static_cast<float>(dataVal) / 127.0f;
-                else if (msb == profile_.drumPanNrpnMsb)
-                    slot.pan = static_cast<float>(dataVal - 64) / 64.0f;
-                else if (msb == profile_.drumReverbNrpnMsb)
-                    slot.reverbSend = static_cast<float>(dataVal) / 127.0f;
-            }
-            else
-            {
-                if (profile_.filterCutoff.method == McxControlMethod::Nrpn7Bit &&
-                    profile_.filterCutoff.controlNumber == msb && profile_.filterCutoff.subNumber == lsb)
-                {
-                    const float norm = std::clamp((static_cast<float>(dataVal) - profile_.filterCutoff.minVal) /
-                                                  (profile_.filterCutoff.maxVal - profile_.filterCutoff.minVal), 0.0f, 1.0f);
-                    for (auto& part : p.partials)
-                        part.cutoffHz = 20.0f * std::pow(1000.0f, norm);
-                }
-                else if (profile_.filterResonance.method == McxControlMethod::Nrpn7Bit &&
-                         profile_.filterResonance.controlNumber == msb && profile_.filterResonance.subNumber == lsb)
-                {
-                    const float norm = std::clamp((static_cast<float>(dataVal) - profile_.filterResonance.minVal) /
-                                                  (profile_.filterResonance.maxVal - profile_.filterResonance.minVal), 0.0f, 1.0f);
-                    for (auto& part : p.partials)
-                        part.resonance = norm;
-                }
-            }
-        }
-    }
-}
-
-void McxHardwareBridge::processInboundMidiByte(std::uint8_t b) noexcept
-{
-    if (b >= 0xF8)
-        return;
-
-    if (b >= 0x80)
-    {
-        runningStatus_ = b;
-        msgPendingLen_ = 0;
-        return;
-    }
-
-    if (runningStatus_ == 0)
-        return;
-
-    msgPending_[msgPendingLen_++] = b;
-
-    const std::uint8_t msgType = runningStatus_ & 0xF0;
-    const std::uint8_t ch = static_cast<std::uint8_t>((runningStatus_ & 0x0F) + 1);
-
-    if (msgType == 0xB0 && msgPendingLen_ == 2)
-    {
-        processInboundCc(ch, msgPending_[0], msgPending_[1]);
-        msgPendingLen_ = 0;
-    }
-    else if ((msgType == 0x90 || msgType == 0x80) && msgPendingLen_ == 2)
-    {
-        if (msgType == 0x90 && msgPending_[1] > 0)
-        {
-            for (int i = 0; i < 16; ++i)
-                if (engine_.part(i).midiChannel == ch)
-                    engine_.triggerNote(static_cast<std::uint8_t>(i), msgPending_[0], static_cast<float>(msgPending_[1]) / 127.0f);
-        }
-        else
-        {
-            for (int i = 0; i < 16; ++i)
-                if (engine_.part(i).midiChannel == ch)
-                    engine_.releaseNote(static_cast<std::uint8_t>(i), msgPending_[0]);
-        }
-        msgPendingLen_ = 0;
-    }
-}
-
-void McxHardwareBridge::processInboundMidiBuffer(const std::uint8_t* data, std::size_t length) noexcept
-{
-    if (!data || length == 0)
-        return;
-
-    for (std::size_t i = 0; i < length; ++i)
-        processInboundMidiByte(data[i]);
+    routeSemanticParam(partIdx, abd::synth::role::kAmpEnvAttack, aNorm);
+    routeSemanticParam(partIdx, abd::synth::role::kAmpEnvDecay, dNorm);
+    routeSemanticParam(partIdx, abd::synth::role::kAmpEnvRelease, rNorm);
 }
 
 std::size_t McxHardwareBridge::drainOutboundQueue(const MidiByteSink& sink) noexcept
 {
-    if (!sink)
-        return 0;
+    if (!sink) return 0;
 
-    std::size_t count = 0;
     McxMidiOutMessage msg {};
+    std::size_t count = 0;
     while (outQueue_.pop(msg))
     {
-        if (msg.length > 0)
-        {
-            sink(msg.bytes, msg.length);
-            ++count;
-        }
+        sink(msg.bytes, msg.length);
+        ++count;
     }
     return count;
 }

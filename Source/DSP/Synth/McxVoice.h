@@ -24,6 +24,7 @@ struct McxVoiceRenderConfig
     McxFilterModel forcedFilterModel { McxFilterModel::RolandTc6116Tvf };
     bool forcePartFilterModel { false };
     int maxPartialsAllowed { 4 };
+    float masterTuneSemitones { 0.0f };
 };
 
 /**

@@ -1,4 +1,5 @@
 #include "McxEngine.h"
+#include "../../Core/McxFactoryBank.h"
 
 #include <algorithm>
 #include <cmath>
@@ -23,11 +24,13 @@ McxEngine::McxEngine() noexcept
         p.drumRemapper.initIdentity();
     }
 
-    parts_[0].enabled = true;
-    parts_[0].isDrumKit = false;
-
-    parts_[9].enabled = true;
-    parts_[9].isDrumKit = true;
+    McxFactoryBank::applyFactoryDefaults(*this);
+    for (int i = 0; i < kNumParts; ++i)
+    {
+        auto& p = parts_[static_cast<std::size_t>(i)];
+        p.enabled = true;
+        setPartKind(i, (i == 9) ? McxPartKind::DrumMap : McxPartKind::Chromatic);
+    }
 }
 
 void McxEngine::prepare(double sampleRate) noexcept
@@ -38,16 +41,19 @@ void McxEngine::prepare(double sampleRate) noexcept
     for (auto& v : voices_)
         v.prepare(sampleRate_);
     outputAndFx_.prepare(sampleRate_);
+    diagProbe_.prepare(sampleRate_);
+    diagFilter_.prepare(sampleRate_);
     reset();
 }
 
 void McxEngine::reset() noexcept
 {
-    testTonePhase_ = 0.0;
     noteCounter_ = 0;
     fxTailSamplesLeft_ = 0;
     mirrorRouter_.clear();
     outputAndFx_.reset();
+    diagProbe_.reset();
+    diagFilter_.reset();
     for (auto& v : voices_)
         v.reset();
     for (auto& p : parts_)
@@ -210,40 +216,69 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
             if (!v.isActive())
                 continue;
             anyVoiceActive = true;
-            const auto& p = parts_[static_cast<std::size_t>(std::clamp(v.getPartIndex(), 0, kNumParts - 1))];
-            v.processBlock(dryL_.data(), dryR_.data(), revL_.data(), revR_.data(), choL_.data(), choR_.data(), chunk, buildVoiceConfig(p));
+            const int vPart = std::clamp(v.getPartIndex(), 0, kNumParts - 1);
+            auto cfg = buildVoiceConfig(parts_[static_cast<std::size_t>(vPart)]);
+            if (!isPartAudible(vPart)) cfg.partLevel = 0.0f;
+            v.processBlock(dryL_.data(), dryR_.data(), revL_.data(), revR_.data(), choL_.data(), choR_.data(), chunk, cfg);
         }
 
-        const bool toneOn = diagnosticTestTone_.load(std::memory_order_acquire);
-        if (toneOn)
+        const bool injFilter = diagProbe_.isInjectingAt(4) || diagProbe_.isInjectingAt(5);
+        const bool injPreFx = diagProbe_.isInjectingAt(3);
+        const bool injPreMaster = diagProbe_.isInjectingAt(2);
+        const bool injPostMaster = diagProbe_.isInjectingAt(1);
+        const auto& fp = parts_[static_cast<std::size_t>(std::clamp(focusedPartIndex_, 0, kNumParts - 1))];
+
+        if (injFilter || injPreFx || injPreMaster)
         {
-            const double inc = 440.0 / sampleRate_;
+            if (injFilter)
+            {
+                const auto& pt0 = fp.partials[0];
+                diagFilter_.setParameters(fp.filterModel, pt0.filterMode, pt0.cutoffHz, pt0.resonance, pt0.zplaneMorph, pt0.drive);
+            }
             for (int i = 0; i < chunk; ++i)
             {
-                const float tone = static_cast<float>(std::sin(kTwoPi * testTonePhase_)) * 0.25f;
-                testTonePhase_ += inc;
-                if (testTonePhase_ >= 1.0) testTonePhase_ -= 1.0;
-                dryL_[static_cast<std::size_t>(i)] += tone;
-                dryR_[static_cast<std::size_t>(i)] += tone;
+                const float raw = diagProbe_.nextSample();
+                const auto idx = static_cast<std::size_t>(i);
+                if (injFilter)
+                {
+                    const float sf = diagFilter_.processSample(raw);
+                    dryL_[idx] += sf; dryR_[idx] += sf;
+                    choL_[idx] += sf * fp.chorusSend; choR_[idx] += sf * fp.chorusSend;
+                    revL_[idx] += sf * fp.reverbSend; revR_[idx] += sf * fp.reverbSend;
+                }
+                if (injPreFx)
+                {
+                    dryL_[idx] += raw; dryR_[idx] += raw;
+                    choL_[idx] += raw * fp.chorusSend; choR_[idx] += raw * fp.chorusSend;
+                    revL_[idx] += raw * fp.reverbSend; revR_[idx] += raw * fp.reverbSend;
+                }
+                if (injPreMaster)
+                {
+                    dryL_[idx] += raw; dryR_[idx] += raw;
+                }
             }
         }
 
-        if (anyVoiceActive || toneOn || fxTailSamplesLeft_ > 0)
+        const bool runOutput = anyVoiceActive || injFilter || injPreFx || injPreMaster || fxTailSamplesLeft_ > 0;
+        if (runOutput)
         {
-            if (anyVoiceActive)
+            if (anyVoiceActive || injFilter || injPreFx)
                 fxTailSamplesLeft_ = static_cast<int>(sampleRate_ * 2.5);
             else if (fxTailSamplesLeft_ > 0)
                 fxTailSamplesLeft_ = std::max(0, fxTailSamplesLeft_ - chunk);
 
             outputAndFx_.processChunk(
                 dryL_.data(), dryR_.data(), choL_.data(), choR_.data(), revL_.data(), revR_.data(),
-                chunk, toneOn ? 1.0f : masterGain_);
+                chunk, (injPreMaster && !anyVoiceActive && !injFilter && !injPreFx) ? 1.0f : masterGain_);
             for (int i = 0; i < chunk; ++i)
             {
                 left[offset + i] = dryL_[static_cast<std::size_t>(i)];
                 right[offset + i] = dryR_[static_cast<std::size_t>(i)];
             }
         }
+
+        if (injPostMaster)
+            diagProbe_.injectStereoBuffer(1, left + offset, right + offset, chunk, false);
 
         offset += chunk;
     }

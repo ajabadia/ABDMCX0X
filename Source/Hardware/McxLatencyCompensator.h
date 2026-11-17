@@ -1,30 +1,36 @@
 #pragma once
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace abdmcx
 {
 
 /**
- * @brief Zero-allocation stereo latency compensation delay line for A/B monitoring.
+ * @brief Zero-allocation (RT-safe on process) stereo latency compensation delay line for A/B monitoring.
  * Aligns internal DSP playback with external hardware MIDI transmission and response latency.
- * Supports up to 100ms delay at 192 kHz (19,200 samples capacity).
+ * Buffers are allocated once in constructor (keeping stack footprint tiny for DAWs & WASM).
+ * Supports up to 100ms delay at 192 kHz (24,576 samples capacity).
  */
 class McxLatencyCompensator
 {
 public:
     static constexpr std::size_t kMaxDelaySamples = 24576; // >100ms @ 192kHz
 
-    McxLatencyCompensator() noexcept { reset(); }
+    McxLatencyCompensator()
+        : bufferL_(kMaxDelaySamples, 0.0f),
+          bufferR_(kMaxDelaySamples, 0.0f)
+    {
+        reset();
+    }
 
     void reset() noexcept
     {
-        bufferL_.fill(0.0f);
-        bufferR_.fill(0.0f);
+        std::fill(bufferL_.begin(), bufferL_.end(), 0.0f);
+        std::fill(bufferR_.begin(), bufferR_.end(), 0.0f);
         writeIndex_ = 0;
         sampleRate_ = 44100.0;
         delayMs_ = 0.0f;
@@ -62,12 +68,10 @@ public:
             const float inL = left[i];
             const float inR = right[i];
 
-            // Read delayed sample
             const std::size_t readIndex = (writeIndex_ + cap - d) % cap;
             left[i] = bufferL_[readIndex];
             right[i] = bufferR_[readIndex];
 
-            // Write current sample into ring
             bufferL_[writeIndex_] = inL;
             bufferR_[writeIndex_] = inR;
 
@@ -83,8 +87,8 @@ private:
         delaySamples_ = std::min(ds, kMaxDelaySamples - 1);
     }
 
-    std::array<float, kMaxDelaySamples> bufferL_ {};
-    std::array<float, kMaxDelaySamples> bufferR_ {};
+    std::vector<float> bufferL_;
+    std::vector<float> bufferR_;
     std::size_t writeIndex_ { 0 };
     std::size_t delaySamples_ { 0 };
     double sampleRate_ { 44100.0 };

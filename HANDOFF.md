@@ -1,56 +1,59 @@
 # HANDOFF — ABDMCX0X
 
-> **Última actualización:** 2026-11-17 · **Fase actual:** Fase 2 implementada (pendiente de compilación, ejecución de tests y commit por el usuario)
+> **Última actualización:** 2026-11-18 · **Fase actual:** Fases 0–5 y **Fase 3C (Host Nativo JUCE 9 Standalone + VST3 + WebView2 + WASM)** verificadas al 100 % (`.\build.bat full` verde). **Siguiente etapa:** ejecución por slices pequeños de la arquitectura Groovebox Modular v2 ([`DOCS/VISION_GROOVEBOX_16P.md`](DOCS/VISION_GROOVEBOX_16P.md)).
 
 ---
 
-## 1. Decisiones y Reglas Inmutables de Proyecto
-1. **Arquitectura Rectora:** Leer [`DOCS/BRIEF_9_DECISIONES.md`](DOCS/BRIEF_9_DECISIONES.md) antes de añadir cualquier funcionalidad.
-2. **Propiedad Intelectual limpia:** Prohibido incluir Mask ROMs originales (`IC3`, `SC-55`, etc.), PCM de fábrica protegido, código GPLv3 (`grvbox-main`) o código sin licencia (`MC3o3-arpegiator`). Las ondas de fábrica llegarán des-horneadas como resíntesis espectral/DDSP o síntesis VA.
-3. **DRY Estricto sobre `ABDShared` y `ABDBankManager`:**
-   - Arpegiador groove compartido: **`ABDShared/Code/SynthCore/GrooveArpeggiator.h`** (documentado en [`ABDShared/Docs/dsp/ARPEGGIATORS_GUIDE.md`](../ABDShared/Docs/dsp/ARPEGGIATORS_GUIDE.md)).
-   - Diccionario de parámetros (`CDD v2.0`): [`ABDShared/Contracts/abdmcx0x_parameter_spec.json`](../ABDShared/Contracts/abdmcx0x_parameter_spec.json).
-   - Formato de banco/cápsula propietario: [`ABDShared/Contracts/abd_structured_rompler.schema.json`](../ABDShared/Contracts/abd_structured_rompler.schema.json) y [`abdStructuredRompler.ts`](../ABDShared/Contracts/abdStructuredRompler.ts).
-   - Contratos de hardware/softsynth en `ABDShared/Contracts/` (todos bajo `hardware_profile.schema.json` + `bankManagement`): `boss_dr5.json`, `roland_mc303.json`, `roland_d2.json`, `roland_sc55.json` y `abd_mcx0x.json`, hidratados de forma aséptica en [`ABDShared/Code/BankManager/Contracts/Models/jsonContractHydrator.ts`](../ABDShared/Code/BankManager/Contracts/Models/jsonContractHydrator.ts) (`createUniversalContractRegistry()`).
-   - Módulos hardware e identidad: `ABDShared/Code/HardwareMidiDetect` (`abd::hwid::HardwareContractRegistry`, `JuceMidiHardwareBackend`), `ABDShared/Code/HardwareDrivers` (`abd::hw::NRPNParser`) y `ABDBankManagerCore`.
-   - Módulos UI/Telemetría compartidos para Fases 3–5: **`D:\desarrollos\ABDSynths\ABDShared\Code\MidiKeyboard`** (`@abdsynths/midi-keyb`, registro obligatorio en `host-strip-height.test.js`) y **`D:\desarrollos\ABDSynths\ABDShared\Code\Scope`** (`ABDShared::ScopeCoreHeaders`, `ABDShared::ScopeCore`, `ABDShared::ScopeWebAssets` y `@abdsynths/shared/scope`).
-4. **Reglas de Código y UI:**
-   - GUI en **JUCE 9 + WebView2 estático** (`JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1`), **Vanilla CSS** con tokens de `@abdsynths/shared`, cero emojis (solo SVGs de `ABDShared/Assets/icons/`).
-   - C++ `.h/.cpp` `< 300` líneas por archivo; JS/TS `< 200` líneas de lógica por archivo; identificadores y comentarios del código 100 % en inglés; cero alojamientos o locks en `processBlock`.
-   - `DspSources.cmake` como lista única compartida entre Nativo y Emscripten WASM.
+## 1. Estado Actual de Verificaciones
+- **Tests C++20 Headless (`build.bat` / CTest — 6/6 Suites pasando, 100 %, 0.78 s):**
+  - `McxPhase0Tests`: 21/21 passed.
+  - `McxPhase1Tests`: 15/15 passed (motor 4-parciales, filtros ZDF/TC6116AF, envolventes 5-stage LUT IC7, drum maps, `FxBuffers` en heap).
+  - `McxPhase2Tests`: 58/58 passed (hidratación JSON real de `boss_dr5.json`, `roland_mc303.json`, `korg_ms2000.json`, `behringer_deepmind12.json`, auto-detección Universal Identity Reply, cola SPSC).
+  - `McxPhase3Tests`: 21/21 passed.
+  - `McxPhase4Tests`: 10/10 passed (carga `.abdbank`, descompresión PCM, hi-hat `muteGroup 1` choke).
+  - `McxPhase5Tests`: 7/7 passed (sample rates 44.1k..192k, buffers 32..4096, MC-303 28-partial stealing, NaN/Inf, DAW state).
+- **Contratos `@abdsynths/contracts`:** 30/30 Vitest tests verdes (`semanticRoles.ts`, `drum_map_profiles.json`, `hardware_profile.schema.json`).
+- **Módulo `ABDShared::DiagnosticProbe`:**
+  - `DiagnosticSignalProbe.h` (201 l., bitmask atómico 64-bit, `double` phase para 440.0 Hz exactos 44.1k..192k, 4 ondas).
+  - WebUI (`DiagnosticProbeModal.js`, `DiagnosticProbeWave.js`, `DiagnosticProbeI18n.js`, `DiagnosticProbeModal.css`): ventana flotante arrastrable (patrón `ABDScope` `FloatingMount`), 0 colores hardcodeados, verificada precisión 440 Hz en 44.1k/48k/96k/192k Hz y bitmask exacto.
+- **Compilación WASM (`wasm/build_wasm.bat`):** configurado con `-O2` (exports/imports sin minificar para `AudioWorklet`) y despliegue automático a `WebUI/src/wasm/` y `WebUI/public/wasm/`.
+- **WebUI (`start.bat` -> `http://localhost:5330`):**
+  - `ABDShared` `SynthNavBar` (`File / Edit / Tools / Help` + `AboutDialog` + `Tools -> 440 Hz Signal Probe`).
+  - 3 modos iniciales (`SuperFree` [default], `MC-303`, `DR-5`), Light/Dark sobre `bg_neutral.webp` con paneles semitransparentes (`color-mix`, **0 colores hardcodeados**), i18n ES/EN.
+  - `@abdsynths/midi-keyb` con ruedas `bender.png` (`wheels.css`, `kbd-buttons.css`) y botones `OCT +` / `OCT -` con LEDs, Osciloscopio + Stereo VU, Mezclador 16 partes, 10 Macros, FX GS/MC-303 (`RolandGsMc303FxProfile.h`), Vector 2D, Drum Rack 16 Pads y carga drag-and-drop `.abdbank`.
+- **Modularidad:** 100 % de archivos C++ `< 300` líneas (`McxBankLoader.cpp` 299, `McxVoice.cpp` 298, `WasmBridge.cpp` 297) y JS/TS `< 200` líneas.
 
 ---
 
-## 2. Entorno de Herramientas Verificado
+## 2. Reglas Inmutables y Arquitectura DRY
+1. **Propiedad Intelectual limpia:** prohibido incluir Mask ROMs originales (`IC3`, `SC-55`, etc.), PCM de fábrica protegido, código GPLv3 o código sin licencia.
+2. **Cero colores hardcodeados:** 100 % de estilos en `ABDMCX0X/WebUI` y `ABDShared/Code/DiagnosticProbe` consumen tokens canónicos de `@abdsynths/shared/styles` (`--color-*`, `--font-*`, `--space-*`, `--radius-*`, `--shadow-*`).
+3. **Seguridad en pila (Stack Safety):** buffers grandes (`DspStereoChorus`, `DspFlanger`, `DspZitaReverb`, `McxLatencyCompensator`) SIEMPRE en heap una sola vez en constructor (`std::unique_ptr` / `std::vector`), nunca por valor en stack ni alocados en `process()`.
+4. **Reglas de flujo de trabajo:** nunca ejecutar `cmake --build`, `ctest` ni `git commit/push` de forma autónoma; proporcionar los comandos exactos al usuario.
+5. **Rutas compartidas clave en `ABDShared`:**
+   - `ABDShared/Code/SynthCore/` (`GrooveArpeggiator.h`, `HardwareProfileHydrator.h/.cpp`, `MiniJsonParser.h`, `SemanticRoleHash.h`)
+   - `ABDShared/Code/DiagnosticProbe/` (`DiagnosticSignalProbe.h`, `WebUI/`, `DIAGNOSTIC_PROBE_INTEGRATION_GUIDE.md`)
+   - `ABDShared/Code/DspEffects/profiles/RolandGsMc303FxProfile.h`
+   - `ABDShared/Code/Scope/` (`ABDShared::ScopeCore`, `@abdsynths/shared/scope`)
+   - `ABDShared/Code/MidiKeyboard/` (`@abdsynths/midi-keyb`)
+   - `ABDShared/Assets/styles/themes/` (`mc303`, `mc303-light`, `dr5`, `dr5-light`, `ms2000`, `ms2000-light`, `neuron-dark`, `neuron-light`)
+
+---
+
+## 3. Entorno de Herramientas Verificado
 - **Remoto GitHub:** `https://github.com/ajabadia/ABDMCX0X.git`
 - **JUCE 9:** autodescubrimiento `JUCE_PATH` → `../ABDEep/JUCE` → `../ABDMS2000/GITS/JUCE` → `C:/JUCE`
-- **Emscripten SDK:** `D:\desarrollos\emsdk\emsdk_env.bat` (con Ninja)
-- **Node.js / Workspace:** `%LOCALAPPDATA%\nvm\v24.21.0` o `C:\Program Files\nodejs`, monorepo `ABDShared` + `ABDBankManager`
+- **Emscripten SDK:** `D:\desarrollos\emsdk\emsdk_env.bat` (con Ninja, `-O2`)
+- **Node.js / pnpm workspace:** `ABDMCX0X` registrado en `D:\desarrollos\ABDSynths\pnpm-workspace.yaml`; Vite dev en puerto `5330` (`start.bat`).
 - **WebView2 NuGet:** `%USERPROFILE%/AppData/Local/PackageManagement/NuGet/Packages`
 
 ---
 
-## 3. Notas de Investigación Hardware (MC-303 / DR-5 / D-2 / SC-55)
-- **Bug documentado en editores comunitarios (evitado aquí):** Algunos editores envían `CC6 (Data)` antes que `CC99/CC98` al girar un dial NRPN. `HardwareMirrorRouter` y `McxHardwareBridge` imponen siempre el orden estricto Roland: **`CC99 (MSB) → CC98 (LSB) → CC6 (Data)`**.
-- **MC-303:** Chip `TC6116AF`, Tone de 2 Partials con envolventes `4T4L`, 12 Drum Kits donde cada tecla apunta a un Tone evaluado en `coarse_key`. NRPN melódico (`CC99=1`, rango `14..114` relativo a `64`); NRPN de batería por tecla (`CC99=24` Pitch, `26` Level, `28` Pan, `29` Reverb, `30` Chorus; `CC98=11..118`).
-- **Boss DR-5 en mesa:** 4 pistas (`Ch 1..4` Bass/Guitar/Keys, `Ch 10` Drums). CCs 7/10/91 y NRPNs GS de batería por tecla (`CC99=24,26,28,29`), DT1 SysEx con Checksum Roland `(0x80 - (sum & 0x7F)) & 0x7F`.
-- **D-2 / MC-505 & MC-909:** Escalan a **4 Partials (estéreo en MC-909)** y **TVF/TVA independiente por tecla de Drum Kit**, modelo adoptado directamente por `ABDMCX0X`.
-
----
-
-## 4. Estado Actual y Siguientes Pasos (Fase 2 → Fase 3)
-1. **Fase 2 escrita al 100 %** y documentada en [`DOCS/PHASE2_HARDWARE_AND_BANK_MANAGER.md`](DOCS/PHASE2_HARDWARE_AND_BANK_MANAGER.md):
-   - Cola SPSC lock-free `McxMidiOutQueue.h` (`Capacity = 1024`, `alignas(64)` en cabezales).
-   - Compensador de latencia A/B de muestra exacta `McxLatencyCompensator.h` (`setLatencyMs(ms)`).
-   - Puente bidireccional `McxHardwareBridge.h/.cpp` con enrutamiento `INT|EXT|BOTH`, orden estricto Roland, generación de CC/NRPN para Boss DR-5 / Roland MC-303, y parsing de CCs/NRPNs entrantes para actualización en caliente de `McxEngine`.
-   - Persistencia multinivel `McxBankManagerBridge.h/.cpp` (preset `abd_mcx0x_preset_v1` JSON, volcados SysEx Roland DT1 con checksum exacto, y soporte `juce::ValueTree` DAW chunk).
-   - Suite de pruebas unitarias `Tests/McxPhase2Tests.cpp` integrada en `CMakeLists.txt` y `DspSources.cmake`.
-   - **El usuario ejecutará manualmente** la compilación CMake, `McxPhase2Tests.exe` y los commits a GitHub.
-2. En **Fase 3**: montar la WebUI con `ABDShared/Code/MidiKeyboard` (`@abdsynths/midi-keyb` + alta en `host-strip-height.test.js`) y `ABDShared/Code/Scope` (`ABDShared::ScopeCore` + `createScope()`) para inspección SPSC en vivo e instrumentación A/B hardware vs DSP en host JUCE 9 + WebView2 estático + WASM.
-3. **Componentes clave de UI y Síntesis identificados para Fases 3–5:**
-   - **Deck Desplegable "Nuke / Groove Deck"** (de `ABDAxionikVS`): panel deslizante superior que no cubre el teclado inferior, con 4 perillas Macro rápidas, Vector Stick 2D y selector de voces.
-   - **Ruedas con barras LED & Aftertouch** (de `ABDEep`): Pitch Bend con LED verde/rosa y lectura numérica exacta de semitonos (`+2.00` / `-2.00`), Mod Wheel azul (`0..100%`) y Aftertouch naranja.
-   - **Hilera de LEDs de Voces Activas** (de `ABDEep`): monitorización en tiempo real del uso y robo de voces (16, 28, 64 voces).
-   - **Motor de Acordes (Chord Memory & Poly Chord)** (de `ABDEep`): captura interactiva y presets armónicos expandidos con *strum delay*.
-   - **Vitaminado Virtual Analógico (VA) desde `_Deprecados/ABDSharedCode/DspCore`:** reactivar `DspMoogLadder.h`, `DspJunoVCF.h` + `DspJunoHPF.h`, `DspKorgMS20.h` y `OscVcoCa72.h` para que los 4 parciales estéreo puedan operar tanto como rompler PCM des-horneado como sintetizador analógico virtual con modulación cruzada.
-   - **Módulos a migrar a `ABDShared` previamente:** `StickPlayer.h` (`ABDAxionikVS`), `LCDMenuFormatter.h` (`ABDMS2000`) y `VelocitySensitivityCurves.h` (`ABDCZ101`).
+## 4. Visión v2 Consolidada y Siguientes Pasos (Ver `DOCS/VISION_GROOVEBOX_16P.md` y `ROADMAP.md`)
+1. **Validación inmediata de Fase 3C:** ejecutar `.\build.bat full` para verificar compilación y arranque del ejecutable Standalone (`ABDMCX0X.exe`) y VST3 (`ABDMCX0X.vst3`) con WebView2 offline + paridad completa Nativo ↔ WASM vía `McxParamRouter.h`.
+2. **Transición a la Arquitectura Groovebox Modular de 16 Partes (`DOCS/VISION_GROOVEBOX_16P.md`):**
+   - Motor único libre (sin modos limitadores `MC-303`/`DR-5`, conservando sus paletas como Temas Visuales puros).
+   - 16 partes con `PartKind` libre (`Chromatic` o `DrumMap`, Parte 10 `DrumMap` por defecto), jerarquía de 3 niveles (`SystemSettings` / `MultiPreset` / `PartPreset`) y directorio de trabajo unificado compatible con `AxionikDB` (`Models/`, `Presets/Parts/`, `Presets/Multis/`, `Presets/Patterns/`, `Banks/`, `MidiLearn/`).
+   - **Canal de parte:** Doble Filtro en serie (`Filter 1 → Filter 2`, edición en Drawers deslizantes), EQ Paramétrico ligero + Drive (`DspMidasEQ`/`DspSaturation`), 4 envíos (`Send A..D`, Pre/Post-Fader), 4 LFOs Globales + 2 LFOs Locales (mute + auto-skip 0 % CPU) + ModMatrix con Via-Attenuator (`ModMatrix.h`), Accent Acid por velocidad, y edición completa por sonido/pad en Drum Maps (paridad MC-303+).
+   - **Promociones a `ABDShared`:** `DwgsWavetable` (desde `ABDMS2000` OSC 1), `MusicalScaleTransposer.h` + integración en `@abdsynths/midi-keyb`, `DspMultiBusFxRack` (4+ buses, generalizando `ABDEep`), Secuenciador Piano-Roll Modal basado en ticks PPQ (`1, 2, 4, 8...` compases, futuro `3/4`/`6/8`, grabación real + cuantizado + P-Locks), y Transporte completo + Modo Canción (`Song Mode`).
+   - **Performance MPC/Groovebox & Transversales:** `16 Levels`, `Note Repeat`, `MPC Swing + Humanize`, `Pad Perform`, Megamix, Escenas/Hotcues `1..8`, Master Safety Limiter, `Undo/Redo` + `Compare`, Export `.mid`/`.wav`/Stems, Multi-Out VST3 opcional, y Hardware externo (fase final) únicamente como **controlador de entrada** cargando perfiles completos de `ABDShared` `MIDI Learn`.

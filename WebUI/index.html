@@ -1,119 +1,104 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es" data-theme="ms2000">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ABDMCX0X — Structured Groove-Rompler & Hardware Controller</title>
-  <style>
-    :root {
-      --bg-dark: #121214;
-      --panel-bg: #1a1a1e;
-      --panel-border: #2a2a30;
-      --accent-cyan: #00d2ff;
-      --accent-orange: #ff7700;
-      --led-green: #00ff66;
-      --text-main: #f0f0f4;
-      --text-dim: #8a8a98;
-    }
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      user-select: none;
-    }
-    body {
-      background: var(--bg-dark);
-      color: var(--text-main);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-    #navbar-container {
-      height: 48px;
-      flex-shrink: 0;
-    }
-    #app-container {
-      flex: 1;
-      display: grid;
-      grid-template-columns: 280px 1fr 240px;
-      grid-template-rows: 1fr 180px;
-      gap: 8px;
-      padding: 8px;
-      min-height: 0;
-    }
-    .panel {
-      background: var(--panel-bg);
-      border: 1px solid var(--panel-border);
-      border-radius: 6px;
-      padding: 10px;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-    .panel-title {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--text-dim);
-      margin-bottom: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    #part-mixer {
-      grid-column: 1;
-      grid-row: 1;
-    }
-    #focused-deck {
-      grid-column: 2;
-      grid-row: 1;
-    }
-    #side-hardware {
-      grid-column: 3;
-      grid-row: 1;
-    }
-    #bottom-controllers {
-      grid-column: 1 / span 3;
-      grid-row: 2;
-      display: flex;
-      gap: 12px;
-    }
-    #wheels-rack {
-      width: 140px;
-      display: flex;
-      gap: 8px;
-    }
-    #keyboard-container {
-      flex: 1;
-    }
-  </style>
+  <meta name="color-scheme" content="light dark" />
+  <script>
+    try {
+      var s = localStorage.getItem('color-scheme');
+      if (s === 'light' || s === 'dark') {
+        document.querySelector('meta[name="color-scheme"]').content = s;
+      }
+    } catch (e) {}
+  </script>
+  <title>ABDMCX0X -- Groove-Rompler &amp; Hardware Bridge</title>
 </head>
-<body>
-  <div id="navbar-container"></div>
-  <div id="app-container">
-    <div id="part-mixer" class="panel">
-      <div class="panel-title"><span>Part Mixer (16 Parts)</span><span id="voice-counter">0 Voices</span></div>
-      <div id="part-list" style="overflow-y: auto; flex: 1;"></div>
+<body class="mcx-app abd-theme-bg abd-theme-bg--full">
+  <div id="mcx-navbar-host"></div>
+
+  <section class="mcx-lcd-strip">
+    <div class="mcx-lcd" aria-live="polite">
+      <div class="mcx-lcd-line1" id="lcd-line1">SUPERFREE  |  PART 01  |  64 VOICES</div>
+      <div class="mcx-lcd-line2" id="lcd-line2" data-i18n="mcx.lcdReady">LISTO -- TOCA TECLAS O MUEVE MANDOS</div>
     </div>
-    <div id="focused-deck" class="panel">
-      <div class="panel-title"><span>Focused Part Groove Deck</span><span id="focused-part-label">Part 1: Synth Lead</span></div>
-      <div id="nuke-controls" style="flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;"></div>
+
+    <div class="mcx-scope-wrap">
+      <canvas id="mcx-scope-canvas" class="mcx-scope-canvas" width="240" height="44"></canvas>
     </div>
-    <div id="side-hardware" class="panel">
-      <div class="panel-title"><span>Hardware Mirror</span><span id="profile-name">Boss DR-5</span></div>
-      <div id="hardware-status" style="font-size: 12px; color: var(--text-dim);">Aseptic Sysex Link: Active</div>
+
+    <label class="mcx-select-card" style="min-width: 120px;">
+      <span class="mcx-control-label" data-i18n="mcx.masterVol">MASTER</span>
+      <input type="range" id="master-volume" min="0" max="1" step="0.01" value="0.85" />
+    </label>
+
+    <div class="mcx-voice-meter">
+      <span class="mcx-voice-caption" id="voice-caption">0 / 64 VOICES</span>
+      <div class="mcx-voice-leds" id="voice-leds"></div>
     </div>
-    <div id="bottom-controllers" class="panel">
-      <div id="wheels-rack">
-        <div id="pitch-bend-wheel" style="flex: 1; text-align: center; font-size: 10px;">PITCH</div>
-        <div id="mod-wheel" style="flex: 1; text-align: center; font-size: 10px;">MOD</div>
+  </section>
+
+  <main class="mcx-workspace">
+    <aside class="mcx-panel">
+      <div class="mcx-panel-title" data-i18n="mcx.partsTitle">MEZCLADOR 16 PARTES</div>
+      <div class="mcx-part-list" id="part-list"></div>
+    </aside>
+
+    <section class="mcx-center-col">
+      <div class="mcx-tabs-bar" id="center-tabs" role="tablist">
+        <button type="button" class="mcx-btn is-active" data-tab="tone" data-i18n="mcx.tabToneFx">TONO Y FX</button>
+        <button type="button" class="mcx-btn" data-tab="drums" data-i18n="mcx.tabDrums">DRUM RACK (16 PADS)</button>
       </div>
-      <div id="keyboard-container"></div>
+
+      <div class="mcx-tab-pane" data-pane="tone">
+        <div class="mcx-panel">
+          <div class="mcx-panel-title" data-i18n="mcx.deckTitle">TONO Y MACROS EN VIVO</div>
+          <div class="mcx-controls-grid" id="macro-deck"></div>
+        </div>
+        <div class="mcx-panel">
+          <div class="mcx-panel-title" data-i18n="mcx.fxTitle">EFECTOS MASTER</div>
+          <div class="mcx-selects-grid" id="fx-deck"></div>
+        </div>
+      </div>
+
+      <div class="mcx-tab-pane is-hidden" data-pane="drums">
+        <div class="mcx-panel">
+          <div class="mcx-panel-title" data-i18n="mcx.drumRackTitle">DRUM RACK 16 PADS GROOVEBOX (PARTE DRUM ACTIVA)</div>
+          <div class="mcx-drum-grid" id="drum-pads"></div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="mcx-panel">
+      <div class="mcx-panel-title" data-i18n="mcx.vectorTitle">MORPH VECTORIAL 2D</div>
+      <div class="mcx-vector-pad" id="vector-pad">
+        <div class="mcx-vector-dot" id="vector-dot"></div>
+      </div>
+      <div class="mcx-drop-zone" id="bank-drop-zone" data-i18n="mcx.dropBankHint">
+        Suelta aquí un archivo .abdbank para cargar el banco
+      </div>
+      <input type="file" id="bank-file-input" accept=".abdbank" hidden />
+    </aside>
+  </main>
+
+  <footer class="mcx-keyboard-dock">
+    <div class="mcx-kbd-wheels">
+      <div id="pitch-wheel-container"></div>
+      <div id="mod-wheel-container"></div>
     </div>
-  </div>
+    <div class="kbd-octave-controls">
+      <button type="button" id="oct-up" class="kbd-octave-btn" title="Octave Up">
+        <span>OCT +</span>
+        <div class="kbd-octave-led" id="led-up"></div>
+      </button>
+      <button type="button" id="oct-down" class="kbd-octave-btn" title="Octave Down">
+        <span>OCT -</span>
+        <div class="kbd-octave-led" id="led-down"></div>
+      </button>
+    </div>
+    <div class="mcx-kbd-host" id="piano-keyboard"></div>
+  </footer>
+
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

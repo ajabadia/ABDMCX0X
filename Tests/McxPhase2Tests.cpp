@@ -122,28 +122,30 @@ int main()
               "Latency compensator accurately shifts stereo impulse by exactly 441 samples");
     }
 
-    // 4. Boss DR-5 & Roland MC-303 Outbound and Inbound Parameter Mirroring
+    // 4. Dynamic JSON Contract Hydration (Boss DR-5, Roland MC-303, Korg MS2000, Behringer DeepMind 12)
     {
         McxEngine engine;
         engine.prepare(44100.0);
         McxHardwareBridge bridge(engine);
 
-        // Outbound DR-5 CC & Drum Key NRPNs via aseptic profile
-        bridge.setProfile(McxHardwareDeviceProfile::makeRolandGs());
+        const std::size_t loadedCount = bridge.loadContractsDirectory(ABDSHARED_CONTRACTS_DIR);
+        check(loadedCount >= 10, "Hydrator dynamically loads >= 10 real hardware JSON contracts from ABDShared/Contracts");
+
+        // Switch cleanly to Boss DR-5 purely by JSON contract ID (zero hardcoded C++ profile)
+        bridge.setProfileById("boss_dr5");
+        check(bridge.getProfile().id == "boss_dr5", "setProfileById resolves hydrated boss_dr5.json contract");
+
         auto& drumPart = engine.part(9); // Track 10
         drumPart.routeMode = McxPartRouteMode::ExternalMidi;
         drumPart.midiChannel = 10;
         drumPart.isDrumKit = true;
         drumPart.drumRemapper.slotToExternal[36] = 36; // Kick
 
-        // Route Track Volume (CC7), Pan (CC10), Reverb (CC91)
         bridge.routePartVolume(9, 0.8f);
         bridge.routePartPan(9, 0.5f);
         bridge.routePartReverb(9, 0.4f);
-
-        // Route Drum Slot TVA Level (NRPN 26) & Reverb Send (NRPN 29)
-        bridge.routeDrumSlotParam(9, 36, 1, 0.95f); // Level
-        bridge.routeDrumSlotParam(9, 36, 3, 0.5f);  // Reverb
+        bridge.routeDrumSlotParam(9, 36, 1, 0.95f); // DrumKeyLevel -> NRPN 26
+        bridge.routeDrumSlotParam(9, 36, 3, 0.5f);  // DrumKeyReverbSend -> NRPN 29
 
         std::vector<McxMidiOutMessage> drained;
         bridge.drainOutboundQueue([&](const std::uint8_t* b, std::size_t n) {
@@ -153,32 +155,63 @@ int main()
             drained.push_back(m);
         });
 
-        // 3 CCs (Vol, Pan, Rev) + 2 NRPNs (Level: CC99,98,6 + Rev: CC99,98,6) = 9 messages total
-        check(drained.size() == 9, "Drained 9 outbound MIDI messages for DR-5 CCs and GS Drum NRPNs");
+        check(drained.size() == 9, "Drained 9 outbound MIDI messages for hydrated boss_dr5.json CCs & Drum NRPNs");
         check(drained[0].bytes[1] == 7 && drained[1].bytes[1] == 10 && drained[2].bytes[1] == 91,
-              "Outbound CCs correctly formatted CC7, CC10, CC91 on Track 10");
-
-        // Check strict Roland NRPN order: CC99=26 -> CC98=36 -> CC6=120
+              "Outbound CCs from boss_dr5.json match CC7, CC10, CC91 on Track 10");
         check(drained[3].bytes[1] == 99 && drained[3].bytes[2] == 26 &&
               drained[4].bytes[1] == 98 && drained[4].bytes[2] == 36 &&
               drained[5].bytes[1] == 6  && drained[5].bytes[2] == 120,
-              "GS Drum Level NRPN follows strict Roland order: CC99(26) -> CC98(36) -> CC6(120)");
+              "GS Drum Level NRPN from boss_dr5.json follows strict Roland order: CC99(26)->CC98(36)->CC6(120)");
 
         // Inbound MIDI Parsing: Boss DR-5 sends NRPN CC99=24, CC98=36, CC6=70 (Coarse Pitch)
-        // Status 0xB9 (Ch 10 CC)
         const std::uint8_t inboundNrpn[] = { 0xB9, 99, 24, 0xB9, 98, 36, 0xB9, 6, 70 };
         bridge.processInboundMidiBuffer(inboundNrpn, sizeof(inboundNrpn));
         check(drumPart.drumSlots[36].pitchKeyTrack == 3.0f,
-              "Inbound DR-5 GS Drum Pitch NRPN (CC99=24, CC98=36, CC6=70) updates slot pitch to +3.0 semitones");
+              "Inbound DR-5 GS Drum Pitch NRPN updates slot pitch to +3.0 semitones via contract lookup");
 
-        // Inbound MIDI Parsing: Roland MC-303 sends Cutoff NRPN CC99=1, CC98=32, CC6=64 on Ch 1
-        bridge.setProfile(McxHardwareDeviceProfile::makeRolandMc());
+        // Auto-detect Roland MC-303 via Universal Identity Reply (F0 7E 10 06 02 41 00 03 ... F7)
+        const std::uint8_t mc303IdReply[] = { 0xF0, 0x7E, 0x10, 0x06, 0x02, 0x41, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0xF7 };
+        bridge.processInboundMidiBuffer(mc303IdReply, sizeof(mc303IdReply));
+        check(bridge.getProfile().id == "roland_mc303",
+              "Universal Identity Reply auto-detects and activates roland_mc303.json contract");
+
+        // Inbound MC-303 TVF Cutoff NRPN (1/32, wire range 14..114) + generic semantic callback for Lfo1Delay (1/10)
         auto& synthPart = engine.part(0);
         synthPart.midiChannel = 1;
-        const std::uint8_t mc303Inbound[] = { 0xB0, 99, 1, 0xB0, 98, 32, 0xB0, 6, 64 };
-        bridge.processInboundMidiBuffer(mc303Inbound, sizeof(mc303Inbound));
+        std::uint64_t lastCbRole = 0;
+        float lastCbNorm = -1.0f;
+        bridge.setInboundSemanticCallback([&](std::uint8_t, std::uint64_t roleHash, float norm) {
+            lastCbRole = roleHash;
+            lastCbNorm = norm;
+        });
+
+        const std::uint8_t mc303Cutoff[] = { 0xB0, 99, 1, 0xB0, 98, 32, 0xB0, 6, 64 };
+        bridge.processInboundMidiBuffer(mc303Cutoff, sizeof(mc303Cutoff));
         check(synthPart.partials[0].cutoffHz > 400.0f && synthPart.partials[0].cutoffHz < 2000.0f,
-              "Inbound MC-303 TVF Cutoff NRPN (CC99=1, CC98=32, CC6=64) updates synth partial filter cutoff");
+              "Inbound MC-303 TVF Cutoff NRPN (1/32, [14..114]) updates synth partial filter cutoff");
+
+        const std::uint8_t mc303LfoDelay[] = { 0xB0, 99, 1, 0xB0, 98, 10, 0xB0, 6, 114 };
+        bridge.processInboundMidiBuffer(mc303LfoDelay, sizeof(mc303LfoDelay));
+        check(lastCbRole == abd::synth::role::kLfo1Delay && std::abs(lastCbNorm - 1.0f) < 0.01f,
+              "Inbound MC-303 Vibrato Delay NRPN (1/10, val=114) fires generic kLfo1Delay semantic callback at 1.0");
+
+        // Auto-detect Korg MS2000 & Behringer DeepMind 12 (3-byte extended MMA ID 00 20 32) + [0..1] wire scaling
+        const std::uint8_t ms2000IdReply[] = { 0xF0, 0x7E, 0x00, 0x06, 0x02, 0x42, 0x58, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0xF7 };
+        bridge.processInboundMidiBuffer(ms2000IdReply, sizeof(ms2000IdReply));
+        check(bridge.getProfile().id == "korg_ms2000",
+              "Universal Identity Reply auto-detects and activates korg_ms2000.json contract");
+
+        synthPart.routeMode = McxPartRouteMode::ExternalMidi;
+        bridge.routeSemanticParam(0, abd::synth::role::kDistortionDrive, 0.5f); // MS2000 CC 79 [0..1] -> MIDI 64
+        McxMidiOutMessage msMsg {};
+        const bool gotMs = bridge.getOutboundQueue().pop(msMsg);
+        check(gotMs && msMsg.bytes[1] == 79 && msMsg.bytes[2] == 64,
+              "Korg MS2000 normalized [0..1] DistortionDrive auto-scales cleanly to MIDI CC 79 value 64");
+
+        const std::uint8_t dm12IdReply[] = { 0xF0, 0x7E, 0x00, 0x06, 0x02, 0x00, 0x20, 0x32, 0x20, 0x00, 0x00, 0x00, 0x01, 0x00, 0xF7 };
+        bridge.processInboundMidiBuffer(dm12IdReply, sizeof(dm12IdReply));
+        check(bridge.getProfile().id == "behringer_deepmind12",
+              "3-byte extended MMA Identity Reply (00 20 32 20) auto-detects behringer_deepmind12.json");
     }
 
     // 5. McxBankManagerBridge JSON State Persistence & Roland SysEx Generation
@@ -186,9 +219,10 @@ int main()
         McxEngine engA;
         engA.prepare(44100.0);
         McxHardwareBridge brA(engA);
+        brA.loadContractsDirectory(ABDSHARED_CONTRACTS_DIR);
         engA.setMachinePersona(McxMachinePersona::RolandMc303);
         engA.setOutputCharacter(McxOutputCharacter::Rompler16Bit);
-        brA.setProfile(McxHardwareDeviceProfile::makeRolandGs());
+        brA.setProfileById("boss_dr5");
         brA.getLatencyCompensator().setLatencyMs(4.5f);
 
         auto& p0 = engA.part(0);
@@ -207,8 +241,11 @@ int main()
         McxEngine engB;
         engB.prepare(44100.0);
         McxHardwareBridge brB(engB);
+        brB.loadContractsDirectory(ABDSHARED_CONTRACTS_DIR);
         const bool deserialized = McxBankManagerBridge::deserializeFromJson(engB, brB, json);
         check(deserialized, "BankManagerBridge successfully deserializes preset JSON");
+        check(brB.getProfile().id == "boss_dr5",
+              "Deserialized state restores hydrated boss_dr5 contract profile cleanly");
         check(engB.getPersonaSpec().persona == McxMachinePersona::RolandMc303,
               "Deserialized state preserves RolandMc303 persona");
         check(engB.getOutputCharacter() == McxOutputCharacter::Rompler16Bit,

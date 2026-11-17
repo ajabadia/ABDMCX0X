@@ -35,7 +35,7 @@ std::string McxBankManagerBridge::serializeToJson(const McxEngine& engine,
     ss << "  \"name\": \"" << presetName << "\",\n";
     ss << "  \"persona\": " << static_cast<int>(engine.getPersonaSpec().persona) << ",\n";
     ss << "  \"dacCharacter\": " << static_cast<int>(engine.getOutputCharacter()) << ",\n";
-    ss << "  \"hardwareProfile\": \"" << bridge.getProfile().profileId << "\",\n";
+    ss << "  \"hardwareProfile\": \"" << bridge.getProfile().id << "\",\n";
     ss << "  \"latencyMs\": " << floatToStr(bridge.getLatencyCompensator().getLatencyMs()) << ",\n";
     ss << "  \"parts\": [\n";
 
@@ -124,7 +124,7 @@ bool McxBankManagerBridge::deserializeFromJson(McxEngine& engine,
     const int dac = findInt(jsonString, "dacCharacter", 0);
     engine.setOutputCharacter(static_cast<McxOutputCharacter>(dac));
 
-    const std::string hwProfile = findString(jsonString, "hardwareProfile", "roland_gs");
+    const std::string hwProfile = findString(jsonString, "hardwareProfile", "generic_midi");
     bridge.setProfileById(hwProfile);
 
     const float latency = findFloat(jsonString, "latencyMs", 0.0f);

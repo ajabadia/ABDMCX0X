@@ -19,9 +19,11 @@ public:
 private:
     void timerCallback() override;
     void handleJsEvent(const juce::var& msg);
+    void emitSystemSettings();
 
     McxAudioProcessor& processor_;
     std::unique_ptr<abd::webview2::JuceWebView2Component> webComponent_;
+    std::unique_ptr<juce::FileChooser> folderChooser_;
     bool isUiReady_{false};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(McxAudioProcessorEditor)

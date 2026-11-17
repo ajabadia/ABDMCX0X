@@ -104,7 +104,83 @@ McxVoiceRenderConfig McxEngine::buildVoiceConfig(const McxPartState& p) const no
     cfg.forcePartFilterModel = personaSpec_.locksLimits;
     cfg.forcedFilterModel = personaSpec_.defaultFilter;
     cfg.maxPartialsAllowed = personaSpec_.locksLimits ? personaSpec_.maxPartialsPerTone : 4;
+    cfg.masterTuneSemitones = masterTuneSemitones_;
     return cfg;
+}
+
+void McxEngine::setMasterTuneHz(float a4Hz) noexcept
+{
+    masterTuneHz_ = std::clamp(a4Hz, 415.0f, 466.0f);
+    masterTuneSemitones_ = 12.0f * std::log2(masterTuneHz_ / 440.0f);
+}
+
+void McxEngine::setPartKind(int partIndex, McxPartKind kind) noexcept
+{
+    auto& p = part(partIndex);
+    p.kind = kind;
+    p.isDrumKit = (kind == McxPartKind::DrumMap);
+    p.followGlobalTranspose = (kind == McxPartKind::Chromatic);
+    if (p.isDrumKit)
+    {
+        for (int n = 0; n < 128; ++n)
+        {
+            auto& slot = p.drumSlots[static_cast<std::size_t>(n)];
+            if (slot.level <= 0.0f) slot.level = 0.9f;
+            if (slot.decayMs <= 0.0f) slot.decayMs = 260.0f;
+            if (slot.coarseKey == 0) slot.coarseKey = static_cast<std::uint8_t>(n);
+        }
+    }
+}
+
+bool McxEngine::isAnyPartSoloed() const noexcept
+{
+    for (const auto& p : parts_)
+        if (p.solo) return true;
+    return false;
+}
+
+bool McxEngine::isPartAudible(int partIndex) const noexcept
+{
+    const auto& p = part(partIndex);
+    if (!p.enabled) return false;
+    if (isAnyPartSoloed()) return p.solo;
+    return !p.mute;
+}
+
+void McxEngine::routeMidiChannelNoteOn(int midiChannel1to16, int midiNote, float velocity, std::int32_t sampleOffset) noexcept
+{
+    const int ch = std::clamp(midiChannel1to16, 1, 16);
+    const int note = std::clamp(midiNote, 0, 127);
+    for (int i = 0; i < kNumParts; ++i)
+    {
+        const auto& p = parts_[static_cast<std::size_t>(i)];
+        if (p.enabled && static_cast<int>(p.midiChannel) == ch && note >= p.keyLow && note <= p.keyHigh)
+            triggerNote(i, note, velocity, sampleOffset);
+    }
+}
+
+void McxEngine::routeMidiChannelNoteOff(int midiChannel1to16, int midiNote, std::int32_t sampleOffset) noexcept
+{
+    const int ch = std::clamp(midiChannel1to16, 1, 16);
+    const int note = std::clamp(midiNote, 0, 127);
+    for (int i = 0; i < kNumParts; ++i)
+    {
+        const auto& p = parts_[static_cast<std::size_t>(i)];
+        if (p.enabled && static_cast<int>(p.midiChannel) == ch && note >= p.keyLow && note <= p.keyHigh)
+            releaseNote(i, note, sampleOffset);
+    }
+}
+
+void McxEngine::allNotesOff() noexcept
+{
+    for (auto& v : voices_)
+        v.forceChoke();
+    for (auto& p : parts_)
+    {
+        p.arp.reset();
+        for (auto& slot : p.drumSlots)
+            slot.activeSounding = false;
+    }
 }
 
 void McxEngine::applyDrumMuteGroup(int partIdx, McxPartState& p, int slotNote) noexcept

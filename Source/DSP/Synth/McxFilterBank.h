@@ -47,7 +47,7 @@ private:
 
     // Shared ABDShared::DspCore filter engines
     abd::dsp::FilterTpt svfClean_ {};
-    abd::dsp::JunoVCF_ZDF rolandZdf_ {};
+    abd::dsp::JunoVCF_ZDF rolandZdf_ { abd::dsp::JunoVCF_ZDF::Mode::Juno106 };
     abd::dsp::KorgMS20VCF ms20Acid_ {};
     abd::dsp::MoogLadderVCF ladderDrive_ {};
     abd::dsp::FilterTpt zplaneStageA_ {};

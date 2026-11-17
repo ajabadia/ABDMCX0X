@@ -7,14 +7,19 @@
 
 ## Visión general
 
-**ABDMCX0X** une en un solo instrumento propietario limpio (sin ROMs protegidas ni código GPL de terceros):
-1. **Motor interno modular de hasta 4 Partials Estéreo** (`Spectral+DDSP` des-horneado vía `ABDNeuModMakr`, `PCM/SFZ`, `VA PolyBLEP`), topologías paralela / *RingMod* / *Booster* / **Vector 2D `(X,Y)`**, filtros intercambiables (`SVF`, `Roland TVF ZDF`, `MS-20 Acid`, `Ladder Drive`, `Z-Plane Morph`), envolventes `4T4L`, `ModMatrix` (*PatchCords*), etapas de salida intercambiables (`HD Studio`, `90s 16-bit`, `Vintage 12-bit`), Drum Rack de 128 teclas con *mute groups* y matriz FX de `ABDShared::DspEffects`.
-2. **Groove Arpeggiator (`abd::synth::GrooveArpeggiator`)**: 12 motivos, 16 divisiones de reloj, swing bipolar invariante, `LatchReArm`, *strum*, acento y máscara/patrón programable de hasta 32 pasos.
-3. **Hardware Mirror Controller (`INT | EXT | BOTH A/B`)**: emisión estricta de NRPN (`CC99 → CC98 → CC6`), NRPN por tecla de batería y SysEx `DT1` gobernados por contratos JSON (`boss_dr5.json`, `roland_mc303.json`, `roland_d2.json`, `roland_sc55.json`), gestionado con **`ABDBankManager`**.
+**ABDMCX0X** es una **Groovebox / Workstation modular de 16 partes** (propietaria y limpia, sin ROMs protegidas ni código GPL de terceros) construida sobre `ABDShared`:
+1. **16 Partes libres (`Chromatic` o `DrumMap`, Parte 10 Drum por defecto) y Multi-Motor extensible:** Rompler multicapa / Drum Kits (edición por sonido tipo MC-303+), motor `DwgsWavetable` (promovido desde `ABDMS2000`), y futuros motores VA / FM / Spectral, con **Doble Filtro en serie (`Filter 1 → Filter 2`)**, envolventes `4T4L`, **4 LFOs Globales + 2 LFOs Locales** (auto-skip 0 % CPU), Matriz de Modulación por parte con *Via-Attenuator*, **EQ Paramétrico + Drive por canal**, 4 envíos independientes (`Send A..D` Pre/Post-Fader) y **Rack FX Master multi-entrada** promovido a `ABDShared`.
+2. **Secuenciador Piano-Roll Modal (PPQ), Transporte, Modo Canción y Utilidades MIDI:** edición estilo rollo de pianola / Drum Grid (`1, 2, 4, 8...` compases, preparado para futuras métricas), grabación en tiempo real con cuantización, *Parameter Locks*, *Accent Acid*, `GrooveArpeggiator`, Transposición Global por tono y escala/tonalidad (`ABDShared` + `@abdsynths/midi-keyb`), y flujo de directo inspirado en MPC/Groovebox (`16 Levels`, `Note Repeat`, `MPC Swing`, `Megamix`, `Escenas/Hotcues` y `Song Mode`).
+3. **Directorio de Trabajo unificado (`AxionikDB`-compatible), Temas Light/Dark y Hardware vía `MIDI Learn`:** Bank Manager compartido (`Modelos`, `Presets de Parte`, `Presets Multi`, `Banks`), estilos clásicos (`MS2000`, `Axionik`, `MC-303`, `DR-5`) como temas visuales puros sobre `bg_neutral.webp`, y soporte final de hardware externo como **controlador de entrada** mediante perfiles completos de `ABDShared` `MIDI Learn`.
 
 ## Documentación clave
+- [`DOCS/VISION_GROOVEBOX_16P.md`](DOCS/VISION_GROOVEBOX_16P.md) — **Visión v2 en curso:** Groovebox modular de 16 partes libres (`Chromatic`/`DrumMap`), jerarquía 3 niveles, directorio de trabajo compatible con `AxionikDB`, motor DWGS, Rack FX multi-entrada y utilidades MIDI.
 - [`DOCS/BRIEF_9_DECISIONES.md`](DOCS/BRIEF_9_DECISIONES.md) — Hipótesis, 9 decisiones cerradas, convergencia de hardware y alcance blindado v1.
 - [`DOCS/PHASE1_DSP_AND_DRUM_MAPS.md`](DOCS/PHASE1_DSP_AND_DRUM_MAPS.md) — Arquitectura detallada de Fase 1 (motor 4-Partial, filtros ROM `TC6116AF`/`Z-Plane`, envolventes `5-Stage`, Personas y Drum Maps multi-estándar).
+- [`DOCS/PHASE2_HARDWARE_AND_BANK_MANAGER.md`](DOCS/PHASE2_HARDWARE_AND_BANK_MANAGER.md) — Puente hardware bidireccional A/B en vivo, cola SPSC, compensación de latencia y persistencia.
+- [`DOCS/PHASE4_BANK_CONTAINER.md`](DOCS/PHASE4_BANK_CONTAINER.md) — Formato propietario `.abdbank`, descompresión PCM, drum kits, choking hi-hat y política dual DAW.
+- [`DOCS/PHASE5_WASM_AND_RESILIENCE.md`](DOCS/PHASE5_WASM_AND_RESILIENCE.md) — Compilación WebAssembly (`mcx0x_dsp`), resiliencia 44.1k..192k, buffers 32..4096 y medición offline.
+- [`DOCS/HARDWARE_INTEGRATION_AND_SEMANTICS.md`](DOCS/HARDWARE_INTEGRATION_AND_SEMANTICS.md) — Taxonomía semántica universal CDD v2.0, auto-detección con `HardwareMidiDetect` e integración aséptica.
 - [`ROADMAP.md`](ROADMAP.md) — Fases de desarrollo, Definition of Done y estado vivo.
 - [`HANDOFF.md`](HANDOFF.md) — Contexto técnico, inventario de herramientas, rutas compartidas y notas para retomar.
 - [`CHANGELOG.md`](CHANGELOG.md) — Historial semántico de versiones.
@@ -28,9 +33,15 @@ cmake --build build_headless --config Release
 ctest --test-dir build_headless -C Release --output-on-failure
 ```
 
-### Build completo (Nativo JUCE 9 + WebView2 estático + Emscripten WASM + WebUI)
+### Build completo (Nativo Headless + CTest + Emscripten WASM; añadir `full` para JUCE VST3/Standalone)
 ```powershell
 .\build.bat
+.\build.bat full
+```
+
+### Arranque rápido WebUI + WASM (Vite puerto `5330`)
+```powershell
+.\start.bat
 ```
 
 ## Remoto

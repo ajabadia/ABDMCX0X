@@ -72,7 +72,9 @@ void McxVoice::noteOnMelodic(int partIdx, int midiNote, float velocity01, float 
         auto& u = units_[static_cast<std::size_t>(i)];
         u.enabledInVoice = true;
         u.velScaled = McxRomTables::applyVelocityAndAccent(velocity01, pc.velCurveIndex, accent01);
-        u.exciter.noteOn(pc, static_cast<float>(midiNote_));
+        if (pc.externalSampleData != nullptr && pc.externalSampleLength > 0)
+            u.exciter.setExternalTable(pc.externalSampleData, pc.externalSampleLength, pc.externalLoopStart, pc.externalLoopEnd);
+        u.exciter.noteOn(pc, static_cast<float>(midiNote_) + cfg.masterTuneSemitones);
         u.pitchEnv.noteOn(pc.pitchEnv, 1.0f, accent01, kfScale);
         u.filterEnv.noteOn(pc.filterEnv, std::clamp(u.velScaled, 0.2f, 1.35f), accent01, kfScale);
         u.ampEnv.noteOn(pc.ampEnv, u.velScaled, accent01, kfScale);
@@ -117,14 +119,41 @@ void McxVoice::noteOnDrum(int partIdx, int rawInputNote, int slotNote, float vel
         u.resOverride = slotCfg.resonanceOverride;
 
         McxEnv4T4L drumAmp = pc.ampEnv;
+        drumAmp.l0 = 0.0f;
+        drumAmp.l1 = (pc.ampEnv.l1 > 0.05f) ? pc.ampEnv.l1 : 1.0f;
+        drumAmp.l2 = (pc.ampEnv.l2 > 0.05f) ? pc.ampEnv.l2 : 0.8f;
         drumAmp.t1Ms = std::min(pc.ampEnv.t1Ms, 2.5f);
         drumAmp.t3Ms = std::max(10.0f, slotCfg.decayMs);
         drumAmp.t4Ms = std::max(15.0f, slotCfg.decayMs * 0.65f);
         drumAmp.l3 = (slotCfg.triggerMode == McxDrumTriggerMode::Gated) ? pc.ampEnv.l3 : 0.0f;
 
-        u.exciter.noteOn(pc, pitchedNote);
-        u.pitchEnv.noteOn(pc.pitchEnv, 1.0f, accent01, 1.0f);
-        u.filterEnv.noteOn(pc.filterEnv, u.velScaled, accent01, 1.0f);
+        McxPartialConfig drumPc = pc;
+        McxEnv4T4L drumPitchEnv = pc.pitchEnv;
+        const bool hasExternal = (slotCfg.externalSampleData != nullptr && slotCfg.externalSampleLength > 0) ||
+                                 (pc.externalSampleData != nullptr && pc.externalSampleLength > 0);
+        if (!hasExternal)
+        {
+            if (slotNote == 35 || slotNote == 36) { // Kick
+                drumPc.vaWaveform = 3; drumPc.pitchEnvSemitones = 32.0f;
+                drumPitchEnv = { 0.0f, 0.0f, 0.5f, 25.0f, 50.0f, 40.0f, 1.0f, 0.0f, 0.0f, 0.0f };
+            } else if (slotNote == 38 || slotNote == 40) { // Snare
+                drumPc.vaWaveform = (i == 0) ? 2 : 5; drumPc.pitchEnvSemitones = 12.0f;
+                drumPitchEnv = { 0.0f, 0.0f, 0.5f, 15.0f, 30.0f, 20.0f, 1.0f, 0.0f, 0.0f, 0.0f };
+            } else if (slotNote == 42 || slotNote == 44 || slotNote == 46) { // Hi-Hats
+                drumPc.vaWaveform = 5; drumPc.filterMode = 1; drumPc.cutoffHz = 8000.0f;
+            } else if (slotNote == 39) { // Clap
+                drumPc.vaWaveform = 5; drumPc.filterMode = 2; drumPc.cutoffHz = 2800.0f;
+            }
+        }
+
+        if (slotCfg.externalSampleData != nullptr && slotCfg.externalSampleLength > 0)
+            u.exciter.setExternalTable(slotCfg.externalSampleData, slotCfg.externalSampleLength, slotCfg.externalLoopStart, slotCfg.externalLoopEnd);
+        else if (pc.externalSampleData != nullptr && pc.externalSampleLength > 0)
+            u.exciter.setExternalTable(pc.externalSampleData, pc.externalSampleLength, pc.externalLoopStart, pc.externalLoopEnd);
+
+        u.exciter.noteOn(drumPc, pitchedNote);
+        u.pitchEnv.noteOn(drumPitchEnv, 1.0f, accent01, 1.0f);
+        u.filterEnv.noteOn(drumPc.filterEnv, u.velScaled, accent01, 1.0f);
         u.ampEnv.noteOn(drumAmp, u.velScaled, accent01, 1.0f);
         ++enabledCount;
     }

@@ -18,8 +18,10 @@ node_modules/
 
 # Generated & synced assets (resolved from ABDShared / ABDBankManager)
 WebUI/src/wasm/
+WebUI/public/wasm/mcx0x_dsp.*
 WebUI/abdbank/
 WebUI/assets/
+mcx0x_factory_demo.wav
 
 # Logs, temp & OS
 logs/

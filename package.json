@@ -1,0 +1,22 @@
+{
+  "name": "abdmcx0x",
+  "version": "1.0.0",
+  "description": "Structured Groove-Rompler & Hardware Module Controller in ABDSynths",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "generate:registry": "node Scripts/registry_generator.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@abdsynths/midi-keyb": "workspace:*",
+    "@abdsynths/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0",
+    "vitest": "^1.6.0"
+  }
+}

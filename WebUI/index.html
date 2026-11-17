@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ABDMCX0X — Structured Groove-Rompler & Hardware Controller</title>
+  <style>
+    :root {
+      --bg-dark: #121214;
+      --panel-bg: #1a1a1e;
+      --panel-border: #2a2a30;
+      --accent-cyan: #00d2ff;
+      --accent-orange: #ff7700;
+      --led-green: #00ff66;
+      --text-main: #f0f0f4;
+      --text-dim: #8a8a98;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+    body {
+      background: var(--bg-dark);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #navbar-container {
+      height: 48px;
+      flex-shrink: 0;
+    }
+    #app-container {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 280px 1fr 240px;
+      grid-template-rows: 1fr 180px;
+      gap: 8px;
+      padding: 8px;
+      min-height: 0;
+    }
+    .panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 6px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .panel-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #part-mixer {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    #focused-deck {
+      grid-column: 2;
+      grid-row: 1;
+    }
+    #side-hardware {
+      grid-column: 3;
+      grid-row: 1;
+    }
+    #bottom-controllers {
+      grid-column: 1 / span 3;
+      grid-row: 2;
+      display: flex;
+      gap: 12px;
+    }
+    #wheels-rack {
+      width: 140px;
+      display: flex;
+      gap: 8px;
+    }
+    #keyboard-container {
+      flex: 1;
+    }
+  </style>
+</head>
+<body>
+  <div id="navbar-container"></div>
+  <div id="app-container">
+    <div id="part-mixer" class="panel">
+      <div class="panel-title"><span>Part Mixer (16 Parts)</span><span id="voice-counter">0 Voices</span></div>
+      <div id="part-list" style="overflow-y: auto; flex: 1;"></div>
+    </div>
+    <div id="focused-deck" class="panel">
+      <div class="panel-title"><span>Focused Part Groove Deck</span><span id="focused-part-label">Part 1: Synth Lead</span></div>
+      <div id="nuke-controls" style="flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;"></div>
+    </div>
+    <div id="side-hardware" class="panel">
+      <div class="panel-title"><span>Hardware Mirror</span><span id="profile-name">Boss DR-5</span></div>
+      <div id="hardware-status" style="font-size: 12px; color: var(--text-dim);">Aseptic Sysex Link: Active</div>
+    </div>
+    <div id="bottom-controllers" class="panel">
+      <div id="wheels-rack">
+        <div id="pitch-bend-wheel" style="flex: 1; text-align: center; font-size: 10px;">PITCH</div>
+        <div id="mod-wheel" style="flex: 1; text-align: center; font-size: 10px;">MOD</div>
+      </div>
+      <div id="keyboard-container"></div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

@@ -63,6 +63,10 @@ add_executable(McxPhase2Tests Tests/McxPhase2Tests.cpp)
 target_link_libraries(McxPhase2Tests PRIVATE ABDMCX0X_Core)
 add_test(NAME McxPhase2Tests COMMAND McxPhase2Tests)
 
+add_executable(McxPhase3Tests Tests/McxPhase3Tests.cpp)
+target_link_libraries(McxPhase3Tests PRIVATE ABDMCX0X_Core)
+add_test(NAME McxPhase3Tests COMMAND McxPhase3Tests)
+
 # ==============================================================================
 # Full JUCE 9 + Windows WebView2 Static Linking Plugin Targets (Phase 3+)
 # ==============================================================================
@@ -108,6 +112,22 @@ if(NOT MCX_HEADLESS_ONLY)
             NEEDS_MIDI_INPUT TRUE
             NEEDS_MIDI_OUTPUT TRUE
             PRODUCT_NAME "ABDMCX0X"
+            NEEDS_WEBVIEW2 TRUE
+        )
+        target_sources(ABDMCX0X PRIVATE
+            Source/Plugin/PluginProcessor.cpp
+            Source/Plugin/PluginEditor.cpp
+        )
+        target_include_directories(ABDMCX0X PUBLIC
+            "${CMAKE_CURRENT_SOURCE_DIR}/Source"
+            "${ABDSHARED_CODE_DIR}"
+        )
+        target_link_libraries(ABDMCX0X PRIVATE
+            ABDMCX0X_Core
+            ABDShared::WebView2Bridge
+            juce::juce_audio_utils
+            juce::juce_audio_processors
+            juce::juce_gui_extra
         )
         if(WIN32)
             target_compile_definitions(ABDMCX0X PUBLIC

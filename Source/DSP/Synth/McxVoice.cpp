@@ -9,6 +9,7 @@ namespace abdmcx
 
 void McxVoice::prepare(double sampleRate) noexcept
 {
+    sampleRate_ = (sampleRate > 1000.0) ? sampleRate : 44100.0;
     for (auto& u : units_)
     {
         u.exciter.prepare(sampleRate);
@@ -29,18 +30,15 @@ void McxVoice::reset() noexcept
     drumSlotNote_ = -1;
     drumMuteGroup_ = 0;
     lastLevelEstimate_ = 0.0f;
+    isGliding_ = false;
+    currentPitchSemitones_ = targetPitchSemitones_ = 60.0f;
+    glideCoeff_ = 1.0f;
 
     for (auto& u : units_)
     {
         u.enabledInVoice = false;
-        u.exciter.reset();
-        u.filter.reset();
-        u.pitchEnv.reset();
-        u.filterEnv.reset();
-        u.ampEnv.reset();
-        u.cutoffOverrideHz = -1.0f;
-        u.resOverride = -1.0f;
-        u.releaseMsOverride = -1.0f;
+        u.exciter.reset(); u.filter.reset(); u.pitchEnv.reset(); u.filterEnv.reset(); u.ampEnv.reset();
+        u.cutoffOverrideHz = u.resOverride = u.releaseMsOverride = -1.0f;
     }
 }
 
@@ -57,8 +55,23 @@ void McxVoice::noteOnMelodic(int partIdx, int midiNote, float velocity01, float 
     voiceReverbSend_ = cfg.reverbSend;
     voiceChorusSend_ = cfg.chorusSend;
     voiceSlotLevel_ = 1.0f;
+    targetPitchSemitones_ = static_cast<float>(midiNote_) + cfg.masterTuneSemitones;
+    if (cfg.portamentoEnabled && cfg.portamentoTimeMs > 0.0f && cfg.lastNoteSemitones >= 0.0f)
+    {
+        currentPitchSemitones_ = cfg.lastNoteSemitones + cfg.masterTuneSemitones;
+        const double tau = std::max(0.001, static_cast<double>(cfg.portamentoTimeMs) * 0.001);
+        glideCoeff_ = static_cast<float>(1.0 - std::exp(-1.0 / (sampleRate_ * tau)));
+        isGliding_ = true;
+    }
+    else
+    {
+        currentPitchSemitones_ = targetPitchSemitones_;
+        glideCoeff_ = 1.0f;
+        isGliding_ = false;
+    }
 
     const int midiVel = std::clamp(static_cast<int>(std::lround(velocity01 * 127.0f)), 1, 127);
+    const float effAccent = (midiVel > 100) ? std::max(accent01, static_cast<float>(midiVel - 100) / 27.0f) : accent01;
     const float kfScale = std::pow(2.0f, static_cast<float>(midiNote_ - 60) / 36.0f);
     const int limit = std::clamp(cfg.maxPartialsAllowed, 1, kMaxPartials);
 
@@ -71,13 +84,13 @@ void McxVoice::noteOnMelodic(int partIdx, int midiNote, float velocity01, float 
 
         auto& u = units_[static_cast<std::size_t>(i)];
         u.enabledInVoice = true;
-        u.velScaled = McxRomTables::applyVelocityAndAccent(velocity01, pc.velCurveIndex, accent01);
+        u.velScaled = McxRomTables::applyVelocityAndAccent(velocity01, pc.velCurveIndex, effAccent);
         if (pc.externalSampleData != nullptr && pc.externalSampleLength > 0)
             u.exciter.setExternalTable(pc.externalSampleData, pc.externalSampleLength, pc.externalLoopStart, pc.externalLoopEnd);
         u.exciter.noteOn(pc, static_cast<float>(midiNote_) + cfg.masterTuneSemitones);
-        u.pitchEnv.noteOn(pc.pitchEnv, 1.0f, accent01, kfScale);
-        u.filterEnv.noteOn(pc.filterEnv, std::clamp(u.velScaled, 0.2f, 1.35f), accent01, kfScale);
-        u.ampEnv.noteOn(pc.ampEnv, u.velScaled, accent01, kfScale);
+        u.pitchEnv.noteOn(pc.pitchEnv, 1.0f, effAccent, kfScale);
+        u.filterEnv.noteOn(pc.filterEnv, std::clamp(u.velScaled, 0.2f, 1.35f), effAccent, kfScale);
+        u.ampEnv.noteOn(pc.ampEnv, u.velScaled, effAccent, kfScale);
         ++enabledCount;
     }
     active_ = (enabledCount > 0);
@@ -105,6 +118,8 @@ void McxVoice::noteOnDrum(int partIdx, int rawInputNote, int slotNote, float vel
                               slotCfg.pitchKeyTrack * static_cast<float>(slotNote - static_cast<int>(slotCfg.coarseKey));
     const int limit = std::clamp(cfg.maxPartialsAllowed, 1, kMaxPartials);
 
+    const int rawVel = std::clamp(static_cast<int>(std::lround(velocity01 * 127.0f)), 1, 127);
+    const float effAccent = (rawVel > 100) ? std::max(accent01, static_cast<float>(rawVel - 100) / 27.0f) : accent01;
     int enabledCount = 0;
     for (int i = 0; i < kMaxPartials && enabledCount < limit; ++i)
     {
@@ -114,17 +129,14 @@ void McxVoice::noteOnDrum(int partIdx, int rawInputNote, int slotNote, float vel
 
         auto& u = units_[static_cast<std::size_t>(i)];
         u.enabledInVoice = true;
-        u.velScaled = McxRomTables::applyVelocityAndAccent(velocity01, pc.velCurveIndex, accent01);
+        u.velScaled = McxRomTables::applyVelocityAndAccent(velocity01, pc.velCurveIndex, effAccent);
         u.cutoffOverrideHz = slotCfg.cutoffHzOverride;
         u.resOverride = slotCfg.resonanceOverride;
 
         McxEnv4T4L drumAmp = pc.ampEnv;
-        drumAmp.l0 = 0.0f;
-        drumAmp.l1 = (pc.ampEnv.l1 > 0.05f) ? pc.ampEnv.l1 : 1.0f;
-        drumAmp.l2 = (pc.ampEnv.l2 > 0.05f) ? pc.ampEnv.l2 : 0.8f;
-        drumAmp.t1Ms = std::min(pc.ampEnv.t1Ms, 2.5f);
-        drumAmp.t3Ms = std::max(10.0f, slotCfg.decayMs);
-        drumAmp.t4Ms = std::max(15.0f, slotCfg.decayMs * 0.65f);
+        drumAmp.l0 = 0.0f; drumAmp.l1 = (pc.ampEnv.l1 > 0.05f) ? pc.ampEnv.l1 : 1.0f;
+        drumAmp.l2 = (pc.ampEnv.l2 > 0.05f) ? pc.ampEnv.l2 : 0.8f; drumAmp.t1Ms = std::min(pc.ampEnv.t1Ms, 2.5f);
+        drumAmp.t3Ms = std::max(10.0f, slotCfg.decayMs); drumAmp.t4Ms = std::max(15.0f, slotCfg.decayMs * 0.65f);
         drumAmp.l3 = (slotCfg.triggerMode == McxDrumTriggerMode::Gated) ? pc.ampEnv.l3 : 0.0f;
 
         McxPartialConfig drumPc = pc;
@@ -152,9 +164,9 @@ void McxVoice::noteOnDrum(int partIdx, int rawInputNote, int slotNote, float vel
             u.exciter.setExternalTable(pc.externalSampleData, pc.externalSampleLength, pc.externalLoopStart, pc.externalLoopEnd);
 
         u.exciter.noteOn(drumPc, pitchedNote);
-        u.pitchEnv.noteOn(drumPitchEnv, 1.0f, accent01, 1.0f);
-        u.filterEnv.noteOn(drumPc.filterEnv, u.velScaled, accent01, 1.0f);
-        u.ampEnv.noteOn(drumAmp, u.velScaled, accent01, 1.0f);
+        u.pitchEnv.noteOn(drumPitchEnv, 1.0f, effAccent, 1.0f);
+        u.filterEnv.noteOn(drumPc.filterEnv, u.velScaled, effAccent, 1.0f);
+        u.ampEnv.noteOn(drumAmp, u.velScaled, effAccent, 1.0f);
         ++enabledCount;
     }
     active_ = (enabledCount > 0);
@@ -163,18 +175,8 @@ void McxVoice::noteOnDrum(int partIdx, int rawInputNote, int slotNote, float vel
 void McxVoice::noteOff() noexcept
 {
     heldByKey_ = false;
-    if (!active_ || (isDrumVoice_ && drumTriggerMode_ == McxDrumTriggerMode::OneShot))
-        return;
-
-    for (auto& u : units_)
-    {
-        if (u.enabledInVoice)
-        {
-            u.pitchEnv.noteOff();
-            u.filterEnv.noteOff();
-            u.ampEnv.noteOff();
-        }
-    }
+    if (!active_ || (isDrumVoice_ && drumTriggerMode_ == McxDrumTriggerMode::OneShot)) return;
+    for (auto& u : units_) if (u.enabledInVoice) { u.pitchEnv.noteOff(); u.filterEnv.noteOff(); u.ampEnv.noteOff(); }
 }
 
 void McxVoice::forceChoke() noexcept { reset(); }
@@ -182,8 +184,7 @@ void McxVoice::forceChoke() noexcept { reset(); }
 bool McxVoice::isReleasing() const noexcept
 {
     if (!active_) return false;
-    for (const auto& u : units_)
-        if (u.enabledInVoice && u.ampEnv.isReleasing()) return true;
+    for (const auto& u : units_) if (u.enabledInVoice && u.ampEnv.isReleasing()) return true;
     return false;
 }
 
@@ -191,15 +192,13 @@ int McxVoice::getActivePartialCount() const noexcept
 {
     if (!active_) return 0;
     int count = 0;
-    for (const auto& u : units_)
-        if (u.enabledInVoice && u.ampEnv.isActive()) ++count;
+    for (const auto& u : units_) if (u.enabledInVoice && u.ampEnv.isActive()) ++count;
     return count;
 }
 
 void McxVoice::computeVectorWeights(float vx, float vy, std::array<float, 4>& weights) noexcept
 {
-    const float u = (std::clamp(vx, -1.0f, 1.0f) + 1.0f) * 0.5f;
-    const float v = (std::clamp(vy, -1.0f, 1.0f) + 1.0f) * 0.5f;
+    const float u = (std::clamp(vx, -1.0f, 1.0f) + 1.0f) * 0.5f, v = (std::clamp(vy, -1.0f, 1.0f) + 1.0f) * 0.5f;
     weights = { (1.0f - u) * (1.0f - v), u * (1.0f - v), (1.0f - u) * v, u * v };
 }
 
@@ -217,6 +216,14 @@ void McxVoice::processBlock(float* dryL, float* dryR, float* revL, float* revR,
     float peakTrack = 0.0f;
     for (int s = 0; s < numSamples; ++s)
     {
+        float pitchGlide = 0.0f;
+        if (isGliding_)
+        {
+            currentPitchSemitones_ += (targetPitchSemitones_ - currentPitchSemitones_) * glideCoeff_;
+            pitchGlide = currentPitchSemitones_ - targetPitchSemitones_;
+            if (std::abs(pitchGlide) < 0.005f) { isGliding_ = false; pitchGlide = 0.0f; }
+        }
+
         std::array<float, 4> excL {}, excR {}, amp {};
         bool anyAlive = false;
 
@@ -226,11 +233,7 @@ void McxVoice::processBlock(float* dryL, float* dryR, float* revL, float* revR,
             if (!u.enabledInVoice) continue;
 
             const float a = u.ampEnv.processSample();
-            if (!u.ampEnv.isActive())
-            {
-                u.enabledInVoice = false;
-                continue;
-            }
+            if (!u.ampEnv.isActive()) { u.enabledInVoice = false; continue; }
             anyAlive = true;
 
             const auto& pc = cfg.partials[static_cast<std::size_t>(i)];
@@ -242,7 +245,7 @@ void McxVoice::processBlock(float* dryL, float* dryR, float* revL, float* revR,
             const auto fModel = cfg.forcePartFilterModel ? cfg.forcedFilterModel : pc.filterModel;
 
             u.filter.setParameters(fModel, pc.filterMode, modCutoff, baseRes, pc.zplaneMorph, pc.drive);
-            u.exciter.processStereo(pc, pEnv * pc.pitchEnvSemitones, excL[static_cast<std::size_t>(i)], excR[static_cast<std::size_t>(i)]);
+            u.exciter.processStereo(pc, (pEnv * pc.pitchEnvSemitones) + pitchGlide, excL[static_cast<std::size_t>(i)], excR[static_cast<std::size_t>(i)]);
             amp[static_cast<std::size_t>(i)] = a * pc.level * vecWeights[static_cast<std::size_t>(i)];
         }
 

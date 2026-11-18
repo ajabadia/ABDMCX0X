@@ -22,7 +22,7 @@ export interface McxNavbarCallbacks {
   onPanic: () => void;
   onEnableAudio: () => void;
   onToggleProbe: () => void;
-  onSelectTab: (tab: 'tone' | 'drums') => void;
+  onSelectTab?: (tab: 'tone' | 'drums') => void;
 }
 
 function buildMenus() {
@@ -71,9 +71,6 @@ function buildMenus() {
       name: 'Tools', nameEs: 'Herramientas',
       items: [
         { id: 301, label: '440 Hz Signal Probe...', labelEs: 'Sonda de Señal 440 Hz...', action: 'toggleProbe', shortcut: 'Ctrl+4' },
-        { separator: true },
-        { id: 302, label: 'Tone & FX Deck', labelEs: 'Panel Tono y FX', action: 'tab', value: 'tone' },
-        { id: 303, label: 'Drum Rack (16 Pads)', labelEs: 'Drum Rack (16 Pads)', action: 'tab', value: 'drums' },
       ],
     },
     {

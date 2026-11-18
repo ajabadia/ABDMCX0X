@@ -25,6 +25,9 @@ struct McxVoiceRenderConfig
     bool forcePartFilterModel { false };
     int maxPartialsAllowed { 4 };
     float masterTuneSemitones { 0.0f };
+    bool portamentoEnabled { false };
+    float portamentoTimeMs { 0.0f };
+    float lastNoteSemitones { -1.0f };
 };
 
 /**
@@ -110,6 +113,11 @@ private:
     float voiceChorusSend_ { 0.0f };
     float voicePanOffset_ { 0.0f };
     float voiceSlotLevel_ { 1.0f };
+    double sampleRate_ { 44100.0 };
+    float currentPitchSemitones_ { 60.0f };
+    float targetPitchSemitones_ { 60.0f };
+    float glideCoeff_ { 1.0f };
+    bool isGliding_ { false };
 
     std::array<PartialUnit, kMaxPartials> units_ {};
 };

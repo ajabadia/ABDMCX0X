@@ -8,6 +8,7 @@ import '@abdsynths/shared/styles/components/wheels.css';
 import '@abdsynths/shared/styles/components/kbd-buttons.css';
 import '@abdsynths/shared/diagnostic-probe/styles';
 import '@abdsynths/midi-keyb/keyboard.css';
+import '@abdsynths/shared/assets/styles/components/step-button-strip.css';
 import './styles/mcx0x.css';
 
 import { createKeyboard } from '@abdsynths/midi-keyb';
@@ -20,25 +21,30 @@ import { McxSettingsModal } from './ui/McxSettingsModal';
 import { McxBankDrawer, type McxCatalogItem } from './ui/McxBankDrawer';
 import { McxSavePresetModal } from './ui/McxSavePresetModal';
 import {
-  bindVectorPad, renderFxAndSelectors, renderMacroDeck, renderPartMixer,
-  renderVoiceLedStrip, wireBankDropZone, type McxPartUiState,
+  bindVectorPad,
+  renderVoiceLedStrip, wireBankDropZone,
 } from './ui/McxPanels';
+import { renderMixerConsole, createDefaultPartState, type McxPartUiState } from './ui/McxMixerConsole';
 import { McxScopeCanvas } from './ui/McxScopeCanvas';
 import { renderDrumPads } from './ui/McxDrumPads';
+import { McxStepStrip } from './ui/McxStepStrip';
+import { McxToneDrawer } from './ui/McxToneDrawer';
+import { McxGlobalDrawer } from './ui/McxGlobalDrawer';
 
 const bridge = new McxHostBridge();
 const themeMgr = new ThemeManager();
-const partsState: McxPartUiState[] = Array.from({ length: 16 }, (_, i) => ({
-  kind: i === 9 ? 'drum_map' : 'chromatic', midiChannel: i + 1, mute: false, solo: false,
-}));
+const partsState: McxPartUiState[] = Array.from({ length: 16 }, (_, i) => createDefaultPartState(i));
 
 let focusedPart = 0;
+let stepStrip: McxStepStrip | null = null;
 let globalSettings: McxSystemSettingsDto = bridge.loadLocalSettingsFallback();
 let scopeView: McxScopeCanvas | null = null;
 let navbar: McxNavbar | null = null;
 let settingsModal: McxSettingsModal | null = null;
 let probeModal: ReturnType<typeof createDiagnosticProbeModal> | null = null;
 let bankDrawer: McxBankDrawer | null = null;
+let toneDrawer: McxToneDrawer | null = null;
+let globalDrawer: McxGlobalDrawer | null = null;
 
 function openSaveModal(type: 'part' | 'multi'): void {
   new McxSavePresetModal({
@@ -73,21 +79,35 @@ function updateLcdLine1(activeVoices = 0): void {
 
 function setLcdLine2(text: string): void { const el = document.getElementById('lcd-line2'); if (el) el.textContent = text; }
 
-function selectCenterTab(active: 'tone' | 'drums'): void {
-  document.getElementById('center-tabs')?.querySelectorAll('button').forEach((b) => b.classList.toggle('is-active', b.dataset.tab === active));
-  document.querySelectorAll('.mcx-tab-pane').forEach((p) => p.classList.toggle('is-hidden', (p as HTMLElement).dataset.pane !== active));
+function toggleDrumRack(show: boolean): void {
+  const drumSec = document.getElementById('drum-rack-section');
+  if (drumSec) drumSec.classList.toggle('is-hidden', !show);
 }
 
-function refreshPartList(): void { const el = document.getElementById('part-list'); if (el) renderPartMixer(el, panelCbs); }
+function refreshPartList(): void {
+  const el = document.getElementById('part-list');
+  if (el) renderMixerConsole(el, panelCbs, bridge);
+  stepStrip?.refresh();
+}
 
 const panelCbs = {
   getFocusedPart: () => focusedPart,
-  setFocusedPart: (idx: number) => { focusedPart = idx; updateLcdLine1(0); },
+  setFocusedPart: (idx: number) => {
+    focusedPart = idx;
+    updateLcdLine1(0);
+    stepStrip?.refresh();
+    if (toneDrawer?.isOpen()) toneDrawer.syncPart(idx, partsState[idx]);
+    toggleDrumRack(partsState[idx].kind === 'drum_map');
+  },
   getPartsState: () => partsState,
   onTogglePartKind: (idx: number) => {
     const next = partsState[idx].kind === 'drum_map' ? 'chromatic' : 'drum_map';
     partsState[idx].kind = next;
     bridge.setParam(idx, 'partKind', next === 'drum_map' ? 1 : 0);
+    if (idx === focusedPart) {
+      if (toneDrawer?.isOpen()) toneDrawer.syncPart(idx, partsState[idx]);
+      toggleDrumRack(next === 'drum_map');
+    }
     refreshPartList(); updateLcdLine1(0);
     setLcdLine2(`P${String(idx + 1).padStart(2, '0')} -> ${next === 'drum_map' ? t('mcx.partDrumMap') : t('mcx.partChromatic')}`);
   },
@@ -96,9 +116,38 @@ const panelCbs = {
     bridge.setParam(idx, 'partMidiChannel', ch);
     updateLcdLine1(0); setLcdLine2(`P${String(idx + 1).padStart(2, '0')} MIDI CH ${ch}`);
   },
-  onToggleMute: (idx: number) => { partsState[idx].mute = !partsState[idx].mute; bridge.setParam(idx, 'partMute', partsState[idx].mute ? 1 : 0); refreshPartList(); },
+  onToggleFollowTranspose: (idx: number) => {
+    const cur = partsState[idx].followTranspose !== false;
+    const next = !cur;
+    partsState[idx].followTranspose = next;
+    bridge.setParam(idx, 'partFollowTranspose', next ? 1 : 0);
+    refreshPartList();
+    setLcdLine2(`P${String(idx + 1).padStart(2, '0')} TRANSPOSE: ${next ? 'ON' : 'OFF'}`);
+  },
+  onToggleMute: (idx: number) => {
+    partsState[idx].mute = !partsState[idx].mute;
+    bridge.setParam(idx, 'partMute', partsState[idx].mute ? 1 : 0);
+    if (toneDrawer?.isOpen() && toneDrawer.getPart() === idx) toneDrawer.syncPart(idx, partsState[idx]);
+    refreshPartList();
+  },
   onToggleSolo: (idx: number) => { partsState[idx].solo = !partsState[idx].solo; bridge.setParam(idx, 'partSolo', partsState[idx].solo ? 1 : 0); refreshPartList(); },
   onOpenBankForPart: (idx: number) => bankDrawer?.open(idx),
+  onOpenToneForPart: (idx: number) => {
+    focusedPart = idx;
+    toneDrawer?.toggle(idx);
+    refreshPartList();
+  },
+  onOpenPadsForPart: (idx: number) => {
+    focusedPart = idx;
+    if (toneDrawer?.isOpen()) toneDrawer.close();
+    toggleDrumRack(true);
+    refreshPartList();
+  },
+  onChangeGlide: (idx: number, ms: number) => stepStrip?.setPortaTime(idx, ms),
+  onChangeLevel: (idx: number, lvl: number) => { partsState[idx].partLevel = lvl; bridge.setParam(idx, 'partLevel', lvl); },
+  onChangePan: (idx: number, pan: number) => { partsState[idx].partPan = pan; bridge.setParam(idx, 'partPan', pan); },
+  onChangeSendA: (idx: number, send: number) => { partsState[idx].reverbSend = send; bridge.setParam(idx, 'reverbSend', send); },
+  onChangeSendB: (idx: number, send: number) => { partsState[idx].chorusSend = send; bridge.setParam(idx, 'chorusSend', send); },
   setLcdLine2,
 };
 
@@ -227,18 +276,53 @@ window.addEventListener('DOMContentLoaded', () => {
   themeMgr.apply();
   bridge.updateSystemSettings(globalSettings);
 
-  document.getElementById('master-volume')?.addEventListener('input', (ev) => bridge.setMasterVolume(parseFloat((ev.target as HTMLInputElement).value)));
-  document.getElementById('center-tabs')?.addEventListener('click', (ev) => {
-    const btn = (ev.target as HTMLElement).closest('button[data-tab]') as HTMLElement | null;
-    if (btn?.dataset.tab === 'tone' || btn?.dataset.tab === 'drums') selectCenterTab(btn.dataset.tab);
+  const byId = (id: string) => document.getElementById(id);
+
+  globalDrawer = new McxGlobalDrawer({
+    hostEl: document.body,
+    bridge,
+    setLcdLine2,
+    onClose: () => {
+      byId('mcx-global-btn')?.classList.remove('is-active');
+    },
   });
 
-  const byId = (id: string) => document.getElementById(id);
+  byId('mcx-global-btn')?.addEventListener('click', () => {
+    globalDrawer?.toggle();
+    byId('mcx-global-btn')?.classList.toggle('is-active', globalDrawer?.isOpen());
+  });
   if (byId('bank-drop-zone') && fileInput) wireBankDropZone(byId('bank-drop-zone')!, fileInput, bridge, setLcdLine2);
   if (byId('mcx-scope-canvas')) scopeView = new McxScopeCanvas(byId('mcx-scope-canvas') as HTMLCanvasElement);
+
+  const mainCol = document.querySelector<HTMLElement>('.mcx-main-col');
+  if (mainCol) {
+    toneDrawer = new McxToneDrawer({
+      hostEl: mainCol,
+      bridge,
+      getPartState: (idx) => partsState[idx],
+      setLcdLine2,
+      onClose: () => refreshPartList(),
+    });
+  }
+
   refreshPartList();
-  if (byId('macro-deck')) renderMacroDeck(byId('macro-deck')!, bridge, panelCbs);
-  if (byId('fx-deck')) renderFxAndSelectors(byId('fx-deck')!, bridge, panelCbs);
+  if (byId('mcx-step-strip-host')) {
+    stepStrip = new McxStepStrip(byId('mcx-step-strip-host')!, bridge, {
+      getFocusedPart: () => focusedPart,
+      setFocusedPart: (idx: number) => {
+        focusedPart = idx;
+        updateLcdLine1(0);
+        if (toneDrawer?.isOpen()) toneDrawer.syncPart(idx, partsState[idx]);
+        refreshPartList();
+      },
+      getPartsState: () => partsState,
+      onToggleMute: (partIdx: number) => {
+        panelCbs.onToggleMute(partIdx);
+        stepStrip?.refresh();
+      },
+      setLcdNotice: setLcdLine2,
+    });
+  }
   if (byId('drum-pads')) renderDrumPads(byId('drum-pads')!, bridge, getActiveDrumPart, (lbl, note, vel, pIdx) =>
     setLcdLine2(`P${String(pIdx + 1).padStart(2, '0')} DRUM ${lbl} (N${note}) VEL ${Math.round(vel * 127)}`),
   );
@@ -250,10 +334,14 @@ window.addEventListener('DOMContentLoaded', () => {
     onNoteOn: (note: number, vel: number) => bridge.noteOn(focusedPart, note, Math.max(0.05, Math.min(1, vel > 1 ? vel / 127 : vel))),
     onNoteOff: (note: number) => bridge.noteOff(focusedPart, note),
     onPanic: () => bridge.allNotesOff(),
+    onCollapseChange: (collapsed: boolean) => {
+      document.querySelector('.mcx-keyboard-dock')?.classList.toggle('is-collapsed', collapsed);
+    },
     config: {
       numOctaves: 4, startNote: 36, maxOctaveShift: 3, enableWheels: true, enablePanic: true,
       enableIvoryTexture: true, enableQwerty: true, showQwertyLabels: true,
       enableHold: true, enableRetrig: true, enableSustain: true, enableTouch: true, enableResizeObserver: true,
+      enableCollapse: true,
     },
   });
 

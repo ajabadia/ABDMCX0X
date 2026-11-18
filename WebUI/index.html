@@ -27,49 +27,24 @@
       <canvas id="mcx-scope-canvas" class="mcx-scope-canvas" width="240" height="44"></canvas>
     </div>
 
-    <label class="mcx-select-card" style="min-width: 120px;">
-      <span class="mcx-control-label" data-i18n="mcx.masterVol">MASTER</span>
-      <input type="range" id="master-volume" min="0" max="1" step="0.01" value="0.85" />
-    </label>
-
     <div class="mcx-voice-meter">
       <span class="mcx-voice-caption" id="voice-caption">0 / 64 VOICES</span>
       <div class="mcx-voice-leds" id="voice-leds"></div>
     </div>
+
+    <button type="button" class="mcx-global-toggle-btn" id="mcx-global-btn" title="Global & Master Bus Settings" data-i18n-title="mcx.globalBtn">
+      <span class="mcx-global-btn-led"></span>
+      <span data-i18n="mcx.globalBtn">GLOBAL</span>
+    </button>
   </section>
 
-  <main class="mcx-workspace">
-    <aside class="mcx-panel">
-      <div class="mcx-panel-title" data-i18n="mcx.partsTitle">MEZCLADOR 16 PARTES</div>
-      <div class="mcx-part-list" id="part-list"></div>
-    </aside>
+  <!-- 16-BUTTON HARDWARE STRIP (Canonical @abdsynths/shared component) -->
+  <section class="mcx-step-strip-host" id="mcx-step-strip-host"></section>
 
-    <section class="mcx-center-col">
-      <div class="mcx-tabs-bar" id="center-tabs" role="tablist">
-        <button type="button" class="mcx-btn is-active" data-tab="tone" data-i18n="mcx.tabToneFx">TONO Y FX</button>
-        <button type="button" class="mcx-btn" data-tab="drums" data-i18n="mcx.tabDrums">DRUM RACK (16 PADS)</button>
-      </div>
-
-      <div class="mcx-tab-pane" data-pane="tone">
-        <div class="mcx-panel">
-          <div class="mcx-panel-title" data-i18n="mcx.deckTitle">TONO Y MACROS EN VIVO</div>
-          <div class="mcx-controls-grid" id="macro-deck"></div>
-        </div>
-        <div class="mcx-panel">
-          <div class="mcx-panel-title" data-i18n="mcx.fxTitle">EFECTOS MASTER</div>
-          <div class="mcx-selects-grid" id="fx-deck"></div>
-        </div>
-      </div>
-
-      <div class="mcx-tab-pane is-hidden" data-pane="drums">
-        <div class="mcx-panel">
-          <div class="mcx-panel-title" data-i18n="mcx.drumRackTitle">DRUM RACK 16 PADS GROOVEBOX (PARTE DRUM ACTIVA)</div>
-          <div class="mcx-drum-grid" id="drum-pads"></div>
-        </div>
-      </div>
-    </section>
-
-    <aside class="mcx-panel">
+  <!-- SCROLLABLE WORKSPACE (Between 16-Button Strip and Keyboard Dock) -->
+  <main class="mcx-workspace" id="mcx-workspace">
+    <!-- LEFT PANEL: Morph Vectorial 2D Joystick & Bank Drop Zone -->
+    <aside class="mcx-panel mcx-panel--left" id="mcx-left-dock">
       <div class="mcx-panel-title" data-i18n="mcx.vectorTitle">MORPH VECTORIAL 2D</div>
       <div class="mcx-vector-pad" id="vector-pad">
         <div class="mcx-vector-dot" id="vector-dot"></div>
@@ -79,6 +54,23 @@
       </div>
       <input type="file" id="bank-file-input" accept=".abdbank" hidden />
     </aside>
+
+    <!-- MAIN COLUMN: Horizontal 16-Part Mixer on top, Contextual Tone/Drums on bottom -->
+    <section class="mcx-main-col">
+      <!-- TOP: 16-Part Console (Horizontal Rack of 16 Vertical Channel Strips) -->
+      <section class="mcx-panel mcx-mixer-panel">
+        <div class="mcx-panel-title" data-i18n="mcx.partsTitle">MEZCLADOR 16 PARTES</div>
+        <div class="mcx-mixer-console" id="part-list"></div>
+      </section>
+
+      <!-- Contextual Drum Rack (16 Pads) - Temporary reference until Step 4 -->
+      <section class="mcx-center-col" id="drum-rack-section">
+        <div class="mcx-panel">
+          <div class="mcx-panel-title" data-i18n="mcx.drumRackTitle">DRUM RACK 16 PADS GROOVEBOX (PARTE DRUM ACTIVA)</div>
+          <div class="mcx-drum-grid" id="drum-pads"></div>
+        </div>
+      </section>
+    </section>
   </main>
 
   <footer class="mcx-keyboard-dock">
@@ -87,12 +79,12 @@
       <div id="mod-wheel-container"></div>
     </div>
     <div class="kbd-octave-controls">
-      <button type="button" id="oct-up" class="kbd-octave-btn" title="Octave Up">
-        <span>OCT +</span>
+      <button type="button" id="oct-up" class="kbd-octave-btn" title="Octave Up" data-i18n-title="mcx.octaveUp">
+        <span data-i18n="mcx.octUpShort">OCT +</span>
         <div class="kbd-octave-led" id="led-up"></div>
       </button>
-      <button type="button" id="oct-down" class="kbd-octave-btn" title="Octave Down">
-        <span>OCT -</span>
+      <button type="button" id="oct-down" class="kbd-octave-btn" title="Octave Down" data-i18n-title="mcx.octaveDown">
+        <span data-i18n="mcx.octDownShort">OCT -</span>
         <div class="kbd-octave-led" id="led-down"></div>
       </button>
     </div>

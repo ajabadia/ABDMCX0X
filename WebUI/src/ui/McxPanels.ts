@@ -1,12 +1,14 @@
 /**
  * ABDMCX0X -- McxPanels.ts
- * Renders the 16-Part Groove Mixer, Voice LED Strip, Tone & Macro Deck,
- * Vector 2D Pad, and Master GS/MC-303 FX controls.
+ * Renders the Voice LED Strip, Tone & Macro Deck, Master FX Deck,
+ * Vector 2D Pad, and Sound Bank Drop Zone.
  */
 
 import type { McxHostBridge, McxParamKey } from '../bridge/McxHostBridge';
-import { getCategoryIconSvg } from '@abdsynths/shared/components/bank/bankIcons.js';
+import type { McxMixerCallbacks, McxPartUiState } from './McxMixerConsole';
 import { t } from '../i18n/mcxI18n';
+
+export type { McxPartUiState, McxMixerCallbacks };
 
 const REVERB_MACROS = ['Room 1', 'Room 2', 'Room 3', 'Hall 1', 'Hall 2', 'Plate', 'Delay', 'Pan Delay'];
 const CHORUS_MACROS = ['Chorus 1', 'Chorus 2', 'Chorus 3', 'Chorus 4', 'FB Chorus', 'Flanger', 'Short Dly', 'Short Dly FB'];
@@ -14,78 +16,15 @@ const FILTER_MODELS = ['SVF Clean', 'Roland TVF ZDF', 'MS-20 Acid', 'Ladder Driv
 const STRUCTURE_MODES = ['Parallel', 'RingMod 1-2', 'Booster 1-2', 'Vector 2D'];
 const DAC_MODES = ['HD Studio', '90s 16-bit', 'Vintage 12-bit'];
 
-export interface McxPartUiState {
-  kind: 'chromatic' | 'drum_map';
-  midiChannel: number;
-  mute: boolean;
-  solo: boolean;
-  name?: string;
-  categoryId?: number;
-  thumbnailUri?: string;
-}
-
-export interface McxPanelCallbacks {
-  getFocusedPart: () => number;
-  setFocusedPart: (idx: number) => void;
-  getPartsState: () => McxPartUiState[];
-  onTogglePartKind: (idx: number) => void;
-  onChangePartChannel: (idx: number, ch: number) => void;
-  onToggleMute: (idx: number) => void;
-  onToggleSolo: (idx: number) => void;
-  onOpenBankForPart?: (idx: number) => void;
-  setLcdLine2: (text: string) => void;
-}
-
-export function renderPartMixer(container: HTMLElement, cb: McxPanelCallbacks): void {
-  container.innerHTML = '';
-  const focused = cb.getFocusedPart();
-  const parts = cb.getPartsState();
-
-  for (let i = 0; i < 16; ++i) {
-    const ps = parts[i];
-    const isDrum = ps.kind === 'drum_map';
-    const catId = ps.categoryId ?? (isDrum ? 9 : 3);
-    const soundName = ps.name || (isDrum ? 'TR-909 Kit' : `Sound P${i + 1}`);
-    const row = document.createElement('div');
-    row.className = `mcx-part-row cat-${catId}${i === focused ? ' is-active' : ''}${isDrum ? ' is-drum' : ''}${ps.mute ? ' is-muted' : ''}`;
-    row.dataset.part = String(i);
-
-    const chOpts = Array.from({ length: 16 }, (_, c) => `<option value="${c + 1}"${ps.midiChannel === c + 1 ? ' selected' : ''}>CH${c + 1}</option>`).join('');
-    row.innerHTML = `
-      <span class="mcx-part-num">P${String(i + 1).padStart(2, '0')}</span>
-      <button type="button" class="mcx-part-kind-btn${isDrum ? ' is-drum' : ''}" data-act="kind" title="${t('mcx.partKindToggle')}">${isDrum ? 'DRM' : 'CHR'}</button>
-      <button type="button" class="mcx-part-sound-btn cat-${catId}" data-act="sound" title="Click to browse sounds / presets">
-        <span class="mcx-part-cat-icon">${getCategoryIconSvg(catId)}</span>
-        <span class="mcx-part-sound-name">${soundName}</span>
-      </button>
-      <select class="mcx-part-ch-select" data-act="ch" aria-label="${t('mcx.midiChannel')}">${chOpts}</select>
-      <button type="button" class="mcx-part-ms-btn${ps.mute ? ' is-mute' : ''}" data-act="mute" title="${t('mcx.mute')}">M</button>
-      <button type="button" class="mcx-part-ms-btn${ps.solo ? ' is-solo' : ''}" data-act="solo" title="${t('mcx.solo')}">S</button>
-    `;
-
-    row.addEventListener('click', (ev) => {
-      const act = (ev.target as HTMLElement).closest('[data-act]')?.getAttribute('data-act');
-      if (act === 'kind') { ev.stopPropagation(); cb.onTogglePartKind(i); return; }
-      if (act === 'sound') { ev.stopPropagation(); cb.onOpenBankForPart?.(i); return; }
-      if (act === 'mute') { ev.stopPropagation(); cb.onToggleMute(i); return; }
-      if (act === 'solo') { ev.stopPropagation(); cb.onToggleSolo(i); return; }
-      if (act === 'ch') return;
-      cb.setFocusedPart(i);
-      container.querySelectorAll('.mcx-part-row').forEach((el, idx) => el.classList.toggle('is-active', idx === i));
-      cb.setLcdLine2(`PART ${String(i + 1).padStart(2, '0')} [${isDrum ? 'DRM' : 'CHR'} · CH${ps.midiChannel}] ${soundName}`);
-    });
-    const chSel = row.querySelector('select[data-act="ch"]') as HTMLSelectElement | null;
-    chSel?.addEventListener('click', (ev) => ev.stopPropagation());
-    chSel?.addEventListener('change', () => cb.onChangePartChannel(i, parseInt(chSel.value, 10)));
-    container.appendChild(row);
-  }
-}
-
 export function renderVoiceLedStrip(container: HTMLElement, budget: number, activeCount: number): void {
   const shown = Math.min(budget, 32);
   if (container.childElementCount !== shown) {
     container.innerHTML = '';
-    for (let i = 0; i < shown; ++i) { const led = document.createElement('span'); led.className = 'mcx-voice-led'; container.appendChild(led); }
+    for (let i = 0; i < shown; ++i) {
+      const led = document.createElement('span');
+      led.className = 'mcx-voice-led';
+      container.appendChild(led);
+    }
   }
   const lit = budget > 32 ? Math.round((activeCount / budget) * shown) : activeCount;
   for (let i = 0; i < shown; ++i) {
@@ -95,10 +34,13 @@ export function renderVoiceLedStrip(container: HTMLElement, budget: number, acti
   }
 }
 
-export function renderMacroDeck(container: HTMLElement, bridge: McxHostBridge, cb: McxPanelCallbacks): void {
+export function renderMacroDeck(container: HTMLElement, bridge: McxHostBridge, cb: McxMixerCallbacks): void {
   const sliders: Array<{ key: McxParamKey; i18n: string; min: number; max: number; step: number; val: number; fmt: (v: number) => string }> = [
     { key: 'filterCutoff', i18n: 'mcx.cutoff', min: 0, max: 1, step: 0.01, val: 0.72, fmt: (v) => `${Math.round(20 * Math.pow(1000, v))} Hz` },
     { key: 'filterResonance', i18n: 'mcx.resonance', min: 0, max: 0.96, step: 0.01, val: 0.18, fmt: (v) => `${Math.round(v * 100)}%` },
+    { key: 'pitchCoarse', i18n: 'mcx.pitchCoarse', min: -24, max: 24, step: 1, val: 0, fmt: (v) => `${v > 0 ? '+' : ''}${Math.round(v)} st` },
+    { key: 'pitchFine', i18n: 'mcx.pitchFine', min: -50, max: 50, step: 1, val: 0, fmt: (v) => `${v > 0 ? '+' : ''}${Math.round(v)} ct` },
+    { key: 'portaTimeMs', i18n: 'mcx.portaTime', min: 0, max: 500, step: 5, val: 60, fmt: (v) => `${Math.round(v)} ms` },
     { key: 'ampAttack', i18n: 'mcx.attack', min: 0, max: 1, step: 0.01, val: 0.04, fmt: (v) => `${Math.round(0.5 + v * v * 2500)} ms` },
     { key: 'ampDecay', i18n: 'mcx.decay', min: 0, max: 1, step: 0.01, val: 0.25, fmt: (v) => `${Math.round(10 + v * 4000)} ms` },
     { key: 'ampSustain', i18n: 'mcx.sustain', min: 0, max: 1, step: 0.01, val: 0.75, fmt: (v) => `${Math.round(v * 100)}%` },
@@ -131,7 +73,7 @@ export function renderMacroDeck(container: HTMLElement, bridge: McxHostBridge, c
       valEl.textContent = txt;
       if (s.key === 'driveAmount') {
         bridge.setParam(cb.getFocusedPart(), 'driveEnabled', num > 0.005 ? 1 : 0);
-      } else if (s.key === 'eqLowGain' || s.key === 'eqMidGain' || s.key === 'eqHighGain') {
+      } else if (s.key.startsWith('eq')) {
         bridge.setParam(cb.getFocusedPart(), 'eqEnabled', 1);
       }
       bridge.setParam(cb.getFocusedPart(), s.key, num);
@@ -141,7 +83,7 @@ export function renderMacroDeck(container: HTMLElement, bridge: McxHostBridge, c
   }
 }
 
-export function renderFxAndSelectors(container: HTMLElement, bridge: McxHostBridge, cb: McxPanelCallbacks): void {
+export function renderFxAndSelectors(container: HTMLElement, bridge: McxHostBridge, cb: McxMixerCallbacks): void {
   const makeSelect = (i18nKey: string, paramKey: McxParamKey, options: string[], defIdx: number) => {
     const wrap = document.createElement('label');
     wrap.className = 'mcx-select-card';
@@ -174,7 +116,7 @@ export function renderFxAndSelectors(container: HTMLElement, bridge: McxHostBrid
   container.appendChild(timeCard);
 }
 
-export function bindVectorPad(pad: HTMLElement, dot: HTMLElement, bridge: McxHostBridge, cb: McxPanelCallbacks): void {
+export function bindVectorPad(pad: HTMLElement, dot: HTMLElement, bridge: McxHostBridge, cb: McxMixerCallbacks): void {
   let dragging = false;
   const update = (ev: PointerEvent) => {
     const rect = pad.getBoundingClientRect();

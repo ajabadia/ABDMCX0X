@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **16-Channel Mixing Console & Ergonomic Scrollable Workspace Layout:**
+  - Designed horizontal 16-channel mixing console (`McxMixerConsole.ts`, 135 lines) featuring 16 vertical channel strips (`.mcx-strip`), each equipped with:
+    - Part header badge (`P01`..`P16`) and chromatic/drum toggle (`DRM`/`CHR`).
+    - Sound preset button with category icon badge (`cat-0`..`cat-9`) and name.
+    - MIDI Channel selector (`CH1`..`CH16`) and Global Transpose follower toggle (`TR`).
+    - Dedicated Mute (`M`) and Solo (`S`) action buttons.
+    - Dedicated per-part Portamento Glide slider (`GLD` 0..500 ms, automatically disabled/dimmed for drum kits).
+    - Compact vertical volume fader with percentage readout.
+  - Reorganized workspace: Vector 2D Morph pad and sound bank drop zone docked to the left; horizontal mixer console positioned on top; contextual Tone/FX deck or 16-Pad Drum Rack situated directly underneath.
+  - Made the entire central workspace (`.mcx-workspace`) smoothly scrollable vertically and horizontally with token-styled scrollbars.
+- **Hardware 16-Step Button Strip Integration (`@abdsynths/shared`):**
+  - Promoted universal hardware step strip (`StepButtonStrip.js` + `step-button-strip.css`) into `ABDShared/Components/Controls/` with unit tests (5/5 pass).
+  - Refactored `ABDMS2000` to consume the shared component, eliminating ~500 lines of duplicate CSS.
+  - Wired into `ABDMCX0X` (`McxStepStrip.ts`, 199 lines) directly beneath the LCD strip, supporting 5 modes: `PART SEL`, `PART MUTE`, `STEP MUTE`, `ACCENT` (velocity boost), and `SLIDE / GLIDE` (legato portamento) with real-time LED chaser animation.
+- **Per-Channel Portamento / Glide & Roland Velocity > 100 Accent:**
+  - Implemented 1-pole pitch smoother in `McxVoice.h/.cpp` with channel-specific `portaTimeMs` (parameter 59), adhering to General MIDI / Roland GS standards (CC 5 / CC 65).
+  - Implemented Roland groovebox accent protocol: incoming MIDI or sequencer notes with velocity > 100 dynamically trigger the accent circuit (VCF peak boost + VCA gain kick + decay bite).
+- **Internationalization (i18n) & Zero Hardcoded Colors Complete Audit:**
+  - 100% tokenized CSS: eliminated hardcoded rgba fallbacks and inline styles.
+  - Modularized i18n dictionaries into `WebUI/src/i18n/locales/en.ts` and `locales/es.ts`, with full coverage across navigation, mixer, step strip, bank drawer, and save preset dialogs.
+  - Enforced strict project limits: all TS/JS files strictly `< 200` lines (extracted `McxBankDrawerViews.ts` and `McxDefaultCatalog.ts`), and all C++ files strictly `< 300` lines.
 - **Consolidated Product & Architecture Vision v2 (`DOCS/VISION_GROOVEBOX_16P.md`):**
   - Documented the unified 16-part modular Groovebox architecture: single unrestricted engine (keeping `MS2000`/`Axionik`/`MC-303`/`DR-5` as pure visual themes), free `Chromatic`/`DrumMap` per part (Part 10 Drum by default), 3-tier settings hierarchy (`SystemSettings` / `MultiPreset` / `PartPreset`), `AxionikDB`-compatible working directory, `DwgsWavetable` engine promotion (`ABDMS2000` → `ABDShared::DspCore`), dual serial filters (`Filter 1 → Filter 2`) edited in sliding Drawers, per-part parametric EQ + Drive + 4 Pre/Post-Fader sends, 4 Global + 2 Local LFOs (0% idle CPU + ModMatrix Via-Attenuator), Global Chromatic + Scale/Key Transposer (`ABDShared` + `@abdsynths/midi-keyb`), multi-bus Master FX Rack (`ABDShared`), PPQ Piano-Roll Sequencer Modal + Full Transport + Song Mode, MPC/Groovebox performance features (`16 Levels`, `Note Repeat`, `MPC Swing`, `P-Locks`, `Acid Accent`, `Megamix`, `Scenes/Hotcues`), and hardware detection relegated to final phase as input controller loading full `ABDShared` MIDI Learn profiles.
 - **Phase 3C Native JUCE 9 Host Parity (Standalone + VST3 + WebView2):**

@@ -36,7 +36,7 @@ export class McxSavePresetModal {
     this.dialog = document.createElement('dialog');
     this.dialog.className = 'mcx-settings-dialog mcx-save-modal';
     const isMulti = this.options.type === 'multi';
-    const title = isMulti ? 'SAVE 16-PART MULTI PRESET (.ABDMULTI)' : `SAVE PART ${String((this.options.partIndex ?? 0) + 1).padStart(2, '0')} PRESET (.ABDPART)`;
+    const title = isMulti ? t('mcx.saveMultiTitle') : `${t('mcx.savePartTitle')} [P${String((this.options.partIndex ?? 0) + 1).padStart(2, '0')}]`;
     const sublibs = this.options.sublibraries?.length ? this.options.sublibraries : ['User', 'Bass', 'Leads', 'Pads', 'Drums'];
     const defName = this.options.initialName || (isMulti ? 'My Multi 01' : `Part ${(this.options.partIndex ?? 0) + 1} Sound`);
     const defCat = this.options.initialCategory ?? (isMulti ? 0 : 3);
@@ -52,29 +52,29 @@ export class McxSavePresetModal {
         </div>
         <div class="mcx-settings-body">
           <div class="mcx-field-row">
-            <label class="mcx-field-label">NAME:</label>
+            <label class="mcx-field-label">${t('mcx.saveName')}</label>
             <input type="text" class="mcx-input-text" id="save-name" value="${defName}" maxlength="64" />
           </div>
           <div class="mcx-field-row">
-            <label class="mcx-field-label">SUBLIBRARY:</label>
+            <label class="mcx-field-label">${t('mcx.saveSublib')}</label>
             <input type="text" class="mcx-input-text" id="save-sublib" list="sublib-list" value="${sublibs[0]}" />
             <datalist id="sublib-list">${sublibs.map((s) => `<option value="${s}">`).join('')}</datalist>
           </div>
           <div class="mcx-field-row">
-            <label class="mcx-field-label">CATEGORY (0..31):</label>
+            <label class="mcx-field-label">${t('mcx.saveCategory')}</label>
             <select class="mcx-select" id="save-cat">
               ${CATEGORY_32_PALETTE.map((c) => `<option value="${c.slot}"${c.slot === defCat ? ' selected' : ''}>${c.slot}: ${getBankCategoryLabel(c.slot)}</option>`).join('')}
             </select>
           </div>
           <div class="mcx-field-row">
-            <label class="mcx-field-label">AUTHOR:</label>
+            <label class="mcx-field-label">${t('mcx.saveAuthor')}</label>
             <input type="text" class="mcx-input-text" id="save-author" value="User" maxlength="48" />
           </div>
           <div class="mcx-field-row">
-            <label class="mcx-field-label">PACKAGE MODE:</label>
+            <label class="mcx-field-label">${t('mcx.savePackageMode')}</label>
             <label class="mcx-checkbox-label">
               <input type="checkbox" id="save-bundle" />
-              <span>Self-contained Bundle (.zip with wave samples)</span>
+              <span>${t('mcx.saveBundleHint')}</span>
             </label>
           </div>
         </div>

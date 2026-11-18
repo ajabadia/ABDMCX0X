@@ -5,12 +5,13 @@
  */
 
 import { createBankShell } from '@abdsynths/shared/components/bank/bankShell.js';
-import { bankCardHtml, bindBankCards } from '@abdsynths/shared/components/bank/bankCard.js';
 import { bankChipsHtml, bindBankChips } from '@abdsynths/shared/components/bank/bankChips.js';
 import { BankCatalogState } from '@abdsynths/shared/components/bank/bankCatalogState.js';
-import { BANK_ICONS, getCategoryIconSvg } from '@abdsynths/shared/components/bank/bankIcons.js';
+import { BANK_ICONS } from '@abdsynths/shared/components/bank/bankIcons.js';
 import { CATEGORY_32_PALETTE, getBankCategoryLabel } from '@abdsynths/shared/components/bank/bankCategories.js';
 import type { McxHostBridge } from '../bridge/McxHostBridge';
+import { getDefaultFactoryItems } from './McxDefaultCatalog';
+import { renderCatalogGrid, renderCatalogTable } from './McxBankDrawerViews';
 import { t } from '../i18n/mcxI18n';
 
 export interface McxCatalogItem {
@@ -49,7 +50,7 @@ export class McxBankDrawer {
     private cb: McxBankDrawerCallbacks
   ) {
     this.initShell();
-    this.loadDefaultFactoryItems();
+    this.setItems(getDefaultFactoryItems());
   }
 
   private initShell(): void {
@@ -57,15 +58,15 @@ export class McxBankDrawer {
       title: 'ABDMCX0X BANK MANAGER',
       badge: '16 PARTS',
       tabs: [
-        { id: 'models', label: 'MODELS', iconHtml: BANK_ICONS.database },
-        { id: 'parts', label: 'PART PRESETS (.ABDPART)', iconHtml: BANK_ICONS.sliders },
-        { id: 'multis', label: 'MULTIS (.ABDMULTI)', iconHtml: BANK_ICONS.database },
-        { id: 'banks', label: 'BANKS (.ABDBANK)', iconHtml: BANK_ICONS.folder },
+        { id: 'models', label: t('mcx.bankTabModels'), iconHtml: BANK_ICONS.database },
+        { id: 'parts', label: t('mcx.bankTabParts'), iconHtml: BANK_ICONS.sliders },
+        { id: 'multis', label: t('mcx.bankTabMultis'), iconHtml: BANK_ICONS.database },
+        { id: 'banks', label: t('mcx.bankTabBanks'), iconHtml: BANK_ICONS.folder },
       ],
-      searchPlaceholder: t('mcx.searchPlaceholder') || 'Search sounds, models, tags...',
+      searchPlaceholder: t('mcx.searchPlaceholder'),
       headerActions: [
-        { id: 'save-part', label: 'Save Part...', iconHtml: BANK_ICONS.save },
-        { id: 'save-multi', label: 'Save Multi...', iconHtml: BANK_ICONS.save },
+        { id: 'save-part', label: t('mcx.savePartPreset'), iconHtml: BANK_ICONS.save },
+        { id: 'save-multi', label: t('mcx.saveMultiPreset'), iconHtml: BANK_ICONS.save },
         { id: 'close', label: '✕', iconHtml: BANK_ICONS.close },
       ],
       onTabChange: (tab) => {
@@ -92,17 +93,17 @@ export class McxBankDrawer {
     const targetPart = this.cb.getTargetPart();
     this.shell.toolbarEl.innerHTML = `
       <div class="mcx-bank-target-bar">
-        <span class="mcx-bank-target-label">DESTINATION:</span>
+        <span class="mcx-bank-target-label">${t('mcx.destination')}</span>
         <select class="mcx-bank-part-select" id="mcx-bank-part-select">
           ${Array.from({ length: 16 }, (_, i) => `<option value="${i}"${i === targetPart ? ' selected' : ''}>PART ${String(i + 1).padStart(2, '0')}</option>`).join('')}
         </select>
-        <button type="button" class="btn btn-xs ${this.state.favoritesOnly ? 'btn-warning' : 'btn-outline'}" id="mcx-bank-favs-btn" title="Filter Favorites">
-          ${BANK_ICONS.starFilled} FAVS
+        <button type="button" class="btn btn-xs ${this.state.favoritesOnly ? 'btn-warning' : 'btn-outline'}" id="mcx-bank-favs-btn" title="${t('mcx.filterFavorites')}">
+          ${BANK_ICONS.starFilled} ${t('mcx.favs')}
         </button>
-        <button type="button" class="btn btn-xs ${this.state.viewMode === 'grid' ? 'btn-primary' : 'btn-outline'}" id="mcx-bank-grid-btn" title="Grid View">
+        <button type="button" class="btn btn-xs ${this.state.viewMode === 'grid' ? 'btn-primary' : 'btn-outline'}" id="mcx-bank-grid-btn" title="${t('mcx.gridView')}">
           ${BANK_ICONS.viewGrid}
         </button>
-        <button type="button" class="btn btn-xs ${this.state.viewMode === 'table' ? 'btn-primary' : 'btn-outline'}" id="mcx-bank-table-btn" title="Table View">
+        <button type="button" class="btn btn-xs ${this.state.viewMode === 'table' ? 'btn-primary' : 'btn-outline'}" id="mcx-bank-table-btn" title="${t('mcx.tableView')}">
           ${BANK_ICONS.viewTable}
         </button>
       </div>
@@ -134,7 +135,7 @@ export class McxBankDrawer {
     const row = this.shell.toolbarEl.querySelector('#mcx-cat-chips-row') as HTMLElement | null;
     if (!row) return;
     const chips = [
-      { id: 'all', label: 'All', catClass: 'cat-0' },
+      { id: 'all', label: t('common.all') || 'All', catClass: 'cat-0' },
       ...CATEGORY_32_PALETTE.slice(0, 10).map((c) => ({
         id: String(c.slot),
         label: getBankCategoryLabel(c.slot),
@@ -179,97 +180,9 @@ export class McxBankDrawer {
     this.cardUnbind?.();
 
     if (this.state.viewMode === 'table') {
-      this.renderTable(filtered);
+      renderCatalogTable(this.shell.contentEl, filtered, this.cb);
     } else {
-      this.renderGrid(filtered);
+      this.cardUnbind = renderCatalogGrid(this.shell.contentEl, filtered, this.state, this.cb, () => this.render());
     }
-  }
-
-  private renderGrid(items: McxCatalogItem[]): void {
-    const cardsHtml = items.map((it) => bankCardHtml({
-      slot: it.id,
-      name: it.name,
-      catLabel: it.categoryName || getBankCategoryLabel(it.categoryId ?? 0),
-      catClass: `cat-${it.categoryId ?? 0}`,
-      paramId: it.categoryId ?? 0,
-      badges: [it.engineKind || 'ROM', it.sublibrary || 'Default'],
-      thumbnailUrl: it.thumbnailUrl,
-      isFavorite: this.state.isFavorite(it.id),
-      hasAudition: true,
-    })).join('');
-
-    this.shell.contentEl.innerHTML = `<div class="ndb-grid catalog-grid">${cardsHtml}</div>`;
-    this.cardUnbind = bindBankCards(this.shell.contentEl, {
-      onCardClick: (_slot, id) => {
-        const item = items.find((x) => x.id === id);
-        if (item && this.state.autoAudition) this.cb.onAudition(this.cb.getTargetPart(), item);
-      },
-      onCardDblClick: (_slot, id) => {
-        const item = items.find((x) => x.id === id);
-        if (item) this.cb.onSelectPartPreset(this.cb.getTargetPart(), item);
-      },
-      onAudition: ({ id }) => {
-        const item = items.find((x) => x.id === id);
-        if (item) this.cb.onAudition(this.cb.getTargetPart(), item);
-      },
-      onFavorite: ({ id }) => {
-        this.state.toggleFavorite(id);
-        this.render();
-      },
-    });
-  }
-
-  private renderTable(items: McxCatalogItem[]): void {
-    const rowsHtml = items.map((it) => `
-      <tr data-id="${it.id}">
-        <td>${getCategoryIconSvg(it.categoryId ?? 0)}</td>
-        <td><strong>${it.name}</strong></td>
-        <td><span class="ndb-card-cat cat-${it.categoryId ?? 0}">${it.categoryName || getBankCategoryLabel(it.categoryId ?? 0)}</span></td>
-        <td>${it.engineKind || 'ROM'}</td>
-        <td>${it.sublibrary || 'Default'}</td>
-        <td><button type="button" class="btn btn-xs btn-audition" data-act="audition" data-id="${it.id}">${BANK_ICONS.audition}</button></td>
-      </tr>
-    `).join('');
-
-    this.shell.contentEl.innerHTML = `
-      <table class="catalog-table">
-        <thead><tr><th></th><th>Name</th><th>Category</th><th>Engine</th><th>Sublibrary</th><th>Preview</th></tr></thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>
-    `;
-
-    this.shell.contentEl.addEventListener('click', (e) => {
-      const btn = (e.target as HTMLElement).closest('[data-act="audition"]');
-      if (btn) {
-        const id = btn.getAttribute('data-id');
-        const item = items.find((x) => x.id === id);
-        if (item) this.cb.onAudition(this.cb.getTargetPart(), item);
-        return;
-      }
-      const row = (e.target as HTMLElement).closest('tr');
-      if (row) {
-        const id = row.getAttribute('data-id');
-        const item = items.find((x) => x.id === id);
-        if (item) this.cb.onSelectPartPreset(this.cb.getTargetPart(), item);
-      }
-    }, { once: true });
-  }
-
-  private loadDefaultFactoryItems(): void {
-    // Standard Roland/Boss factory tones & kits
-    const factory = [
-      { id: 'f_piano01', name: 'Acoustic Piano 1', categoryName: 'Keys / Organ', categoryId: 5, engineKind: 'rompler_chromatic', sublibrary: 'Factory Roland' },
-      { id: 'f_piano02', name: 'Bright Piano', categoryName: 'Keys / Organ', categoryId: 5, engineKind: 'rompler_chromatic', sublibrary: 'Factory Roland' },
-      { id: 'f_ep01', name: 'Vintage Rhodes EP', categoryName: 'Keys / Organ', categoryId: 5, engineKind: 'rompler_chromatic', sublibrary: 'Factory Roland' },
-      { id: 'f_strings01', name: 'Silk Warm Strings', categoryName: 'Strings / Solo', categoryId: 1, engineKind: 'rompler_chromatic', sublibrary: 'Factory Roland' },
-      { id: 'f_bass01', name: 'Acid TB-303 Square', categoryName: 'Bass / Pluck', categoryId: 3, engineKind: 'virtual_analog', sublibrary: 'Factory Roland' },
-      { id: 'f_bass02', name: 'Acid TB-303 Saw', categoryName: 'Bass / Pluck', categoryId: 3, engineKind: 'virtual_analog', sublibrary: 'Factory Roland' },
-      { id: 'f_bass03', name: 'Slap Bass Fingered', categoryName: 'Bass / Pluck', categoryId: 3, engineKind: 'rompler_chromatic', sublibrary: 'Factory Roland' },
-      { id: 'f_pad01', name: 'Solar Ambient Pad', categoryName: 'Pads / Showcase', categoryId: 4, engineKind: 'rompler_chromatic', sublibrary: 'Factory Roland' },
-      { id: 'f_drum01', name: 'TR-909 Dance Kit', categoryName: 'Rhythm / Drums', categoryId: 9, engineKind: 'rompler_drum_map', sublibrary: 'Factory Roland' },
-      { id: 'f_drum02', name: 'TR-808 Electro Kit', categoryName: 'Rhythm / Drums', categoryId: 9, engineKind: 'rompler_drum_map', sublibrary: 'Factory Roland' },
-      { id: 'f_drum03', name: 'Boss DR-5 Standard', categoryName: 'Rhythm / Drums', categoryId: 9, engineKind: 'rompler_drum_map', sublibrary: 'Factory Boss' },
-    ];
-    this.setItems(factory);
   }
 }

@@ -105,6 +105,9 @@ McxVoiceRenderConfig McxEngine::buildVoiceConfig(const McxPartState& p) const no
     cfg.forcedFilterModel = personaSpec_.defaultFilter;
     cfg.maxPartialsAllowed = personaSpec_.locksLimits ? personaSpec_.maxPartialsPerTone : 4;
     cfg.masterTuneSemitones = masterTuneSemitones_;
+    cfg.portamentoEnabled = p.portamentoEnabled && !p.isDrumKit;
+    cfg.portamentoTimeMs = p.portamentoTimeMs;
+    cfg.lastNoteSemitones = p.lastNoteSemitones;
     return cfg;
 }
 
@@ -234,6 +237,7 @@ void McxEngine::triggerInternalVoice(int partIdx, int inputNote, float velocity,
     else
     {
         voices_[static_cast<std::size_t>(voiceIdx)].noteOnMelodic(partIdx, inputNote, velocity, eventAccent, cfg, noteCounter_);
+        p.lastNoteSemitones = static_cast<float>(inputNote);
     }
     fxTailSamplesLeft_ = static_cast<int>(sampleRate_ * 2.5);
 }

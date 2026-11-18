@@ -18,6 +18,9 @@ export const WASM_PARAM_ID = {
   eqEnabled: 37, eqLowGain: 38, eqLowFreq: 39, eqMidGain: 40, eqMidFreq: 41, eqMidQ: 42,
   eqHighGain: 43, eqHighFreq: 44, driveEnabled: 45, driveAmount: 46,
   delaySend: 47, auxSend: 48, sendAPre: 49, sendBPre: 50, sendCPre: 51, sendDPre: 52,
+  pitchCoarse: 53, pitchFine: 54,
+  portaEnabled: 55, portaTimeMs: 56, portaLegatoOnly: 57,
+  arpEnabled: 58, stepMute: 59, stepAccent: 60, stepSlide: 61,
 } as const;
 
 export type McxParamKey = keyof typeof WASM_PARAM_ID;

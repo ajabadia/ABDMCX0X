@@ -11,13 +11,19 @@
 | :--- | :--- | :--- |
 | **Motor único libre** | Se eliminan los modos limitadores (`SuperFree`, `MC-303`, `DR-5`); todo opera como motor libre. Se conservan las estéticas como **Temas Visuales** (`ms2000`, `neuron`, `mc303`, `dr5` en Claro/Oscuro). | Temas ya en `ABDShared/Assets/styles/themes/`. |
 | **16 Partes libres** | Cualquier parte (`1..16`) puede ser **`Chromatic`** o **`DrumMap`** (sin límite de cuántas de cada tipo). Por defecto: Parte 10 = `DrumMap`, resto = `Chromatic`. | Contrato `McxPartKind` + `DrumMapProfiles` ya en `ABDShared/Contracts/`. |
+| **Consola Mezclador 16 Canales (Full-Height)** | **Consola horizontal con 16 tiras verticales de canal (`.mcx-strip`):** P01..P16 independientes alargadas ocupando toda la altura central (~480px en referencia 1280x720). Incluyen selector `DRM`/`CHR`, botón de sonido (abre Bank Drawer), lanzaderas de cajón inferior `[ TONE ]` y `[ PADS ]`, canal MIDI (`CH1..16`), `TR` (seguir transposición), potenciómetro de **Glide / Portamento** (`GLD` 0..500 ms), envíos auxiliares (`Send A/B`), `PAN`, `Mute` y `Solo` iluminados, y fader vertical de largo recorrido (120-140px) con escala en dB y vúmetro estéreo contiguo. | Componente `McxMixerConsole.ts` en WebUI. |
+| **Tira Hardware 16 Pasos (`@abdsynths/shared`)** | Componente canónico universal de botones físicos (`StepButtonStrip.js` + `step-button-strip.css`) situado bajo la LCD con 5 modos (`PART SEL`, `PART MUTE`, `STEP MUTE`, `ACCENT`, `SLIDE / GLIDE`) y chaser animado en tiempo real. **Sincronización maestra:** los cajones inferiores de Tono & FX y MpcPadMatrix se sincronizan directamente con esta tira (al pulsar una parte en `PART SEL` o mutearla en `PART MUTE`), eliminando pestañas redundantes internas. | Promovido canónicamente a `ABDShared/Components/Controls/` y reutilizado también en `ABDMS2000`. |
+| **Acento Roland (Velocidad > 100)** | Umbral clásico Roland `velocity > 100` que activa dinámicamente el circuito de acento (apertura VCF, golpe VCA y mordida de decay) tanto en notas melódicas como de batería. | Implementado y verificado en DSP `McxVoice.cpp`. |
 | **Wavetables (`ABDMS2000` OSC 1)** | Las 512 tablas DWGS/AKWF/Usuario serán un **tipo de motor propio (`DwgsWavetable`)**, no convertidas a PCM estático, visibles y clasificadas en el Bank Manager. | Promover `DWGSTables` + `DWGSOscillator` (limpio, ~4 MB RAM) a `ABDShared::DspCore`. |
 | **Directorio de Trabajo** | Directorio raíz configurable compatible con `AxionikDB` (`Models/`, `Presets/Parts/`, `Presets/Multis/`, `Presets/Patterns/`, `Banks/`, `MidiLearn/`). | Compatible con `ABDAxionikVS` y `ABDNeuModMakr` + `bankCategories.js` (`cat-0..cat-9` e imágenes). |
 | **Canal de Parte (Mesa)** | EQ paramétrico ligero + Drive suave por parte, Volumen general de parte, Pan, Mute/Solo, y **4 envíos independientes (`Send A..D`) con volumen propio y selector Pre/Post-Fader**. | Reutilizar primitivas ya existentes en `ABDShared::DspEffects`: `DspMidasEQ.h` / `CascadeShelfEq.h` + `DspSaturation.h` (con bypass 0 % CPU en reposo). |
 | **Rack FX Master** | Al final de la cadena (antes de Master Volume), inspirado en `ABDEep` pero generalizado y flexible: **múltiples entradas (4 buses estéreo `Send A..D` + `Dry`)** y topologías encadenables (serie, paralelo, cascada con inyección, mixto; retrocompatible 1-bus con `ABDEep`). | Promover `DspMultiBusFxRack` y su UI modular a `ABDShared` (con futura modal de edición clásica por efecto, p. ej. RE-201). |
 | **LFOs Globales + Locales + ModMatrix** | **4 LFOs Globales** (sincronizables a BPM) + **2 LFOs Locales por Parte** (con *key-sync* y Delay/Fade-In). **Mute + auto-skip a 0 % CPU** si un LFO está muteado o no tiene rutas activas. Envolvente sobre LFOs globales gestionada por parte vía **Via-Attenuator (`Source × Via`)** en la ModMatrix (p. ej. `GLFO1 × ModEnv` o `ModWheel`) + `ModEnv` local por parte. Evaluado a control-rate (16–32 muestras) para `< 1 %` CPU. | Reutilizar `ABDShared/Code/SynthCore/ModMatrix.h` (misma base que `ABDEep`) + `LFO.h` / `LfoAnalog.h` + CDD v2.0 `ModSlotViaSource`. |
 | **Doble Filtro en Serie (`Filter 1 → Filter 2`)** | Hasta **2 filtros concatenados en serie por parte**, con bypass individual (0 % CPU apagado). Selección en dos niveles: primero **tipo** (`LPF`, `HPF`, `BPF`, `Notch`, `Comb`, `Z-Plane`) y después **modelo DSP concreto** disponible para ese tipo (SVF, Roland TC6116AF, Juno IR3109/HPF, Moog Ladder, MS-20, etc.). | `McxFilterBank` + filtros de `ABDShared::DspCore` (`DspFilterFamily.h`). |
-| **Edición en Pantallas Deslizantes (Drawers)** | Patrón general de ergonomía UI (como `ABDEep`, `ABDMS2000` y `ABDAxionikVS`): controles compactos en la vista principal y **drawers deslizantes** dedicados para edición profunda (Filter 1/2, Envolventes, ModMatrix, EQ/Drive, Pad Editor) evitando saturar la pantalla. | Reutilizar patrón `DrawerManager` / `slideDrawer` de `ABDAxionikVS` / `ABDMS2000` en `ABDShared`. |
+| **Paneles Deslizantes Inferiores (Bottom Drawers)** | Dos utilidades independientes que emergen desde la parte superior del teclado hacia arriba, cubriendo la totalidad de la consola central (16 canales). Se cierran únicamente desde su botón propio `[ ✕ ]` o toggle del canal: 1) **Tono & FX**: síntesis profunda del canal activo; 2) **MpcPadMatrix**: pads para ritmo y modo melódico cromático; 3) (Futuro) **Pianola PPQ**. | Patrón `BottomDrawerManager` en WebUI. |
+| **Matriz de Pads Universal (`MpcPadMatrix` en `ABDShared`)** | Grid 4x4 táctil y aséptico con **Modo Ritmo** (nombres de percusión, choke groups, notas MIDI) y **Modo Cromático** (notas musicales, octavas, selector de escalas, modo In-Key, 16-Levels). Reutilizable en toda la suite. | Componente `MpcPadMatrix.js` + `mpc-pad-matrix.css` en `ABDShared/Components/Controls/`. |
+| **Teclado Virtual con Colapso** | Teclado cromático inferior dockeado con botón de **colapsar / descolapsar** para maximizar área de trabajo en pantallas compactas o al tocar con teclado MIDI hardware. | `@abdsynths/midi-keyb` + control de colapso en WebUI. |
+| **Utilidad de Acordes (Chord Mode)** | Generador e interpretador de acordes por pad/tecla (Chord Memory, progresiones diatónicas, rasgueo/strum), anotado para investigar referencias de mercado y definir. | Futuro módulo aséptico en `ABDShared`. |
 | **Drum Maps (Paridad MC-303+ por sonido)** | Edición completa **por cada sonido/pad** del Drum Kit (mínimo paridad MC-303 ampliada): `Attack`, `Decay/Release`, `Pitch` (Coarse/Fine), `Volume`, `Pan`, `Filter Cutoff/Reso`, `Choke/Mute Group (0..15)`, `One-Shot/Gated`, `Start/End/Reverse`, `Accent` y envíos independientes a los **4 buses FX (`Send A..D`)**. | Extender `McxDrumSlotConfig` y contrato `drum_map_profile.schema.json`. |
 | **Transposición Global** | Soporta **transposición cromática por tono (`-24..+24`) y por Escala / Tonalidad** (afecta solo a partes cromáticas habilitadas, nunca a Drum Maps). | **Crear en `ABDShared`:** `SynthCore/MusicalScaleTransposer.h` (C++20 RT-safe `O(1)`) + **integración directa en `@abdsynths/midi-keyb`** (resaltado de notas en escala y transposición en vivo). |
 | **MIDI Learn + Hardware Externo** | Relegado a fase final y limitado a **controlador de entrada**: al detectar un equipo físico, se carga un **perfil completo de MIDI Learn** (`MidiLearn/<device>.json`) en lugar de espejo bidireccional complejo. | **Ya existe completo en `ABDShared`:** `Code/HardwareDrivers/MidiLearnManager.h`, `Components/MidiLearn/` (`midiLearnStore.js`, `midiLearnDrawer.js`, `midiLearnContextMenu.js`), `midi-learn.css` y `HardwareMidiDetect`. Solo falta añadir perfiles JSON completos por dispositivo. |
@@ -100,7 +106,63 @@ Para que soporte **cualquier duración en compases (`1, 2, 4, 8...`)**, polifon�
 
 ---
 
-## 6. Pipeline de Señal Completo (Audio + MIDI)
+## 6. Arquitectura de Paneles Deslizantes Inferiores (Bottom Drawers) y Ergonomía Tablet 10"
+
+### A) Paneles Deslizantes Inferiores (Bottom Drawers)
+Para mantener la ergonomía sin saturar la pantalla en resoluciones de referencia **1280 x 720** (y pantallas táctiles de 10 pulgadas), se eliminan los racks fijos inferiores de la consola y se introducen **paneles deslizantes inferiores independientes**:
+
+1. **Ubicación y Despliegue:**
+   - Emergen desde arriba del teclado virtual (`bottom: 104px`) hacia arriba.
+   - Ocupan la totalidad del área que corresponde a las 16 tiras de canal (mesa de mezclas), dejando siempre a la vista:
+     - La barra superior (transporte, master, LCD, globales).
+     - La tira de 16 botones hardware (`StepButtonStrip`).
+     - El dock inferior del teclado virtual.
+   - Transición CSS fluida por hardware (`transform: translateY(...)`).
+   - **Regla de Cierre:** El panel solo se cierra desde su propio botón de cierre `[ ✕ ]` o volviendo a pulsar el botón toggle del canal que lo invocó.
+
+2. **Utilidad 1: Cajón Deslizante "Tono & FX":**
+   - Ofrece edición profunda de síntesis (Osciladores, Parciales, Filtros 1 y 2 en serie, Envolventes, ModMatrix y Envíos FX).
+   - **Sincronización Maestra con los 16 Botones Superiores:** Al permanecer siempre visible la tira de 16 botones físicos superiores, **se eliminan las pestañas redundantes dentro del propio panel**. La parte activa mostrada en Tono & FX se sincroniza en tiempo real con el botón seleccionado en la tira superior cuando está en modo `PART SEL`. Asimismo, si la tira está en `PART MUTE`, refleja el estado de mute de la parte.
+   - **Auditoría y Separación de Parámetros (Locales vs Globales):**
+     - *Parámetros Locales por Canal:* Afinación (Coarse/Fine), Glide, Filtros (Cutoff, Reso, Modelos), Saturación/Drive, Envolventes, EQ paramétrico de canal, Nivel, Pan, y **Envíos Auxiliares con selector Pre-Fader / Post-Fader (`Send A..D`)**.
+     - *Parámetros Globales (Master Bus):* Conversor D/A (`dacCharacter`: HD, 16-bit, 12-bit) y Algoritmos/Tiempos de Efectos Master (`reverbMacro`, `reverbTime`, `chorusMacro`, `chorusRate`). Se revisarán minuciosamente para separar la edición propia del canal de los controles del bus Master FX.
+
+3. **Utilidad 2: Matriz de Pads Universal (`MpcPadMatrix` en `ABDShared`):**
+   - Componente táctil 4x4 (16 pads) desarrollado de forma **completamente aséptica en `ABDShared`**:
+     - **Modo Ritmo (Drum Map):** Cada pad muestra el nombre del sample/sonido de batería, nota MIDI base, categoría de color y grupo de choke/silencio exclusivo.
+     - **Modo Cromático (Note Performer):** Muestra nota musical y octava (`C2`, `D#2`), selector de escalas (Mayor, Menor, Pentatónica, Blues, Dórica, etc.), iluminación de tónica e In-Key mode.
+     - **16-Levels (Akai MPC Classic):** Con un botón, distribuye un solo pad en los 16 pads graduados por velocidad o afinación por semitonos.
+   - **Sincronización:** También se sincroniza con la tira de 16 botones superiores para cambiar de parte/kit activo al vuelo sin cerrar la utilidad.
+
+4. **Utilidad 3 (Futuro): Secuenciador Pianola / Piano-Roll (`ABDShared`):**
+   - Reutilizará el mismo sistema de cajón deslizante inferior para edición gráfica PPQ de notas y eventos sin cambiar de pantalla.
+
+### B) Mesa de Mezclas de 16 Canales de Altura Completa (Full-Height Strips)
+Al liberar el espacio inferior, cada uno de los 16 canales verticales se estira ocupando toda la altura central (~480px):
+- **Header:** Parte (`P01`..`P16`), LED de actividad de voz/audio, selector de modo (`DRM` / `CHR`).
+- **Selector de Sonido:** Botón con nombre del instrumento y categoría (abre Bank Drawer al hacer clic).
+- **Lanzaderas de Cajón:** Botones dedicados `[ TONE ]` y `[ PADS ]` para invocar el panel correspondiente contextualizado a esa pista.
+- **Ruteo y Expresión:** Canal MIDI (`CH1..16`), `TR` (seguir transposición global), potenciómetro de **Glide / Portamento** (`GLD` 0..500 ms con valor numérico, atenuado para batería).
+- **Envíos Auxiliares:** Mini-knobs `Send A` (Reverb) y `Send B` (Delay/Chorus) con opción Pre/Post.
+- **Panorámica:** Knob `PAN` (L64 .. C .. R63) con centro calibrado.
+- **Mute & Solo:** Botones iluminados `[ M ]` (rojo) y `[ S ]` (amarillo).
+- **Fader de Volumen:** Fader deslizante de recorrido largo (120–140px) con escala calibrada en dB (+6 a -∞) y **Vúmetro estéreo/mono contiguo**.
+
+### C) Ergonomía en Pantallas Táctiles de 10 Pulgadas (1280 x 720 / 1280 x 800)
+- **Zonas Táctiles Seguras (Hit Targets):** Todos los botones y controles interactivos en tablet deben tener un tamaño táctil mínimo de 44x44px o pads con espaciado adecuado.
+- **Controles de Lectura vs Edición Fina:** En la vista general de la mesa de mezclas, los parámetros más finos (curvas de envolvente, ruteos complejos de modulación) actúan como indicadores rápidos de estado; la edición precisa y cómoda se realiza abriendo el cajón deslizante inferior correspondiente (`[ TONE ]` o `[ PADS ]`).
+- **Teclado Virtual con Botón de Colapso:** Al teclado virtual inferior dockeado se le añade un botón de **colapsar / descolapsar**. Al colapsarlo, se gana el 100 % del alto vertical del espacio de trabajo, ideal para operar en pantallas de 10" o cuando el músico utiliza un teclado controlador MIDI físico externo.
+
+### D) Utilidad de Acordes (Chord Mode / Chord Performer — Anotado para Investigación)
+- Se proyecta una utilidad complementaria (en pads o teclado) para disparo instantáneo de acordes:
+  - *Chord Memory*: Memorizar acordes personalizados tocados en el teclado.
+  - *Diatonic Chord Mode*: Generación de acordes a 1 toque dentro de la escala activa (I, ii, iii, IV, V, vi, vii°).
+  - *Strum & Spread*: Retardo de rasgueo configurable (ms) y apertura de notas en octavas.
+  - Se investigarán referencias destacadas de mercado (MPC Chord Mode, Novation Launchpad Chord Mode, Reason Scales & Chords) para definir su diseño en una fase posterior.
+
+---
+
+## 7. Pipeline de Señal Completo (Audio + MIDI)
 
 ```text
 [MIDI In (DAW / @abdsynths/midi-keyb / Perfil MIDI Learn HW)]
@@ -129,7 +191,7 @@ Para que soporte **cualquier duración en compases (`1, 2, 4, 8...`)**, polifon�
 
 ---
 
-## 7. Transporte, Modo Canción y Piezas Transversales Recomendadas
+## 8. Transporte, Modo Canción y Piezas Transversales Recomendadas
 
 ### A) Transporte y Modo Canción (`Song Mode`)
 - **Transporte completo:** `Play`, `Pause`, `Stop`, `Record` (overdub/replace), `Rew` / `FF` (salto por compás), `Return to Zero`, `Loop` (patrón o rango de canción), `Metrónomo` (volumen propio + `Count-in` de 1 o 2 compases) y `Tap Tempo`.
@@ -146,29 +208,36 @@ Para que soporte **cualquier duración en compases (`1, 2, 4, 8...`)**, polifon�
 
 ---
 
-## 8. Inventario de Piezas Existentes vs Nuevas en `ABDShared`
+## 9. Inventario de Piezas Existentes vs Nuevas en `ABDShared`
 
 - **Ya existen en `ABDShared` (listos para reusar):**
+  - `StepButtonStrip.js` + `step-button-strip.css` (tira hardware de 16 pasos con 5 modos y sincronización con drawers).
   - `MIDI Learn` completo (`MidiLearnManager.h`, `midiLearnStore.js`, `midiLearnDrawer.js`, `midiLearnContextMenu.js`, `midi-learn.css`).
   - `ModMatrix.h` (base de `ABDEep`), `GrooveArpeggiator.h`, `LFO.h` / `LfoAnalog.h`, `DiagnosticProbe`.
   - `DspMidasEQ.h`, `CascadeShelfEq.h`, `DspSaturation.h`, `DspZitaReverb`, `DspStereoDelay`, `DspStereoChorus`, `DspFlanger`.
   - `Bank` UI (`bankCategories.js`, `bankShell.js`, `bankCard.js`, `bankChips.js`), `SynthNavBar`, `AboutDialog`, `@abdsynths/midi-keyb`, `Scope`.
 - **Nuevas piezas transversales a crear en `ABDShared` (en orden lógico cuando empecemos):**
-  1. `SynthCore/MusicalScaleTransposer.h` + integración de Escala/Transposición en `@abdsynths/midi-keyb`.
-  2. Promoción de `DWGSTables` + `DWGSOscillator` (desde `ABDMS2000`) a `ABDShared::DspCore`.
-  3. `DspEffects/DspMultiBusFxRack.h` (generalización multi-entrada de `ABDEep/FXEngine` con 4 buses + topologías).
-  4. Módulo **Piano-Roll / Pattern Sequencer** basado en ticks PPQ (C++20 RT-safe + modal WebUI reutilizable).
-  5. Perfiles JSON completos de dispositivo para `MidiLearn` + enlace con `HardwareMidiDetect` (fase final).
+  1. `Components/Controls/MpcPadMatrix.js` + `Assets/styles/components/mpc-pad-matrix.css` (matriz 4x4 aséptica con modo batería, modo cromático/escalas y 16-Levels).
+  2. Botón de **colapsar / descolapsar** en el teclado virtual (`@abdsynths/midi-keyb` / host).
+  3. `SynthCore/MusicalScaleTransposer.h` + integración de Escala/Transposición en `@abdsynths/midi-keyb`.
+  4. Promoción de `DWGSTables` + `DWGSOscillator` (desde `ABDMS2000`) a `ABDShared::DspCore`.
+  5. `DspEffects/DspMultiBusFxRack.h` (generalización multi-entrada de `ABDEep/FXEngine` con 4 buses + topologías).
+  6. Módulo **Piano-Roll / Pattern Sequencer** basado en ticks PPQ (C++20 RT-safe + modal WebUI reutilizable en cajón inferior).
+  7. Utilidad de Acordes (**Chord Performer / Chord Memory** modular en `ABDShared`).
+  8. Perfiles JSON completos de dispositivo para `MidiLearn` + enlace con `HardwareMidiDetect` (fase final).
 
 ---
 
-## 9. Orden Recomendado de Ejecución (Cuando Cerramos la Visión)
+## 10. Orden Recomendado de Ejecución (Cuando Cerramos la Visión)
 1. **Cimiento de Datos y Directorio de Trabajo:** definir el modelo de 3 niveles (`SystemSettings` / `MultiPreset` / `PartPreset` + `PartKind::Chromatic | DrumMap`) y la estructura de `<WorkingDir>` compatible con `AxionikDB`.
 2. **Canal de Parte + Motor Modular + `ABDShared` Core:**
+   - Consola 16 canales alargada (Full-Height) con faders largos, vúmetros, sends A/B, PAN, GLD y lanzaderas `[ TONE ]` / `[ PADS ]`.
+   - Sistema de cajones inferiores deslizantes (`Tono & FX` y `MpcPadMatrix`) sincronizados con la tira superior de 16 botones (`PART SEL` / `PART MUTE`).
+   - Botón de colapso en el dock del teclado virtual para ergonomía en tablets táctiles de 10".
    - EQ paramétrico + Drive + 4 envíos Pre/Post-Fader por parte.
    - `MusicalScaleTransposer` en `ABDShared` (+ función en `@abdsynths/midi-keyb`).
    - Promoción de `DwgsWavetable` (`ABDMS2000` → `ABDShared::DspCore`).
    - LFOs Globales + ModMatrix por parte (control-rate) + Accent por velocidad.
 3. **Rack FX Master Multi-Entrada en `ABDShared` (`4 buses`, topologías flexibles).**
-4. **Secuenciador Piano-Roll Modal (PPQ, `1/2/4/8...` compases, grabación en tiempo real + cuantizado, P-Locks) + Utilidades MIDI (`GrooveArpeggiator`, Chord Gen).**
+4. **Secuenciador Piano-Roll Modal (PPQ, `1/2/4/8...` compases, grabación en tiempo real + cuantizado, P-Locks) + Utilidades MIDI (`GrooveArpeggiator`, Chord Gen, MpcPadMatrix).**
 5. **Performance Avanzada y Hardware:** Megamix en vivo por parte, Escenas/Hotcues `1..8`, y perfiles automáticos de MIDI Learn con `HardwareMidiDetect`.

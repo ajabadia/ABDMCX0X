@@ -58,6 +58,13 @@ struct McxPartState
     // Channel strip Drive
     bool driveEnabled { false };
     float driveAmount { 0.0f };
+
+    // Portamento / Glide
+    bool portamentoEnabled { false };
+    float portamentoTimeMs { 60.0f };
+    bool portamentoLegatoOnly { true };
+    float lastNoteSemitones { -1.0f };
+
     std::array<McxPartialConfig, 4> partials {};
     std::array<McxDrumSlotConfig, 128> drumSlots {};
     McxDrumNoteRemapper drumRemapper {};

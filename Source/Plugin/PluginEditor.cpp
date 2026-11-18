@@ -89,9 +89,9 @@ std::optional<juce::WebBrowserComponent::Resource> mcxResourceProvider(const juc
 
 McxAudioProcessorEditor::McxAudioProcessorEditor(McxAudioProcessor& p)
     : AudioProcessorEditor(&p), processor_(p) {
-    setSize(1280, 780);
+    setSize(1280, 720);
     setResizable(true, true);
-    setResizeLimits(960, 620, 2560, 1440);
+    setResizeLimits(960, 600, 2560, 1440);
 
     abd::webview2::JuceWebView2Component::EventListeners listeners;
     listeners["mcxEvent"] = [this](const juce::var& msg) { handleJsEvent(msg); };

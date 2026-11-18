@@ -204,6 +204,57 @@ inline void applyWebPartParam(McxEngine& engine, int partIdx, int paramId, float
     case 52: // Channel Strip Send D Pre/Post (0=Post, 1=Pre)
         p.auxSendPre = (value >= 0.5f);
         break;
+    case 53: // Part Pitch Coarse (-24..+24 semitones)
+    {
+        const auto st = static_cast<std::int8_t>(std::clamp(static_cast<int>(value), -24, 24));
+        for (auto& pt : p.partials) pt.coarseSemitones = st;
+        break;
+    }
+    case 54: // Part Pitch Fine (-50..+50 cents)
+    {
+        const float cents = std::clamp(value, -50.0f, 50.0f);
+        for (auto& pt : p.partials) pt.fineCents = cents;
+        break;
+    }
+    case 55: // Part Portamento Enable (0/1)
+        p.portamentoEnabled = (value >= 0.5f);
+        break;
+    case 56: // Part Portamento Time ms (0..1000)
+        p.portamentoTimeMs = std::clamp(value, 0.0f, 1000.0f);
+        break;
+    case 57: // Part Portamento Legato Only (0/1)
+        p.portamentoLegatoOnly = (value >= 0.5f);
+        break;
+    case 58: // Part Arp / Sequencer Enable (0/1)
+        p.arp.setEnabled(value >= 0.5f);
+        p.arp.setPatternMaskEnabled(true);
+        p.arp.setPatternLength(16);
+        break;
+    case 59: // Part Step Mute Toggle (stepIdx * 10 + (on ? 1 : 0))
+    {
+        const int sIdx = std::clamp(static_cast<int>(value) / 10, 0, 15);
+        const bool on = (static_cast<int>(value) % 10) != 0;
+        p.arp.setStepActive(sIdx, on);
+        break;
+    }
+    case 60: // Part Step Accent Toggle (stepIdx * 10 + (accent ? 1 : 0))
+    {
+        const int sIdx = std::clamp(static_cast<int>(value) / 10, 0, 15);
+        const bool acc = (static_cast<int>(value) % 10) != 0;
+        auto step = p.arp.getStep(sIdx);
+        step.velocityScale = acc ? 1.5f : 1.0f;
+        p.arp.setStep(sIdx, step);
+        break;
+    }
+    case 61: // Part Step Slide Toggle (stepIdx * 10 + (slide ? 1 : 0))
+    {
+        const int sIdx = std::clamp(static_cast<int>(value) / 10, 0, 15);
+        const bool slide = (static_cast<int>(value) % 10) != 0;
+        auto step = p.arp.getStep(sIdx);
+        step.tie = slide;
+        p.arp.setStep(sIdx, step);
+        break;
+    }
     default:
         break;
     }

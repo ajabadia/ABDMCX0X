@@ -147,6 +147,7 @@ export const mcxEs = {
     gridView: 'Vista Cuadrícula',
     tableView: 'Vista Tabla',
     toneDrawerTitle: 'EDICIÓN DE TONO & ENVÍOS FX',
+    padsDrawerTitle: 'MATRIZ DE PADS MPC (4x4)',
     closeDrawer: 'Cerrar Panel Deslizante',
     toneGenSection: '1. TONO / GENERADOR & EXPRESIÓN DE PARTE',
     routeMode: 'RUTA SALIDA',

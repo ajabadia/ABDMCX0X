@@ -9,6 +9,7 @@ import '@abdsynths/shared/styles/components/kbd-buttons.css';
 import '@abdsynths/shared/diagnostic-probe/styles';
 import '@abdsynths/midi-keyb/keyboard.css';
 import '@abdsynths/shared/assets/styles/components/step-button-strip.css';
+import '@abdsynths/shared/assets/styles/components/mpc-pad-matrix.css';
 import './styles/mcx0x.css';
 
 import { createKeyboard } from '@abdsynths/midi-keyb';
@@ -26,10 +27,10 @@ import {
 } from './ui/McxPanels';
 import { renderMixerConsole, createDefaultPartState, type McxPartUiState } from './ui/McxMixerConsole';
 import { McxScopeCanvas } from './ui/McxScopeCanvas';
-import { renderDrumPads } from './ui/McxDrumPads';
 import { McxStepStrip } from './ui/McxStepStrip';
 import { McxToneDrawer } from './ui/McxToneDrawer';
 import { McxGlobalDrawer } from './ui/McxGlobalDrawer';
+import { McxPadsDrawer } from './ui/McxPadsDrawer';
 
 const bridge = new McxHostBridge();
 const themeMgr = new ThemeManager();
@@ -44,6 +45,7 @@ let settingsModal: McxSettingsModal | null = null;
 let probeModal: ReturnType<typeof createDiagnosticProbeModal> | null = null;
 let bankDrawer: McxBankDrawer | null = null;
 let toneDrawer: McxToneDrawer | null = null;
+let padsDrawer: McxPadsDrawer | null = null;
 let globalDrawer: McxGlobalDrawer | null = null;
 
 function openSaveModal(type: 'part' | 'multi'): void {
@@ -63,9 +65,6 @@ function openSaveModal(type: 'part' | 'multi'): void {
   }).open();
 }
 
-const getActiveDrumPart = () => partsState[focusedPart].kind === 'drum_map'
-  ? focusedPart : Math.max(0, partsState.findIndex((p) => p.kind === 'drum_map'));
-
 function updateLcdLine1(activeVoices = 0): void {
   const ps = partsState[focusedPart];
   const budget = Math.max(8, Math.min(64, globalSettings.maxPolyphony || 64));
@@ -78,11 +77,6 @@ function updateLcdLine1(activeVoices = 0): void {
 }
 
 function setLcdLine2(text: string): void { const el = document.getElementById('lcd-line2'); if (el) el.textContent = text; }
-
-function toggleDrumRack(show: boolean): void {
-  const drumSec = document.getElementById('drum-rack-section');
-  if (drumSec) drumSec.classList.toggle('is-hidden', !show);
-}
 
 function refreshPartList(): void {
   const el = document.getElementById('part-list');
@@ -97,7 +91,7 @@ const panelCbs = {
     updateLcdLine1(0);
     stepStrip?.refresh();
     if (toneDrawer?.isOpen()) toneDrawer.syncPart(idx, partsState[idx]);
-    toggleDrumRack(partsState[idx].kind === 'drum_map');
+    if (padsDrawer?.isOpen()) padsDrawer.syncPart(idx, partsState[idx]);
   },
   getPartsState: () => partsState,
   onTogglePartKind: (idx: number) => {
@@ -106,7 +100,7 @@ const panelCbs = {
     bridge.setParam(idx, 'partKind', next === 'drum_map' ? 1 : 0);
     if (idx === focusedPart) {
       if (toneDrawer?.isOpen()) toneDrawer.syncPart(idx, partsState[idx]);
-      toggleDrumRack(next === 'drum_map');
+      if (padsDrawer?.isOpen()) padsDrawer.syncPart(idx, partsState[idx]);
     }
     refreshPartList(); updateLcdLine1(0);
     setLcdLine2(`P${String(idx + 1).padStart(2, '0')} -> ${next === 'drum_map' ? t('mcx.partDrumMap') : t('mcx.partChromatic')}`);
@@ -128,19 +122,21 @@ const panelCbs = {
     partsState[idx].mute = !partsState[idx].mute;
     bridge.setParam(idx, 'partMute', partsState[idx].mute ? 1 : 0);
     if (toneDrawer?.isOpen() && toneDrawer.getPart() === idx) toneDrawer.syncPart(idx, partsState[idx]);
+    if (padsDrawer?.isOpen() && padsDrawer.getPart() === idx) padsDrawer.syncPart(idx, partsState[idx]);
     refreshPartList();
   },
   onToggleSolo: (idx: number) => { partsState[idx].solo = !partsState[idx].solo; bridge.setParam(idx, 'partSolo', partsState[idx].solo ? 1 : 0); refreshPartList(); },
   onOpenBankForPart: (idx: number) => bankDrawer?.open(idx),
   onOpenToneForPart: (idx: number) => {
     focusedPart = idx;
+    if (padsDrawer?.isOpen()) padsDrawer.close();
     toneDrawer?.toggle(idx);
     refreshPartList();
   },
   onOpenPadsForPart: (idx: number) => {
     focusedPart = idx;
     if (toneDrawer?.isOpen()) toneDrawer.close();
-    toggleDrumRack(true);
+    padsDrawer?.toggle(idx);
     refreshPartList();
   },
   onChangeGlide: (idx: number, ms: number) => stepStrip?.setPortaTime(idx, ms),
@@ -303,6 +299,13 @@ window.addEventListener('DOMContentLoaded', () => {
       setLcdLine2,
       onClose: () => refreshPartList(),
     });
+    padsDrawer = new McxPadsDrawer({
+      hostEl: mainCol,
+      bridge,
+      getPartState: (idx) => partsState[idx],
+      setLcdLine2,
+      onClose: () => refreshPartList(),
+    });
   }
 
   refreshPartList();
@@ -313,6 +316,7 @@ window.addEventListener('DOMContentLoaded', () => {
         focusedPart = idx;
         updateLcdLine1(0);
         if (toneDrawer?.isOpen()) toneDrawer.syncPart(idx, partsState[idx]);
+        if (padsDrawer?.isOpen()) padsDrawer.syncPart(idx, partsState[idx]);
         refreshPartList();
       },
       getPartsState: () => partsState,
@@ -323,9 +327,6 @@ window.addEventListener('DOMContentLoaded', () => {
       setLcdNotice: setLcdLine2,
     });
   }
-  if (byId('drum-pads')) renderDrumPads(byId('drum-pads')!, bridge, getActiveDrumPart, (lbl, note, vel, pIdx) =>
-    setLcdLine2(`P${String(pIdx + 1).padStart(2, '0')} DRUM ${lbl} (N${note}) VEL ${Math.round(vel * 127)}`),
-  );
   if (byId('vector-pad') && byId('vector-dot')) bindVectorPad(byId('vector-pad')!, byId('vector-dot')!, bridge, panelCbs);
 
   createKeyboard({

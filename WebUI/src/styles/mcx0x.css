@@ -862,6 +862,16 @@ body.mcx-app {
   scrollbar-color: var(--color-panel-border) transparent;
 }
 
+.mcx-pads-drawer-body {
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2) var(--space-6);
+}
+.mcx-matrix-mount-point {
+  width: 100%;
+  max-width: 620px;
+}
+
 .mcx-tone-section {
   display: flex;
   flex-direction: column;

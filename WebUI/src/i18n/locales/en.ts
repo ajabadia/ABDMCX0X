@@ -147,6 +147,7 @@ export const mcxEn = {
     gridView: 'Grid View',
     tableView: 'Table View',
     toneDrawerTitle: 'TONE & FX SENDS EDIT',
+    padsDrawerTitle: 'MPC PADS MATRIX (4x4)',
     closeDrawer: 'Close Sliding Drawer',
     toneGenSection: '1. TONE / GENERATOR & PART EXPRESSION',
     routeMode: 'ROUTING',

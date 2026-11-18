@@ -89,10 +89,6 @@ std::optional<juce::WebBrowserComponent::Resource> mcxResourceProvider(const juc
 
 McxAudioProcessorEditor::McxAudioProcessorEditor(McxAudioProcessor& p)
     : AudioProcessorEditor(&p), processor_(p) {
-    setSize(1280, 720);
-    setResizable(true, true);
-    setResizeLimits(960, 600, 2560, 1440);
-
     abd::webview2::JuceWebView2Component::EventListeners listeners;
     listeners["mcxEvent"] = [this](const juce::var& msg) { handleJsEvent(msg); };
 
@@ -106,6 +102,14 @@ McxAudioProcessorEditor::McxAudioProcessorEditor(McxAudioProcessor& p)
     );
 
     addAndMakeVisible(*webComponent_);
+
+    setResizable(true, true);
+    setResizeLimits(960, 600, 2560, 1440);
+    setSize(1280, 720);
+    if (webComponent_ != nullptr) {
+        webComponent_->setBounds(getLocalBounds());
+    }
+
     startTimerHz(30);
 }
 

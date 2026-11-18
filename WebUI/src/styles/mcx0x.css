@@ -131,8 +131,8 @@ body.mcx-app {
   display: flex;
   flex-direction: row;
   gap: var(--space-4);
-  padding: var(--space-3) var(--space-5);
-  overflow-y: auto;
+  padding: var(--space-2) var(--space-4);
+  overflow-y: hidden;
   overflow-x: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--color-panel-border) transparent;
@@ -162,7 +162,9 @@ body.mcx-app {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  height: 100%;
+  min-height: 0;
+  gap: var(--space-2);
   position: relative;
 }
 
@@ -177,16 +179,26 @@ body.mcx-app {
 
 /* ── 16-Part Horizontal Mixer Console (Vertical Channel Strips) ── */
 .mcx-mixer-panel {
-  padding: var(--space-2) var(--space-3);
-  flex-shrink: 0;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 .mcx-mixer-console {
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: repeat(16, minmax(56px, 1fr));
   gap: 4px;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  box-sizing: border-box;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: var(--space-1) 2px;
+  padding: var(--space-1) 2px 4px;
   scrollbar-width: thin;
   scrollbar-color: var(--color-panel-border) transparent;
 }
@@ -195,11 +207,14 @@ body.mcx-app {
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  justify-content: space-between;
   gap: 3px;
-  width: 62px;
-  min-width: 58px;
-  flex-shrink: 0;
-  padding: 4px 3px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  min-width: 56px;
+  box-sizing: border-box;
+  padding: 6px 4px 6px;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-panel-border-dim);
   background: color-mix(in srgb, var(--color-panel-surface) 40%, transparent);
@@ -282,7 +297,7 @@ body.mcx-app {
   height: 13px;
 }
 .mcx-strip-sound-name {
-  max-width: 54px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -360,40 +375,90 @@ body.mcx-app {
   cursor: not-allowed;
 }
 
+/* Mini sliders in channel strips (GLD, S-A, S-B, PAN) */
+.mcx-strip input[type="range"]:not(.mcx-strip-fader) {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  height: 8px;
+  margin: 0;
+  padding: 0;
+  vertical-align: middle;
+}
+.mcx-strip input[type="range"]:not(.mcx-strip-fader):focus {
+  outline: none;
+}
+.mcx-strip input[type="range"]:not(.mcx-strip-fader)::-webkit-slider-runnable-track {
+  height: 2px;
+  background: var(--color-panel-border-strong);
+  border-radius: 1px;
+}
+.mcx-strip input[type="range"]:not(.mcx-strip-fader)::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 6px;
+  height: 9px;
+  border-radius: 1px;
+  background: var(--color-accent);
+  border: 1px solid var(--color-panel-border-strong);
+  margin-top: -3.5px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+.mcx-strip input[type="range"]:not(.mcx-strip-fader)::-moz-range-track {
+  height: 2px;
+  background: var(--color-panel-border-strong);
+  border-radius: 1px;
+}
+.mcx-strip input[type="range"]:not(.mcx-strip-fader)::-moz-range-thumb {
+  width: 6px;
+  height: 9px;
+  border-radius: 1px;
+  background: var(--color-accent);
+  border: 1px solid var(--color-panel-border-strong);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
 .mcx-strip-glide {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 2px;
   width: 100%;
-  padding: 1px 2px;
+  height: 16px;
+  padding: 1px 3px;
+  box-sizing: border-box;
   background: color-mix(in srgb, var(--color-panel-surface) 35%, transparent);
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-panel-border-dim);
 }
 .mcx-strip-glide.is-disabled { opacity: 0.25; pointer-events: none; }
-.mcx-strip-glide-lbl { font-size: 8px; font-weight: 800; color: var(--color-text-muted); }
-.mcx-strip-glide-slider { flex: 1; min-width: 0; cursor: pointer; height: 6px; }
-.mcx-strip-glide-val { font-family: var(--font-mono); font-size: 8px; color: var(--color-accent); font-weight: 700; width: 16px; text-align: right; }
+.mcx-strip-glide-lbl { font-size: 8px; font-weight: 800; color: var(--color-text-muted); line-height: 1; flex-shrink: 0; }
+.mcx-strip-glide-slider { flex: 1; min-width: 0; cursor: pointer; }
+.mcx-strip-glide-val { font-family: var(--font-mono); font-size: 8px; color: var(--color-accent); font-weight: 700; width: 16px; text-align: right; line-height: 1; flex-shrink: 0; }
 
 .mcx-strip-sends-row {
   display: flex;
-  gap: 2px;
+  gap: 3px;
   width: 100%;
 }
 .mcx-strip-mini-knob {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 1px;
   background: color-mix(in srgb, var(--color-panel-surface) 35%, transparent);
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-panel-border-dim);
-  padding: 1px;
+  padding: 2px 2px;
+  box-sizing: border-box;
 }
-.mcx-strip-mini-lbl { font-size: 8px; font-weight: 800; color: var(--color-text-muted); }
-.mcx-strip-mini-knob input[type="range"] { width: 90%; height: 6px; cursor: pointer; }
+.mcx-strip-mini-lbl { font-size: 8px; font-weight: 800; color: var(--color-text-muted); line-height: 1; }
+.mcx-strip-mini-knob input[type="range"] { width: 100%; cursor: pointer; }
 
 .mcx-strip-pan-row {
   display: flex;
@@ -401,14 +466,16 @@ body.mcx-app {
   justify-content: space-between;
   gap: 2px;
   width: 100%;
-  padding: 1px 2px;
+  height: 16px;
+  padding: 1px 3px;
+  box-sizing: border-box;
   background: color-mix(in srgb, var(--color-panel-surface) 35%, transparent);
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-panel-border-dim);
 }
-.mcx-strip-pan-lbl { font-size: 8px; font-weight: 800; color: var(--color-text-muted); }
-.mcx-strip-pan-slider { flex: 1; min-width: 0; cursor: pointer; height: 6px; }
-.mcx-strip-pan-val { font-family: var(--font-mono); font-size: 8px; color: var(--color-accent); font-weight: 700; width: 18px; text-align: right; }
+.mcx-strip-pan-lbl { font-size: 8px; font-weight: 800; color: var(--color-text-muted); line-height: 1; flex-shrink: 0; }
+.mcx-strip-pan-slider { flex: 1; min-width: 0; cursor: pointer; }
+.mcx-strip-pan-val { font-family: var(--font-mono); font-size: 8px; color: var(--color-accent); font-weight: 700; width: 16px; text-align: right; line-height: 1; flex-shrink: 0; }
 
 .mcx-strip-ms-row {
   display: flex;
@@ -437,32 +504,41 @@ body.mcx-app {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   width: 100%;
+  flex: 1;
+  min-height: 110px;
+  justify-content: flex-end;
   padding: 2px 0 0;
 }
 .mcx-strip-fader-row {
   display: flex;
   align-items: stretch;
   justify-content: center;
-  gap: 3px;
+  gap: 4px;
   width: 100%;
-  height: 110px;
+  flex: 1;
+  min-height: 100px;
+  max-height: 175px;
+  height: 100%;
 }
 .mcx-strip-fader {
   appearance: slider-vertical;
   writing-mode: vertical-lr;
   direction: rtl;
   width: 22px;
-  height: 110px;
+  height: 100%;
+  min-height: 90px;
   cursor: pointer;
 }
 .mcx-strip-vumeter {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  gap: 2px;
   width: 5px;
-  height: 110px;
+  height: 100%;
+  min-height: 90px;
   padding: 1px 0;
   background: color-mix(in srgb, var(--color-panel-bg) 70%, transparent);
   border: 1px solid var(--color-panel-border-dim);
@@ -470,7 +546,8 @@ body.mcx-app {
 }
 .mcx-vu-seg {
   width: 100%;
-  height: 14px;
+  flex: 1;
+  min-height: 4px;
   border-radius: 1px;
   opacity: 0.35;
 }

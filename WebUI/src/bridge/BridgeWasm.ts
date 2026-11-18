@@ -9,6 +9,16 @@ export interface McxTelemetry {
   peakR: number;
   activeVoices: number;
   samplesL?: Float32Array;
+  peakSendA?: number;
+  peakSendB?: number;
+  peakSendC?: number;
+  peakSendD?: number;
+  limiterGrDb?: number;
+  sendBusMutes?: boolean[];
+  sendLabels?: { sendA: string; sendB: string; sendC: string; sendD: string };
+  partPeaks?: number[];
+  partMidiPeaks?: number[];
+  lfoPhase?: number;
 }
 
 export class BridgeWasm {
@@ -116,7 +126,15 @@ export class BridgeWasm {
             this.onStatusCb?.('error', msg.message);
             resolve(false);
           } else if (msg.type === 'TELEMETRY') {
-            this.onTelemetryCb?.({ peakL: msg.peakL, peakR: msg.peakR, activeVoices: msg.activeVoices, samplesL: msg.samplesL });
+            this.onTelemetryCb?.({
+              peakL: msg.peakL,
+              peakR: msg.peakR,
+              activeVoices: msg.activeVoices,
+              samplesL: msg.samplesL,
+              partPeaks: Array.isArray(msg.partPeaks) ? msg.partPeaks : undefined,
+              partMidiPeaks: Array.isArray(msg.partMidiPeaks) ? msg.partMidiPeaks : undefined,
+              lfoPhase: msg.lfoPhase,
+            });
           } else if (msg.type === 'BANK_LOADED') {
             this.onBankLoadedCb?.(Boolean(msg.ok), Number(msg.sizeBytes || 0));
           }

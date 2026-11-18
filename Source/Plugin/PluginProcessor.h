@@ -9,6 +9,7 @@
 #include "../DSP/Core/McxEngine.h"
 #include "../Hardware/McxHardwareBridge.h"
 #include "../Core/McxBankManagerBridge.h"
+#include "../Core/McxCommandQueue.h"
 #include "../Core/McxSystemSettings.h"
 #include "../State/ParameterRegistry.gen.h"
 #include "../State/ParameterLayout.h"
@@ -18,10 +19,23 @@ namespace abdmcx {
 struct McxTelemetrySnapshot {
     float peakL{0.0f};
     float peakR{0.0f};
+    float peakSendA{0.0f};
+    float peakSendB{0.0f};
+    float peakSendC{0.0f};
+    float peakSendD{0.0f};
+    float limiterGrDb{0.0f};
+    std::array<bool, 4> sendBusMutes{false, false, false, false};
+    std::string sendNameA;
+    std::string sendNameB;
+    std::string sendNameC;
+    std::string sendNameD;
     int activeVoices{0};
     int focusedPart{0};
     double sampleRate{48000.0};
+    float lfoPhase{0.0f};
     std::array<float, 128> samplesL{};
+    std::array<float, 16> partPeaks{};
+    std::array<float, 16> partMidiPeaks{};
 };
 
 class McxAudioProcessor : public juce::AudioProcessor,
@@ -60,9 +74,12 @@ public:
     void enqueueUiNoteOn(int partIdx, int midiNote, float velocity);
     void enqueueUiNoteOff(int partIdx, int midiNote);
     void enqueueUiAllNotesOff();
+    void enqueuePartRoute(int partIdx, int routeMode, int midiChannel, int midiPort, int kind);
     void applyWebParam(int partIdx, int paramId, float value);
     void setMasterVolumeLinear(float linearGain);
     void setTempoBpm(double bpm);
+    void setSendBusMute(int busIdx, bool muted);
+    void setLiveZeroLatency(bool enabled);
     void resetToFactory();
     bool loadBankFromMemory(const std::uint8_t* data, std::size_t sizeBytes);
     McxTelemetrySnapshot readTelemetrySnapshot() const noexcept;
@@ -79,18 +96,21 @@ private:
     McxEngine engine_;
     McxHardwareBridge hardwareBridge_;
     McxSystemSettings settings_{};
-    juce::MidiMessageCollector uiMidiCollector_;
+    McxCommandQueue<1024> uiCommandQueue_;
 
     std::atomic<uint32_t> focusedPartIndex_{0};
     std::atomic<double> currentSampleRate_{48000.0};
     std::atomic<float> lastPeakL_{0.0f};
     std::atomic<float> lastPeakR_{0.0f};
     std::atomic<int> lastActiveVoices_{0};
+    std::array<std::atomic<float>, 16> lastPartPeaks_{};
+    std::array<std::atomic<float>, 16> lastPartMidiPeaks_{};
 
     std::array<std::array<float, 128>, 2> scopeBuffers_{};
     std::atomic<int> scopeReadBufferIndex_{0};
 
-    void applyParameterToEngine(const juce::String& paramId, float value);
+    void applyApvtsIndexToEngine(std::uint32_t paramIdx, float value) noexcept;
+    void syncHostLatencyReport();
     void hydrateSharedContracts();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(McxAudioProcessor)

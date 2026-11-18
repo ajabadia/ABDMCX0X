@@ -1,0 +1,132 @@
+/* ABDMCX0X -- Pads Drawer Layout & Side Panels */
+
+.mcx-pads-drawer-body {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  align-items: stretch;
+  justify-content: center;
+}
+
+.mcx-pads-side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: color-mix(in srgb, var(--color-panel-surface) 40%, transparent);
+  border: 1px solid var(--color-panel-border-dim);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-panel-border) transparent;
+}
+.mcx-pads-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-panel-border-dim);
+  padding-bottom: var(--space-1);
+}
+.mcx-pads-side-title {
+  font-size: var(--text-xs);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+.mcx-pads-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  background: var(--color-panel-surface);
+  border: 1px solid var(--color-panel-border-dim);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+}
+.mcx-pads-group-title {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--color-text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.mcx-pads-btn-row {
+  display: flex;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+.mcx-pads-action-btn {
+  appearance: none;
+  border: 1px solid var(--color-panel-border);
+  background: var(--color-panel-bg);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.mcx-pads-action-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text-main);
+}
+.mcx-pads-action-btn.is-active {
+  background: var(--color-accent-dim);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.mcx-pads-ctrl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.mcx-pads-ctrl-lbl {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+.mcx-pad-target-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--color-accent);
+  background: var(--color-accent-dim);
+  border: 1px solid var(--color-accent);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.mcx-pads-select {
+  padding: 2px var(--space-2);
+  background: var(--color-panel-bg);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-main);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mcx-pads-slot-custom {
+  margin-top: auto;
+  border: 1px dashed var(--color-panel-border-dim);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-text-dim);
+  letter-spacing: 0.05em;
+  background: color-mix(in srgb, var(--color-panel-bg) 30%, transparent);
+}

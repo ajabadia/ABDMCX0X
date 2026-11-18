@@ -1,0 +1,153 @@
+/* ABDMCX0X -- Height-Constrained 4x4 MPC Tactile Matrix */
+
+.mcx-pads-center-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  height: 100%;
+}
+.mcx-matrix-mount-point {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  width: auto;
+  align-items: center;
+  justify-content: center;
+}
+.mcx-matrix-mount-point .abd-mpc-matrix {
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--space-2);
+  gap: var(--space-2);
+  background: var(--color-panel-surface);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 16px var(--shadow-elevation-3);
+  box-sizing: border-box;
+}
+.mcx-matrix-mount-point .abd-mpc-toolbar {
+  flex-shrink: 0;
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--color-panel-border-dim);
+  gap: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mcx-matrix-mount-point .abd-mpc-toolbar .abd-mpc-btn {
+  padding: 2px var(--space-2);
+  font-size: 10px;
+}
+.mcx-matrix-mount-point .abd-mpc-toolbar .abd-mpc-select {
+  padding: 2px var(--space-2);
+  font-size: 10px;
+}
+.mcx-matrix-mount-point .abd-mpc-grid {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  max-height: calc(100% - 34px);
+  aspect-ratio: 1.15 / 1;
+  width: auto !important;
+  align-self: center;
+  gap: var(--space-2);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+}
+.mcx-matrix-mount-point .abd-mpc-pad {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  border: 2px solid var(--color-panel-border);
+  background: color-mix(in srgb, var(--color-panel-surface-elevated) 88%, transparent);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  position: relative;
+  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+  overflow: hidden;
+}
+.mcx-matrix-mount-point .abd-mpc-pad:hover {
+  border-color: var(--color-accent);
+}
+.mcx-matrix-mount-point .abd-mpc-pad:active,
+.mcx-matrix-mount-point .abd-mpc-pad.is-active {
+  transform: scale(0.97);
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 26%, var(--color-panel-surface));
+  box-shadow: inset 0 0 12px var(--color-accent), 0 0 10px var(--color-accent);
+}
+.mcx-matrix-mount-point .abd-mpc-pad.is-root {
+  border-color: color-mix(in srgb, var(--color-accent) 75%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-panel-surface));
+}
+.mcx-matrix-mount-point .abd-mpc-pad.is-out-of-key {
+  opacity: 0.35;
+  filter: grayscale(0.8);
+}
+.mcx-matrix-mount-point .abd-mpc-pad__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+.mcx-matrix-mount-point .abd-mpc-pad__num {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--color-text-muted);
+}
+.mcx-matrix-mount-point .abd-mpc-pad__choke {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 800;
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+}
+.mcx-matrix-mount-point .abd-mpc-pad__center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  flex: 1;
+  padding: 1px 0;
+}
+.mcx-matrix-mount-point .abd-mpc-pad__name {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--color-text-main);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.mcx-matrix-mount-point .abd-mpc-pad__bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+.mcx-matrix-mount-point .abd-mpc-pad__note {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--color-accent);
+}
+.mcx-matrix-mount-point .abd-mpc-pad__vel {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}

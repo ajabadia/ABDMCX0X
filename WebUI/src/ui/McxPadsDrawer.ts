@@ -2,12 +2,13 @@
  * ABDMCX0X -- McxPadsDrawer.ts
  * Bottom-up sliding drawer embedding the canonical ABDShared::MpcPadMatrix.
  * Sychronized with the 16-channel mixer and 16-step strip (PART SEL / PART MUTE).
+ * Strict line limit: < 200 lines.
  */
 
 import { MpcPadMatrix } from '@abdsynths/shared/components';
 import type { McxHostBridge } from '../bridge/McxHostBridge';
 import type { McxPartUiState } from './McxMixerConsole';
-import { t } from '../i18n/mcxI18n';
+import { buildPadsHeaderHtml, buildPadsDrawerBodyHtml } from './McxPadsDrawerViews';
 
 export interface McxPadsDrawerOptions {
   hostEl: HTMLElement;
@@ -15,6 +16,7 @@ export interface McxPadsDrawerOptions {
   getPartState: (idx: number) => McxPartUiState;
   setLcdLine2: (text: string) => void;
   onClose?: () => void;
+  onPadNote?: (note: number, vel: number, isRelease: boolean) => void;
 }
 
 export class McxPadsDrawer {
@@ -25,6 +27,7 @@ export class McxPadsDrawer {
   private getPartState: (idx: number) => McxPartUiState;
   private setLcdLine2: (text: string) => void;
   private onClose?: () => void;
+  private onPadNote?: (note: number, vel: number, isRelease: boolean) => void;
   private matrix: MpcPadMatrix | null = null;
 
   constructor(opts: McxPadsDrawerOptions) {
@@ -32,6 +35,7 @@ export class McxPadsDrawer {
     this.getPartState = opts.getPartState;
     this.setLcdLine2 = opts.setLcdLine2;
     this.onClose = opts.onClose;
+    this.onPadNote = opts.onPadNote;
 
     this.el = document.createElement('div');
     this.el.className = 'mcx-bottom-drawer mcx-pads-drawer';
@@ -41,7 +45,7 @@ export class McxPadsDrawer {
     this.el.innerHTML = `
       <div class="mcx-drawer-head-host"></div>
       <div class="mcx-drawer-body mcx-pads-drawer-body">
-        <div class="mcx-matrix-mount-point"></div>
+        ${buildPadsDrawerBodyHtml()}
       </div>
     `;
 
@@ -60,31 +64,20 @@ export class McxPadsDrawer {
       onPadTrigger: (idx: number, note: number, vel: number, meta: { name: string }) => {
         void this.bridge.enableAudio();
         this.bridge.noteOn(this.currentPart, note, vel / 127);
+        this.onPadNote?.(note, vel, false);
         this.setLcdLine2(`P${String(this.currentPart + 1).padStart(2, '0')} PAD ${idx + 1}: ${meta.name} (MIDI ${note})`);
+        this.updateActivePadBadge(idx, note, meta.name);
       },
       onPadRelease: (_idx: number, note: number) => {
         this.bridge.noteOff(this.currentPart, note);
+        this.onPadNote?.(note, 0, true);
       },
     });
   }
 
-  private buildHeaderHtml(partIdx: number, ps: McxPartUiState): string {
-    const isDrum = ps.kind === 'drum_map';
-    const name = ps.name || (isDrum ? 'TR-909 Kit' : `Sound P${partIdx + 1}`);
-    const kindBadge = isDrum ? t('mcx.partDrumMap') : t('mcx.partChromatic');
-
-    return `
-      <div class="mcx-drawer-head">
-        <div class="mcx-drawer-title-row">
-          <span class="mcx-drawer-title-accent">P${String(partIdx + 1).padStart(2, '0')}</span>
-          <h3 class="mcx-drawer-title" data-i18n="mcx.padsDrawerTitle">${t('mcx.padsDrawerTitle') || 'MATRIZ DE PADS MPC'}</h3>
-          <span class="mcx-drawer-part-name">${name}</span>
-          <span class="mcx-drawer-kind-badge${isDrum ? ' is-drum' : ''}">${kindBadge}</span>
-          ${ps.mute ? `<span class="mcx-drawer-mute-badge">${t('mcx.mute')}</span>` : ''}
-        </div>
-        <button type="button" class="mcx-drawer-close-btn" data-act="close" title="${t('mcx.closeDrawer')}" aria-label="${t('mcx.closeDrawer')}">✕</button>
-      </div>
-    `;
+  private updateActivePadBadge(idx: number, note: number, name: string): void {
+    const badge = this.el.querySelector('#mcx-pad-target-lbl');
+    if (badge) badge.textContent = `PAD ${String(idx + 1).padStart(2, '0')}: ${name} (${note})`;
   }
 
   public open(partIdx: number): void {
@@ -113,7 +106,7 @@ export class McxPadsDrawer {
   public syncPart(partIdx: number, ps: McxPartUiState): void {
     this.currentPart = partIdx;
     const headHost = this.el.querySelector('.mcx-drawer-head-host');
-    if (headHost) headHost.innerHTML = this.buildHeaderHtml(partIdx, ps);
+    if (headHost) headHost.innerHTML = buildPadsHeaderHtml(partIdx, ps);
 
     if (this.matrix) {
       if (ps.kind === 'drum_map') {
@@ -135,8 +128,29 @@ export class McxPadsDrawer {
 
   private bindEvents(): void {
     this.el.addEventListener('click', (ev) => {
-      const act = (ev.target as HTMLElement).closest('[data-act]')?.getAttribute('data-act');
-      if (act === 'close') { ev.stopPropagation(); this.close(); }
+      const target = ev.target as HTMLElement;
+      const act = target.closest('[data-act]')?.getAttribute('data-act');
+      if (act === 'close') { ev.stopPropagation(); this.close(); return; }
+
+      // Side panel button toggles (keymap, dynamics, roll)
+      const btn = target.closest('button');
+      if (!btn) return;
+      if (btn.dataset.keymap) {
+        this.el.querySelectorAll('[data-keymap]').forEach((b) => b.classList.remove('is-active'));
+        btn.classList.add('is-active');
+        this.setLcdLine2(`KEYMAP: ${btn.textContent?.trim()}`);
+      } else if (btn.dataset.dyn) {
+        this.el.querySelectorAll('[data-dyn]').forEach((b) => b.classList.remove('is-active'));
+        btn.classList.add('is-active');
+        this.setLcdLine2(`PAD VEL CURVE: ${btn.dataset.dyn.toUpperCase()}`);
+      } else if (btn.dataset.roll) {
+        this.el.querySelectorAll('[data-roll]').forEach((b) => b.classList.remove('is-active'));
+        btn.classList.add('is-active');
+        this.setLcdLine2(`PAD ROLL: ${btn.textContent?.trim()}`);
+      } else if (btn.id === 'mcx-pad-flam-btn') {
+        btn.classList.toggle('is-active');
+        this.setLcdLine2(`PAD FLAM: ${btn.classList.contains('is-active') ? 'ON' : 'OFF'}`);
+      }
     });
 
     window.addEventListener('keydown', (ev) => {

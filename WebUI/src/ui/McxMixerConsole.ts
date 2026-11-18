@@ -1,8 +1,9 @@
 /**
  * ABDMCX0X -- McxMixerConsole.ts
- * 16-Part Full-Height Horizontal Mixer Console featuring 16 Vertical Channel Strips,
- * per-part DRM/CHR, sound selection, TONE/PADS drawer launchers, MIDI CH, TR,
- * sends A/B, PAN, M/S, Glide time, and Long-Throw Fader with peak meter.
+ * 16-Part Horizontal Mixer Console featuring 16 Vertical Channel Strips,
+ * Informative routing badges (CH, TR, PAN, SENDS) opening Part Settings,
+ * M/S toggles, vertical level fader, and 8-segment discrete LED VU meter.
+ * Strict line limit: < 200 lines.
  */
 
 import type { McxHostBridge } from '../bridge/McxHostBridge';
@@ -10,24 +11,21 @@ import { getCategoryIconSvg } from '@abdsynths/shared/components/bank/bankIcons.
 import { t } from '../i18n/mcxI18n';
 
 export interface McxPartUiState {
-  kind: 'chromatic' | 'drum_map';
-  midiChannel: number;
-  mute: boolean;
-  solo: boolean;
-  followTranspose?: boolean;
-  name?: string;
-  categoryId?: number;
-  thumbnailUri?: string;
-  portaTimeMs?: number; portaLegatoOnly?: boolean; routeMode?: number;
-  vectorX?: number; vectorY?: number;
-  partLevel?: number; partPan?: number;
-  reverbSend?: number; chorusSend?: number; delaySend?: number; auxSend?: number;
+  kind: 'chromatic' | 'drum_map'; midiChannel: number; mute: boolean; solo: boolean;
+  followTranspose?: boolean; name?: string; categoryId?: number; thumbnailUri?: string;
+  portaEnabled?: boolean; portaTimeMs?: number; portaLegatoOnly?: boolean; routeMode?: number;
+  midiPortIndex?: number; patternSwing?: number; vectorX?: number; vectorY?: number;
+  partLevel?: number; partPan?: number; reverbSend?: number; chorusSend?: number; delaySend?: number; auxSend?: number;
   sendAPre?: boolean; sendBPre?: boolean; sendCPre?: boolean; sendDPre?: boolean;
-  filterCutoff?: number; filterResonance?: number; filterModel?: number;
+  filterCutoff?: number; filterResonance?: number; filterModel?: number; filterMode?: number;
   filter2Enabled?: boolean; filter2Model?: number; filter2Mode?: number; filter2Cutoff?: number; filter2Resonance?: number;
-  pitchCoarse?: number; pitchFine?: number; structureMode?: number; dacCharacter?: number;
+  pitchCoarse?: number; pitchFine?: number; structureMode?: number; dacCharacter?: number; driveType?: number;
   ampAttack?: number; ampDecay?: number; ampSustain?: number; ampRelease?: number;
   driveAmount?: number; eqLowGain?: number; eqMidGain?: number; eqHighGain?: number;
+  lfo1Shape?: number; lfo1Sync?: boolean; lfo1Trigger?: number; lfo1Rate?: number; lfo1Delay?: number; lfo1Depth?: number; lfo1Target?: number;
+  lfo2Shape?: number; lfo2Sync?: boolean; lfo2Trigger?: number; lfo2Rate?: number; lfo2Delay?: number; lfo2Depth?: number; lfo2Target?: number;
+  sliceMap?: Record<number, string>;
+  sequence?: { bars: number; ppq: number; mode?: 'chromatic' | 'drum'; notes: Array<{ midiNote: number; startTick: number; durationTicks: number; velocity: number }>; motion?: Record<string, any[]> };
 }
 
 export function createDefaultPartState(i: number): McxPartUiState {
@@ -35,41 +33,59 @@ export function createDefaultPartState(i: number): McxPartUiState {
   return {
     kind: isDrum ? 'drum_map' : 'chromatic', midiChannel: i + 1, mute: false, solo: false,
     followTranspose: !isDrum, name: isDrum ? 'TR-909 Kit' : `Sound P${i + 1}`, categoryId: isDrum ? 9 : 3,
-    portaTimeMs: 60, portaLegatoOnly: true, routeMode: 0, vectorX: 0, vectorY: 0,
-    partLevel: 0.85, partPan: 0,
+    portaEnabled: false, portaTimeMs: 60, portaLegatoOnly: true, routeMode: 0, midiPortIndex: 0, patternSwing: 0.50, vectorX: 0, vectorY: 0, partLevel: 0.85, partPan: 0,
     reverbSend: 0.28, chorusSend: 0.20, delaySend: 0.0, auxSend: 0.0,
     sendAPre: false, sendBPre: false, sendCPre: false, sendDPre: false,
-    filterCutoff: 0.72, filterResonance: 0.18, filterModel: 0,
+    filterCutoff: 0.72, filterResonance: 0.18, filterModel: 0, filterMode: 0,
     filter2Enabled: false, filter2Model: 0, filter2Mode: 1, filter2Cutoff: 0.85, filter2Resonance: 0.10,
-    pitchCoarse: 0, pitchFine: 0,
-    structureMode: 0, dacCharacter: 0, ampAttack: 0.04, ampDecay: 0.25, ampSustain: 0.75, ampRelease: 0.18,
+    pitchCoarse: 0, pitchFine: 0, structureMode: 0, dacCharacter: 0, driveType: 0,
+    ampAttack: 0.04, ampDecay: 0.25, ampSustain: 0.75, ampRelease: 0.18,
     driveAmount: 0.0, eqLowGain: 0.0, eqMidGain: 0.0, eqHighGain: 0.0,
+    lfo1Shape: 0, lfo1Sync: false, lfo1Trigger: 0, lfo1Rate: 2.4, lfo1Delay: 0, lfo1Depth: 0.0, lfo1Target: 0,
+    lfo2Shape: 1, lfo2Sync: false, lfo2Trigger: 0, lfo2Rate: 1.2, lfo2Delay: 0, lfo2Depth: 0.0, lfo2Target: 0,
+    sequence: isDrum ? {
+      bars: 1, ppq: 96, mode: 'drum',
+      notes: [
+        { midiNote: 36, startTick: 0, durationTicks: 24, velocity: 110 },
+        { midiNote: 42, startTick: 24, durationTicks: 24, velocity: 90 },
+        { midiNote: 38, startTick: 96, durationTicks: 24, velocity: 115 },
+        { midiNote: 42, startTick: 120, durationTicks: 24, velocity: 90 },
+        { midiNote: 36, startTick: 192, durationTicks: 24, velocity: 105 },
+        { midiNote: 42, startTick: 216, durationTicks: 24, velocity: 90 },
+        { midiNote: 38, startTick: 288, durationTicks: 24, velocity: 115 },
+        { midiNote: 46, startTick: 360, durationTicks: 24, velocity: 100 },
+      ],
+      motion: {},
+    } : undefined,
   };
 }
 
 export interface McxMixerCallbacks {
-  getFocusedPart: () => number;
-  setFocusedPart: (idx: number) => void;
+  getFocusedPart: () => number; setFocusedPart: (idx: number) => void;
   getPartsState: () => McxPartUiState[];
-  onTogglePartKind: (idx: number) => void;
-  onChangePartChannel: (idx: number, ch: number) => void;
-  onToggleFollowTranspose: (idx: number) => void;
-  onToggleMute: (idx: number) => void;
-  onToggleSolo: (idx: number) => void;
-  onOpenBankForPart?: (idx: number) => void;
-  onOpenToneForPart?: (idx: number) => void;
-  onOpenPadsForPart?: (idx: number) => void;
-  onChangeGlide?: (idx: number, ms: number) => void;
-  onChangeLevel?: (idx: number, lvl: number) => void;
-  onChangePan?: (idx: number, pan: number) => void;
-  onChangeSendA?: (idx: number, send: number) => void;
-  onChangeSendB?: (idx: number, send: number) => void;
-  setLcdLine2: (text: string) => void;
+  onTogglePartKind: (idx: number) => void; onChangePartChannel: (idx: number, ch: number) => void;
+  onToggleFollowTranspose: (idx: number) => void; onToggleMute: (idx: number) => void; onToggleSolo: (idx: number) => void;
+  onOpenBankForPart?: (idx: number) => void; onOpenToneForPart?: (idx: number, focusSection?: string) => void; onOpenPadsForPart?: (idx: number) => void;
+  onOpenPianoRollForPart?: (idx: number) => void; onOpenNukeForPart?: (idx: number) => void;
+  onChangeGlide?: (idx: number, ms: number) => void; onChangeLevel?: (idx: number, lvl: number) => void;
+  onChangePan?: (idx: number, pan: number) => void; onChangeSendA?: (idx: number, send: number) => void;
+  onChangeSendB?: (idx: number, send: number) => void; setLcdLine2: (text: string) => void;
 }
 
 function fmtPan(v: number): string {
   if (Math.abs(v) < 0.05) return 'C';
   return v < 0 ? `L${Math.round(-v * 64)}` : `R${Math.round(v * 63)}`;
+}
+
+export function updatePartMeter(container: HTMLElement, partIdx: number, peak: number, isMidiMode = false): void {
+  const vu = container.querySelector(`.mcx-strip-vumeter[data-vu-part="${partIdx}"]`);
+  if (!vu) return;
+  vu.classList.toggle('is-midi-mode', isMidiMode);
+  const segs = vu.children;
+  const activeCount = Math.round(Math.min(1, Math.max(0, peak)) * segs.length);
+  for (let s = 0; s < segs.length; ++s) {
+    segs[s].classList.toggle('is-lit', s < activeCount);
+  }
 }
 
 export function renderMixerConsole(container: HTMLElement, cb: McxMixerCallbacks, bridge?: McxHostBridge): void {
@@ -78,23 +94,14 @@ export function renderMixerConsole(container: HTMLElement, cb: McxMixerCallbacks
   const parts = cb.getPartsState();
 
   for (let i = 0; i < 16; ++i) {
-    const ps = parts[i];
-    const isDrum = ps.kind === 'drum_map';
-    const catId = ps.categoryId ?? (isDrum ? 9 : 3);
+    const ps = parts[i], isDrum = ps.kind === 'drum_map', catId = ps.categoryId ?? (isDrum ? 9 : 3);
     const soundName = ps.name || (isDrum ? 'TR-909 Kit' : `Sound P${i + 1}`);
-    const portaMs = ps.portaTimeMs ?? 60;
-    const level = ps.partLevel ?? 0.85;
-    const pan = ps.partPan ?? 0;
-    const sendA = ps.reverbSend ?? 0.28;
-    const sendB = ps.chorusSend ?? 0.20;
+    const portaMs = ps.portaTimeMs ?? 60, level = ps.partLevel ?? 0.85, pan = ps.partPan ?? 0;
+    const sendA = ps.reverbSend ?? 0.28, sendB = ps.chorusSend ?? 0.20;
 
     const strip = document.createElement('div');
-    strip.className = `mcx-strip cat-${catId}${i === focused ? ' is-active' : ''}${isDrum ? ' is-drum' : ''}${ps.mute ? ' is-muted' : ''}`;
+    strip.className = `mcx-strip cat-${catId}${i === focused ? ' is-active' : ''}${isDrum ? ' is-drum' : ''}${ps.mute ? ' is-muted' : ''}${ps.routeMode === 1 ? ' is-midi-ext' : ''}`;
     strip.dataset.part = String(i);
-
-    const chOpts = Array.from({ length: 16 }, (_, c) =>
-      `<option value="${c + 1}"${ps.midiChannel === c + 1 ? ' selected' : ''}>CH${c + 1}</option>`
-    ).join('');
 
     strip.innerHTML = `
       <div class="mcx-strip-head">
@@ -106,23 +113,26 @@ export function renderMixerConsole(container: HTMLElement, cb: McxMixerCallbacks
         <span class="mcx-strip-sound-name">${soundName}</span>
       </button>
       <div class="mcx-strip-drawers-row">
-        <button type="button" class="mcx-strip-drawer-btn is-tone" data-act="tone" title="${t('mcx.toneDrawerBtn')}">${t('mcx.toneShort')}</button>
-        <button type="button" class="mcx-strip-drawer-btn is-pads" data-act="pads" title="${t('mcx.padsDrawerBtn')}">${t('mcx.padsShort')}</button>
+        <button type="button" class="mcx-strip-drawer-btn is-tone" data-act="open-part" title="${t('mcx.toneDrawerBtn')}">${t('mcx.toneShort') || 'PART'}</button>
+        <button type="button" class="mcx-strip-drawer-btn is-pads" data-act="pads" title="${t('mcx.padsDrawerBtn')}">${t('mcx.padsShort') || 'PAD'}</button>
+        <button type="button" class="mcx-strip-drawer-btn is-seq" data-act="seq" title="Piano Roll Sequencer">SEQ</button>
+        <button type="button" class="mcx-strip-drawer-btn is-nuke" data-act="nuke" title="Performance & Nuke Deck">NUKE</button>
       </div>
-      <div class="mcx-strip-routing">
-        <select class="mcx-strip-ch-select" data-act="ch" aria-label="${t('mcx.midiChannel')}">${chOpts}</select>
-        <button type="button" class="mcx-strip-tr-btn${ps.followTranspose !== false && !isDrum ? ' is-active' : ''}${isDrum ? ' is-disabled' : ''}" data-act="tr" title="${t('mcx.partFollowTranspose')}" ${isDrum ? 'disabled' : ''}>TR</button>
+      <!-- Bloque informativo compacto: Canal MIDI & Transposición -->
+      <div class="mcx-strip-info-row">
+        <span class="mcx-strip-ch-badge" data-act="open-part" data-section="config" title="Canal MIDI (Clic para editar)">CH${String(ps.midiChannel).padStart(2, '0')}</span>
+        <span class="mcx-strip-tr-badge${ps.followTranspose !== false && !isDrum ? ' is-active' : ''}" data-act="open-part" data-section="config" title="Transposición (Clic para editar)">${isDrum ? 'DRM' : (ps.followTranspose !== false ? 'TR' : 'OFF')}</span>
       </div>
-      <div class="mcx-strip-glide${isDrum ? ' is-disabled' : ''}" title="${t('mcx.portaTimeHint')}">
-        <span class="mcx-strip-glide-lbl">GLD</span>
-        <input type="range" class="mcx-strip-glide-slider" min="0" max="500" step="5" value="${portaMs}" ${isDrum ? 'disabled' : ''} />
-        <span class="mcx-strip-glide-val">${Math.round(portaMs)}</span>
+      <!-- Bloque informativo compacto: Panorama & Glide -->
+      <div class="mcx-strip-info-row">
+        <span class="mcx-strip-pan-badge" data-act="open-part" data-section="channel" title="Panorama (Clic para editar)">PAN ${fmtPan(pan)}</span>
+        <span class="mcx-strip-glide-badge" data-act="open-part" data-section="glide" title="Glide (Clic para editar)">${Math.round(portaMs)}ms</span>
       </div>
-      <div class="mcx-strip-sends-row">
-        <div class="mcx-strip-mini-knob" title="${t('mcx.revSend')}"><span class="mcx-strip-mini-lbl">${t('mcx.sendAShort')}</span><input type="range" class="mcx-strip-send-a" min="0" max="1" step="0.02" value="${sendA}" /></div>
-        <div class="mcx-strip-mini-knob" title="${t('mcx.choSend')}"><span class="mcx-strip-mini-lbl">${t('mcx.sendBShort')}</span><input type="range" class="mcx-strip-send-b" min="0" max="1" step="0.02" value="${sendB}" /></div>
+      <!-- Bloque informativo compacto: Envíos FX A y B -->
+      <div class="mcx-strip-sends-badge" data-act="open-part" data-section="sends" title="Envíos FX A y B (Clic para editar)">
+        <span class="mcx-s-tag">A</span><span class="mcx-s-val">${Math.round(sendA * 100)}%</span>
+        <span class="mcx-s-tag">B</span><span class="mcx-s-val">${Math.round(sendB * 100)}%</span>
       </div>
-      <div class="mcx-strip-pan-row" title="${t('mcx.partPan')}"><span class="mcx-strip-pan-lbl">${t('mcx.panShort')}</span><input type="range" class="mcx-strip-pan-slider" min="-1" max="1" step="0.04" value="${pan}" /><span class="mcx-strip-pan-val">${fmtPan(pan)}</span></div>
       <div class="mcx-strip-ms-row">
         <button type="button" class="mcx-strip-ms-btn${ps.mute ? ' is-mute' : ''}" data-act="mute" title="${t('mcx.mute')}">M</button>
         <button type="button" class="mcx-strip-ms-btn${ps.solo ? ' is-solo' : ''}" data-act="solo" title="${t('mcx.solo')}">S</button>
@@ -130,63 +140,44 @@ export function renderMixerConsole(container: HTMLElement, cb: McxMixerCallbacks
       <div class="mcx-strip-fader-section">
         <div class="mcx-strip-fader-row">
           <input type="range" class="mcx-strip-fader" orient="vertical" min="0" max="1" step="0.01" value="${level}" title="${t('mcx.partVolumeHint')}" />
-          <div class="mcx-strip-vumeter" aria-hidden="true"><span class="mcx-vu-seg is-peak"></span><span class="mcx-vu-seg is-hot"></span><span class="mcx-vu-seg is-mid"></span><span class="mcx-vu-seg is-low"></span></div>
+          <!-- Canonical 8-segment discrete LED VU meter tower -->
+          <div class="mcx-strip-vumeter" data-vu-part="${i}" aria-hidden="true">
+            <span class="mcx-vu-seg is-low"></span><span class="mcx-vu-seg is-low"></span>
+            <span class="mcx-vu-seg is-low"></span><span class="mcx-vu-seg is-low"></span>
+            <span class="mcx-vu-seg is-mid"></span><span class="mcx-vu-seg is-mid"></span>
+            <span class="mcx-vu-seg is-hot"></span><span class="mcx-vu-seg is-peak"></span>
+          </div>
         </div>
         <span class="mcx-strip-lvl-val">${Math.round(level * 100)}%</span>
       </div>
     `;
 
     strip.addEventListener('click', (ev) => {
-      const act = (ev.target as HTMLElement).closest('[data-act]')?.getAttribute('data-act');
-      if (act === 'kind') { ev.stopPropagation(); cb.onTogglePartKind(i); return; }
-      if (act === 'sound') { ev.stopPropagation(); cb.onOpenBankForPart?.(i); return; }
-      if (act === 'tone') { ev.stopPropagation(); cb.setFocusedPart(i); cb.onOpenToneForPart?.(i); return; }
-      if (act === 'pads') { ev.stopPropagation(); cb.setFocusedPart(i); cb.onOpenPadsForPart?.(i); return; }
-      if (act === 'tr') { ev.stopPropagation(); if (!isDrum) cb.onToggleFollowTranspose(i); return; }
-      if (act === 'mute') { ev.stopPropagation(); cb.onToggleMute(i); return; }
-      if (act === 'solo') { ev.stopPropagation(); cb.onToggleSolo(i); return; }
-      if (act === 'ch') return;
-      cb.setFocusedPart(i);
-      container.querySelectorAll('.mcx-strip').forEach((el, idx) => el.classList.toggle('is-active', idx === i));
-      cb.setLcdLine2(`PART ${String(i + 1).padStart(2, '0')} [${isDrum ? 'DRM' : 'CHR'} · CH${ps.midiChannel}] ${soundName}`);
-    });
-
-    const bindInput = (sel: string, onVal: (v: number) => void) => {
-      const el = strip.querySelector(sel) as HTMLInputElement | null;
-      el?.addEventListener('click', (ev) => ev.stopPropagation());
-      el?.addEventListener('input', () => onVal(parseFloat(el.value)));
-    };
-
-    const chSel = strip.querySelector('select[data-act="ch"]') as HTMLSelectElement | null;
-    chSel?.addEventListener('click', (ev) => ev.stopPropagation());
-    chSel?.addEventListener('change', () => cb.onChangePartChannel(i, parseInt(chSel.value, 10)));
-
-    const glideVal = strip.querySelector('.mcx-strip-glide-val');
-    bindInput('.mcx-strip-glide-slider', (ms) => {
-      if (glideVal) glideVal.textContent = String(Math.round(ms));
-      ps.portaTimeMs = ms; bridge?.setParam(i, 'portaTimeMs', ms);
-      cb.onChangeGlide?.(i, ms); cb.setLcdLine2(`P${String(i + 1).padStart(2, '0')} GLIDE: ${Math.round(ms)} ms`);
-    });
-
-    bindInput('.mcx-strip-send-a', (v) => {
-      ps.reverbSend = v; bridge?.setParam(i, 'reverbSend', v); cb.onChangeSendA?.(i, v);
-      cb.setLcdLine2(`P${String(i + 1).padStart(2, '0')} REV SEND: ${Math.round(v * 100)}%`);
-    });
-
-    bindInput('.mcx-strip-send-b', (v) => {
-      ps.chorusSend = v; bridge?.setParam(i, 'chorusSend', v); cb.onChangeSendB?.(i, v);
-      cb.setLcdLine2(`P${String(i + 1).padStart(2, '0')} CHO/DEL SEND: ${Math.round(v * 100)}%`);
-    });
-
-    const panVal = strip.querySelector('.mcx-strip-pan-val');
-    bindInput('.mcx-strip-pan-slider', (v) => {
-      if (panVal) panVal.textContent = fmtPan(v);
-      ps.partPan = v; bridge?.setParam(i, 'partPan', v); cb.onChangePan?.(i, v);
-      cb.setLcdLine2(`P${String(i + 1).padStart(2, '0')} PAN: ${fmtPan(v)}`);
+      const tgt = (ev.target as HTMLElement).closest('[data-act]');
+      const act = tgt?.getAttribute('data-act');
+      const sec = tgt?.getAttribute('data-section') || undefined;
+      if (!act) {
+        cb.setFocusedPart(i);
+        container.querySelectorAll('.mcx-strip').forEach((el, idx) => el.classList.toggle('is-active', idx === i));
+        cb.setLcdLine2(`PART ${String(i + 1).padStart(2, '0')} [${isDrum ? 'DRM' : 'CHR'} · CH${ps.midiChannel}] ${soundName}`);
+        return;
+      }
+      ev.stopPropagation();
+      if (act === 'kind') cb.onTogglePartKind(i);
+      else if (act === 'sound') cb.onOpenBankForPart?.(i);
+      else if (act === 'tone' || act === 'open-part') { cb.setFocusedPart(i); cb.onOpenToneForPart?.(i, sec); }
+      else if (act === 'pads') { cb.setFocusedPart(i); cb.onOpenPadsForPart?.(i); }
+      else if (act === 'seq') { cb.setFocusedPart(i); cb.onOpenPianoRollForPart?.(i); }
+      else if (act === 'nuke') { cb.setFocusedPart(i); cb.onOpenNukeForPart ? cb.onOpenNukeForPart(i) : cb.setLcdLine2(`PART ${String(i + 1).padStart(2, '0')}: PERFORMANCE & NUKE DECK`); }
+      else if (act === 'mute') cb.onToggleMute(i);
+      else if (act === 'solo') cb.onToggleSolo(i);
     });
 
     const lvlVal = strip.querySelector('.mcx-strip-lvl-val');
-    bindInput('.mcx-strip-fader', (v) => {
+    const fader = strip.querySelector('.mcx-strip-fader') as HTMLInputElement | null;
+    fader?.addEventListener('click', (e) => e.stopPropagation());
+    fader?.addEventListener('input', () => {
+      const v = parseFloat(fader.value);
       if (lvlVal) lvlVal.textContent = `${Math.round(v * 100)}%`;
       ps.partLevel = v; bridge?.setParam(i, 'partLevel', v); cb.onChangeLevel?.(i, v);
       cb.setLcdLine2(`P${String(i + 1).padStart(2, '0')} LEVEL: ${Math.round(v * 100)}%`);

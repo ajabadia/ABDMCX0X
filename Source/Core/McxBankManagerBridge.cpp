@@ -1,5 +1,6 @@
 #include "McxBankManagerBridge.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <iomanip>
 #include <sstream>
@@ -45,6 +46,7 @@ std::string McxBankManagerBridge::serializeToJson(const McxEngine& engine,
         ss << "    {\n";
         ss << "      \"index\": " << pIdx << ",\n";
         ss << "      \"midiChannel\": " << static_cast<int>(p.midiChannel) << ",\n";
+        ss << "      \"midiPortIndex\": " << static_cast<int>(p.midiPortIndex) << ",\n";
         ss << "      \"routeMode\": " << static_cast<int>(p.routeMode) << ",\n";
         ss << "      \"isDrumKit\": " << (p.isDrumKit ? "true" : "false") << ",\n";
         ss << "      \"structureMode\": " << static_cast<int>(p.structureMode) << ",\n";
@@ -144,6 +146,7 @@ bool McxBankManagerBridge::deserializeFromJson(McxEngine& engine,
 
         auto& p = engine.part(static_cast<std::size_t>(pIdx));
         p.midiChannel = static_cast<std::uint8_t>(findInt(partChunk, "midiChannel", p.midiChannel));
+        p.midiPortIndex = static_cast<std::uint8_t>(std::clamp(findInt(partChunk, "midiPortIndex", p.midiPortIndex), 0, 7));
         p.routeMode = static_cast<McxPartRouteMode>(findInt(partChunk, "routeMode", static_cast<int>(p.routeMode)));
         p.isDrumKit = (partChunk.find("\"isDrumKit\": true") != std::string::npos);
         p.structureMode = static_cast<McxStructureMode>(findInt(partChunk, "structureMode", 0));
@@ -164,6 +167,7 @@ bool McxBankManagerBridge::deserializeFromJson(McxEngine& engine,
             std::string ptBlock = partChunk.substr(ptPos, 300);
             auto& pt = p.partials[static_cast<std::size_t>(ptIdx)];
             pt.enabled = (ptBlock.find("true") < ptBlock.find(','));
+            pt.sourceKind = static_cast<McxOscSourceKind>(std::clamp(findInt(ptBlock, "sourceKind", static_cast<float>(pt.sourceKind)), 0, 5));
             pt.vaWaveform = static_cast<std::uint8_t>(findInt(ptBlock, "vaWaveform", 0));
             pt.coarseSemitones = static_cast<std::int8_t>(findInt(ptBlock, "coarse", 0));
             pt.fineCents = findFloat(ptBlock, "fine", 0.0f);

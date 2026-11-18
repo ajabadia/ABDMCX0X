@@ -7,30 +7,28 @@ namespace abdmcx
 {
 
 McxHardwareBridge::McxHardwareBridge(McxEngine& engine)
-    : engine_(engine), profile_(abd::synth::HardwareProfileHydrator::makeGenericGmProfile())
+    : engine_(engine), fallbackProfile_(abd::synth::HardwareProfileHydrator::makeGenericGmProfile())
 {
+    for (auto& idx : partProfileIdx_)
+        idx.store(-1, std::memory_order_relaxed);
+    engine_.setOutboundMidiQueue(&outQueue_);
 }
 
-void McxHardwareBridge::sendCc(std::uint8_t ch1to16, std::uint8_t cc, std::uint8_t val) noexcept
+void McxHardwareBridge::sendCc(std::uint8_t ch1to16, std::uint8_t cc, std::uint8_t val, std::uint8_t portIdx) noexcept
 {
-    const std::uint8_t ch = static_cast<std::uint8_t>(std::clamp<int>(ch1to16, 1, 16) - 1);
-    McxMidiOutMessage msg {};
-    msg.length = 3;
-    msg.bytes[0] = static_cast<std::uint8_t>(0xB0u | ch);
-    msg.bytes[1] = static_cast<std::uint8_t>(cc & 0x7Fu);
-    msg.bytes[2] = static_cast<std::uint8_t>(val & 0x7Fu);
-    outQueue_.push(msg);
+    outQueue_.push(HardwareMirrorRouter::makeCc(ch1to16, cc, val, 0, portIdx));
 }
 
-void McxHardwareBridge::sendNrpn(std::uint8_t ch1to16, std::uint8_t msb, std::uint8_t lsb, std::uint8_t val) noexcept
+void McxHardwareBridge::sendNrpn(std::uint8_t ch1to16, std::uint8_t msb, std::uint8_t lsb, std::uint8_t val, std::uint8_t portIdx) noexcept
 {
     // Strict Roland ordering: CC99 (MSB) -> CC98 (LSB) -> CC6 (Data Entry MSB)
-    sendCc(ch1to16, 99, msb);
-    sendCc(ch1to16, 98, lsb);
-    sendCc(ch1to16, 6, val);
+    sendCc(ch1to16, 99, msb, portIdx);
+    sendCc(ch1to16, 98, lsb, portIdx);
+    sendCc(ch1to16, 6, val, portIdx);
 }
 
 void McxHardwareBridge::dispatchBinding(std::uint8_t ch,
+                                        std::uint8_t portIdx,
                                         const abd::synth::SemanticControlBinding& binding,
                                         float normalizedVal) noexcept
 {
@@ -45,10 +43,10 @@ void McxHardwareBridge::dispatchBinding(std::uint8_t ch,
     const std::uint8_t byteVal = static_cast<std::uint8_t>(std::clamp(static_cast<int>(std::round(scaled)), 0, 127));
 
     if (binding.method == abd::synth::ControlWireMethod::MidiCc)
-        sendCc(ch, binding.controlNumber, byteVal);
+        sendCc(ch, binding.controlNumber, byteVal, portIdx);
     else if (binding.method == abd::synth::ControlWireMethod::Nrpn7Bit ||
              binding.method == abd::synth::ControlWireMethod::Nrpn14Bit)
-        sendNrpn(ch, binding.controlNumber, binding.subNumber, byteVal);
+        sendNrpn(ch, binding.controlNumber, binding.subNumber, byteVal, portIdx);
 }
 
 void McxHardwareBridge::applyInternalSemanticParam(std::uint8_t partIdx,
@@ -125,63 +123,47 @@ void McxHardwareBridge::applyInternalDrumParam(std::uint8_t partIdx,
 
 void McxHardwareBridge::routeNoteOn(std::uint8_t partIdx, std::uint8_t note, float velocity, std::int32_t sampleOffset) noexcept
 {
-    if (partIdx >= 16) return;
+    if (partIdx >= McxEngine::kNumParts) return;
 
-    auto& p = engine_.part(partIdx);
+    const auto& p = engine_.part(partIdx);
     if (HardwareMirrorRouter::routesToInternal(p.routeMode))
-        engine_.triggerNote(partIdx, note, velocity);
+        engine_.triggerInternalNoteOnly(partIdx, note, velocity);
 
     if (HardwareMirrorRouter::routesToExternal(p.routeMode))
     {
         const std::uint8_t outNote = p.isDrumKit ? p.drumRemapper.slotToExternal[note & 0x7Fu] : note;
-        const std::uint8_t ch = static_cast<std::uint8_t>(std::clamp<int>(p.midiChannel, 1, 16) - 1);
         const std::uint8_t velByte = static_cast<std::uint8_t>(std::clamp<int>(static_cast<int>(velocity * 127.0f), 1, 127));
-
-        McxMidiOutMessage msg {};
-        msg.length = 3;
-        msg.bytes[0] = static_cast<std::uint8_t>(0x90u | ch);
-        msg.bytes[1] = outNote;
-        msg.bytes[2] = velByte;
-        msg.sampleOffset = sampleOffset;
-        outQueue_.push(msg);
+        outQueue_.push(HardwareMirrorRouter::makeNoteOn(p.midiChannel, outNote, velByte, sampleOffset, p.midiPortIndex));
     }
 }
 
 void McxHardwareBridge::routeNoteOff(std::uint8_t partIdx, std::uint8_t note, std::int32_t sampleOffset) noexcept
 {
-    if (partIdx >= 16) return;
+    if (partIdx >= McxEngine::kNumParts) return;
 
-    auto& p = engine_.part(partIdx);
+    const auto& p = engine_.part(partIdx);
     if (HardwareMirrorRouter::routesToInternal(p.routeMode))
-        engine_.releaseNote(partIdx, note);
+        engine_.releaseInternalNoteOnly(partIdx, note);
 
     if (HardwareMirrorRouter::routesToExternal(p.routeMode))
     {
         const std::uint8_t outNote = p.isDrumKit ? p.drumRemapper.slotToExternal[note & 0x7Fu] : note;
-        const std::uint8_t ch = static_cast<std::uint8_t>(std::clamp<int>(p.midiChannel, 1, 16) - 1);
-
-        McxMidiOutMessage msg {};
-        msg.length = 3;
-        msg.bytes[0] = static_cast<std::uint8_t>(0x80u | ch);
-        msg.bytes[1] = outNote;
-        msg.bytes[2] = 0;
-        msg.sampleOffset = sampleOffset;
-        outQueue_.push(msg);
+        outQueue_.push(HardwareMirrorRouter::makeNoteOff(p.midiChannel, outNote, sampleOffset, p.midiPortIndex));
     }
 }
 
 void McxHardwareBridge::routeSemanticParam(std::uint8_t partIdx, std::uint64_t roleHash, float normalizedValue) noexcept
 {
-    if (partIdx >= 16) return;
+    if (partIdx >= McxEngine::kNumParts) return;
 
-    auto& p = engine_.part(partIdx);
+    const auto& p = engine_.part(partIdx);
     if (HardwareMirrorRouter::routesToInternal(p.routeMode))
         applyInternalSemanticParam(partIdx, roleHash, normalizedValue);
 
     if (HardwareMirrorRouter::routesToExternal(p.routeMode))
     {
-        if (const auto* binding = profile_.findByRoleHash(roleHash))
-            dispatchBinding(p.midiChannel, *binding, normalizedValue);
+        if (const auto* binding = getPartProfile(partIdx).findByRoleHash(roleHash))
+            dispatchBinding(p.midiChannel, p.midiPortIndex, *binding, normalizedValue);
     }
 }
 
@@ -190,15 +172,15 @@ void McxHardwareBridge::routeDrumSemanticParam(std::uint8_t partIdx,
                                                std::uint64_t drumRoleHash,
                                                float normalizedValue) noexcept
 {
-    if (partIdx >= 16 || slotIdx >= 128) return;
+    if (partIdx >= McxEngine::kNumParts || slotIdx >= 128) return;
 
-    auto& p = engine_.part(partIdx);
+    const auto& p = engine_.part(partIdx);
     if (HardwareMirrorRouter::routesToInternal(p.routeMode))
         applyInternalDrumParam(partIdx, slotIdx, drumRoleHash, normalizedValue, -1);
 
     if (HardwareMirrorRouter::routesToExternal(p.routeMode))
     {
-        if (const auto* binding = profile_.findByRoleHash(drumRoleHash))
+        if (const auto* binding = getPartProfile(partIdx).findByRoleHash(drumRoleHash))
         {
             if (binding->method == abd::synth::ControlWireMethod::Nrpn7Bit ||
                 binding->method == abd::synth::ControlWireMethod::Nrpn14Bit)
@@ -207,7 +189,7 @@ void McxHardwareBridge::routeDrumSemanticParam(std::uint8_t partIdx,
                 const float clamped = std::clamp(normalizedValue, 0.0f, 1.0f);
                 const float scaled = binding->wireMin + clamped * (binding->wireMax - binding->wireMin);
                 const std::uint8_t valByte = static_cast<std::uint8_t>(std::clamp(static_cast<int>(scaled), 0, 127));
-                sendNrpn(p.midiChannel, binding->controlNumber, drumKey, valByte);
+                sendNrpn(p.midiChannel, binding->controlNumber, drumKey, valByte, p.midiPortIndex);
             }
         }
     }

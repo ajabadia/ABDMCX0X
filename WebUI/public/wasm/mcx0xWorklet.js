@@ -11,14 +11,14 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
     this.HEAPU8 = null;
     this.HEAP32 = null;
     this.HEAPF32 = null;
-
     this.outLPtr = 0;
     this.outRPtr = 0;
     this.peakLPtr = 0;
     this.peakRPtr = 0;
     this.activeVoicesPtr = 0;
+    this.partPeaksPtr = 0;
+    this.partMidiPeaksPtr = 0;
     this.telemetryCounter = 0;
-
     this.port.onmessage = (event) => this.handleMessage(event.data);
   }
 
@@ -29,6 +29,13 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
     this.HEAPF32 = new Float32Array(buf);
   }
 
+  _readPeaks16(fnName, ptr) {
+    if (!ptr || typeof this.wasm[fnName] !== 'function') return undefined;
+    this.wasm[fnName](ptr);
+    const off = ptr >> 2;
+    return Array.from(this.HEAPF32.subarray(off, off + 16));
+  }
+
   handleMessage(data) {
     if (!data) return;
     if (data.type === 'INIT_WASM') {
@@ -36,34 +43,16 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
       return;
     }
     if (!this.isReady || !this.wasm) return;
-
     switch (data.type) {
-      case 'NOTE_ON':
-        this.wasm.noteOn(data.part | 0, data.note | 0, Number(data.velocity ?? 0.85));
-        break;
-      case 'NOTE_OFF':
-        this.wasm.noteOff(data.part | 0, data.note | 0);
-        break;
-      case 'ALL_NOTES_OFF':
-        this.wasm.allNotesOff();
-        break;
-      case 'SET_PARAM':
-        this.wasm.setPartParam(data.part | 0, data.paramId | 0, Number(data.value ?? 0));
-        break;
-      case 'SET_TEMPO':
-        this.wasm.setTempoBPM(Number(data.bpm ?? 120));
-        break;
-      case 'SET_MASTER_VOLUME':
-        this.wasm.setMasterVolume(Number(data.volume ?? 0.85));
-        break;
-      case 'RESET_FACTORY':
-        this.wasm.resetToFactory();
-        break;
-      case 'LOAD_BANK':
-        this._loadBankBinary(data.buffer);
-        break;
-      default:
-        break;
+      case 'NOTE_ON': this.wasm.noteOn(data.part | 0, data.note | 0, Number(data.velocity ?? 0.85)); break;
+      case 'NOTE_OFF': this.wasm.noteOff(data.part | 0, data.note | 0); break;
+      case 'ALL_NOTES_OFF': this.wasm.allNotesOff(); break;
+      case 'SET_PARAM': this.wasm.setPartParam(data.part | 0, data.paramId | 0, Number(data.value ?? 0)); break;
+      case 'SET_TEMPO': this.wasm.setTempoBPM(Number(data.bpm ?? 120)); break;
+      case 'SET_MASTER_VOLUME': this.wasm.setMasterVolume(Number(data.volume ?? 0.85)); break;
+      case 'RESET_FACTORY': this.wasm.resetToFactory(); break;
+      case 'LOAD_BANK': this._loadBankBinary(data.buffer); break;
+      default: break;
     }
   }
 
@@ -96,9 +85,7 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
             this.wasm.memory.grow(pages);
             this._updateMemoryViews();
             return 1;
-          } catch {
-            return 0;
-          }
+          } catch { return 0; }
         },
         clock_time_get: (_clk, _prec, ptime) => {
           if (this.wasm?.memory && ptime) {
@@ -118,11 +105,9 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
       }
       const instance = await WebAssembly.instantiate(compiled, importObj);
       this.wasm = instance.exports;
-
       if (!this.wasm || !this.wasm.memory || typeof this.wasm.initEngine !== 'function') {
         throw new Error('WASM missing memory or unminified initEngine export (rebuild wasm/build_wasm.bat)');
       }
-
       if (typeof this.wasm.__wasm_call_ctors === 'function') this.wasm.__wasm_call_ctors();
       else if (typeof this.wasm._initialize === 'function') this.wasm._initialize();
 
@@ -135,6 +120,8 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
       this.peakLPtr = this.wasm.malloc(4);
       this.peakRPtr = this.wasm.malloc(4);
       this.activeVoicesPtr = this.wasm.malloc(4);
+      this.partPeaksPtr = this.wasm.malloc(16 * 4);
+      this.partMidiPeaksPtr = this.wasm.malloc(16 * 4);
       if (this.HEAPF32.buffer !== this.wasm.memory.buffer) this._updateMemoryViews();
 
       this.isReady = true;
@@ -147,7 +134,6 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
   process(_inputs, outputs) {
     const out = outputs[0];
     if (!this.isReady || !out || out.length === 0) return true;
-
     const outL = out[0];
     const outR = out.length > 1 ? out[1] : null;
     const n = outL.length;
@@ -164,6 +150,8 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
     if (++this.telemetryCounter >= 12) {
       this.telemetryCounter = 0;
       this.wasm.getAudioSnapshot(this.peakLPtr, this.peakRPtr, this.activeVoicesPtr);
+      const partPeaks = this._readPeaks16('getPartPeaks', this.partPeaksPtr);
+      const partMidiPeaks = this._readPeaks16('getPartMidiPeaks', this.partMidiPeaksPtr);
       const scopeCopy = new Float32Array(n);
       scopeCopy.set(outL);
       this.port.postMessage(
@@ -172,6 +160,8 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
           peakL: this.HEAPF32[this.peakLPtr >> 2],
           peakR: this.HEAPF32[this.peakRPtr >> 2],
           activeVoices: this.HEAP32[this.activeVoicesPtr >> 2],
+          partPeaks,
+          partMidiPeaks,
           samplesL: scopeCopy,
         },
         [scopeCopy.buffer],

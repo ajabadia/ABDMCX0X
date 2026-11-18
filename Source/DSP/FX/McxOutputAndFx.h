@@ -1,32 +1,24 @@
 #pragma once
 
 #include "../Core/McxTypes.h"
-#include "DspEffects/DspFlanger.h"
-#include "DspEffects/DspStereoChorus.h"
-#include "DspEffects/DspStereoDelay.h"
-#include "DspEffects/DspZitaReverb.h"
-#include "DspEffects/MasterSafetyLimiter.h"
+#include "DspEffects/DspMultiBusFxRack.h"
 #include "DspEffects/profiles/RolandGsMc303FxProfile.h"
-
-#include <array>
-#include <memory>
 
 namespace abdmcx
 {
 
 /**
- * @brief Master Send FX chain reusing ABDShared::DspEffects (DspStereoChorus, DspFlanger,
- * DspStereoDelay, DspZitaReverb) driven by RolandGsMc303FxProfile macros, plus swappable
- * DAC output quantization/flavor (HD Studio, 90s 16-bit, Vintage 12-bit).
- * FX delay buffers are heap-owned via unique_ptr (allocated once at construction, keeping
- * stack footprint tiny for DAWs & WASM). Strictly zero heap allocations on process().
+ * @brief Master Send & Master Insert FX chain for ABDMCX0X.
+ * Wraps abd::dsp::DspMultiBusFxRack (4 send buses + dry, 4 topologies)
+ * and exposes Roland GS MC-303 macro configurations plus vintage DAC quantization.
  */
 class McxOutputAndFx
 {
 public:
-    static constexpr int kMaxChunk = 256;
+    static constexpr int kMaxChunk = abd::dsp::DspMultiBusFxRack::kMaxChunk;
+    using Topology = abd::dsp::DspMultiBusFxRack::Topology;
 
-    McxOutputAndFx();
+    McxOutputAndFx() = default;
     ~McxOutputAndFx() = default;
     McxOutputAndFx(const McxOutputAndFx&) = delete;
     McxOutputAndFx& operator=(const McxOutputAndFx&) = delete;
@@ -34,7 +26,15 @@ public:
     void prepare(double sampleRate) noexcept;
     void reset() noexcept;
 
-    void setSendReturns(float chorusMix, float delayMix, float reverbMix) noexcept;
+    void setTopology(Topology topo) noexcept { rack_.setTopology(topo); }
+    [[nodiscard]] Topology getTopology() const noexcept { return rack_.getTopology(); }
+
+    void setSendReturns(float chorusMix, float delayMix, float reverbMix, float auxMix = 1.0f) noexcept;
+    void setCascadeInjections(float chorusToReverb, float delayToReverb) noexcept
+    {
+        rack_.setCascadeInjections(chorusToReverb, delayToReverb);
+    }
+
     void setReverbMacro(int macroId0to7) noexcept;
     void setChorusMacro(int macroId0to7) noexcept;
     void setReverbTimeNorm(float norm) noexcept;
@@ -47,10 +47,29 @@ public:
     void setOutputCharacter(McxOutputCharacter character) noexcept { character_ = character; }
     [[nodiscard]] McxOutputCharacter getOutputCharacter() const noexcept { return character_; }
 
-    void setLimiterEnabled(bool enabled) noexcept { limiter_.setEnabled(enabled); }
-    void setLimiterCeilingDb(float db) noexcept { limiter_.setCeilingDb(db); }
-    [[nodiscard]] const abd::dsp::MasterSafetyLimiter& getLimiter() const noexcept { return limiter_; }
-    [[nodiscard]] abd::dsp::MasterSafetyLimiter& getLimiter() noexcept { return limiter_; }
+    void setLimiterEnabled(bool enabled) noexcept { rack_.getLimiter().setEnabled(enabled); }
+    void setLimiterCeilingDb(float db) noexcept { rack_.getLimiter().setCeilingDb(db); }
+    [[nodiscard]] const abd::dsp::MasterSafetyLimiter& getLimiter() const noexcept { return rack_.getLimiter(); }
+    [[nodiscard]] abd::dsp::MasterSafetyLimiter& getLimiter() noexcept { return rack_.getLimiter(); }
+
+    struct ActiveSendLabels
+    {
+        const char* sendA { "Reverb" };
+        const char* sendB { "Chorus" };
+        const char* sendC { "Stereo Delay" };
+        const char* sendD { "Saturation" };
+    };
+
+    void setSendBusMute(int busIdx, bool muted) noexcept { rack_.setSendBusMute(busIdx, muted); }
+    [[nodiscard]] bool isSendBusMuted(int busIdx) const noexcept { return rack_.isSendBusMuted(busIdx); }
+    [[nodiscard]] bool isSendBusMute(int busIdx) const noexcept { return rack_.isSendBusMuted(busIdx); }
+    [[nodiscard]] abd::dsp::DspMultiBusFxRack::Telemetry getTelemetry() const noexcept { return rack_.getTelemetry(); }
+    [[nodiscard]] ActiveSendLabels getActiveSendLabels() const noexcept;
+
+    [[nodiscard]] abd::dsp::DspMultiBusFxRack& getRack() noexcept { return rack_; }
+    [[nodiscard]] const abd::dsp::DspMultiBusFxRack& getRack() const noexcept { return rack_; }
+
+    using ControlFrame = abd::dsp::DspMultiBusFxRack::ControlFrame;
 
     void processChunk(float* dryL,
                       float* dryR,
@@ -63,7 +82,8 @@ public:
                       const float* sendDL,
                       const float* sendDR,
                       int numSamples,
-                      float masterGain) noexcept;
+                      float masterGain,
+                      const ControlFrame& ctrl = {}) noexcept;
 
     void processChunk(float* dryL,
                       float* dryR,
@@ -72,28 +92,15 @@ public:
                       const float* revSendL,
                       const float* revSendR,
                       int numSamples,
-                      float masterGain) noexcept
+                      float masterGain,
+                      const ControlFrame& ctrl = {}) noexcept
     {
-        processChunk(dryL, dryR, revSendL, revSendR, choSendL, choSendR, nullptr, nullptr, nullptr, nullptr, numSamples, masterGain);
+        processChunk(dryL, dryR, revSendL, revSendR, choSendL, choSendR, nullptr, nullptr, nullptr, nullptr, numSamples, masterGain, ctrl);
     }
 
     [[nodiscard]] static float quantizeSample(float x, McxOutputCharacter character) noexcept;
 
 private:
-    struct FxBuffers
-    {
-        abd::dsp::DspStereoChorus chorus {};
-        abd::dsp::DspFlanger flanger {};
-        abd::dsp::DspStereoDelay delay {};
-        abd::dsp::DspZitaReverb reverb {};
-        std::array<float, kMaxChunk> wetChoL {};
-        std::array<float, kMaxChunk> wetChoR {};
-        std::array<float, kMaxChunk> wetDelL {};
-        std::array<float, kMaxChunk> wetDelR {};
-        std::array<float, kMaxChunk> wetRevL {};
-        std::array<float, kMaxChunk> wetRevR {};
-    };
-
     double sampleRate_ { 44100.0 };
     McxOutputCharacter character_ { McxOutputCharacter::HdStudio };
 
@@ -102,12 +109,9 @@ private:
     float chorusMix_ { 0.35f };
     float delayMix_ { 0.25f };
     float reverbMix_ { 0.35f };
-    float holdL_ { 0.0f };
-    float holdR_ { 0.0f };
-    int holdCounter_ { 0 };
+    float auxMix_ { 1.0f };
 
-    abd::dsp::MasterSafetyLimiter limiter_ {};
-    std::unique_ptr<FxBuffers> fx_;
+    abd::dsp::DspMultiBusFxRack rack_ {};
 };
 
 } // namespace abdmcx

@@ -1,17 +1,55 @@
 /**
  * ABDMCX0X -- McxToneDrawerViews.ts
- * HTML templates and card builders for the Bottom Tone & FX Drawer (100% per-channel).
- * 100% tokenized with @abdsynths/shared tokens and fully i18n-ready.
+ * Type definitions, model maps, and view helpers for Tone & FX Drawer.
+ * Strict line limit: < 200 lines.
  */
 
 import { t } from '../i18n/mcxI18n';
 import type { McxPartUiState } from './McxMixerConsole';
+import { buildDeck1Html } from './McxToneDrawerDeck1';
+import { buildDeck2Html } from './McxToneDrawerDeck2';
+import {
+  ABD_FILTER_CATALOG,
+  ABD_FILTER_MODES,
+  checkSeriesFilterConflict,
+  type FilterMetadata,
+  type FilterModeDef,
+} from '@abdsynths/shared/contracts/filterRegistry.ts';
 
-export const FILTER_MODELS = ['SVF Clean', 'Roland TVF ZDF', 'MS-20 Acid', 'Ladder Drive', 'Z-Plane Morph', 'TC6116AF TVF'];
-export const FILTER_MODES = ['LPF', 'HPF', 'BPF', 'Bypass (0% CPU)'];
-export const STRUCTURE_MODES = ['Parallel', 'RingMod 1-2', 'Booster 1-2', 'Vector 2D'];
-export const ROUTE_MODES = ['Internal (DSP)', 'External (MIDI)', 'Both (INT+EXT)'];
-export const GLIDE_MODES = ['Always', 'Legato Only'];
+export type { FilterMetadata, FilterModeDef };
+export const FILTER_MODELS = ABD_FILTER_CATALOG.map((f) => ({
+  id: f.numericId,
+  label: f.name,
+  shortLabel: f.shortLabel,
+  supportedModes: f.supportedModes,
+}));
+export const FILTER_MODES = ABD_FILTER_MODES;
+
+export const STRUCTURE_MODES = [
+  { id: 0, label: 'PAR', title: 'Paralelo' },
+  { id: 1, label: 'RING', title: 'Ring Mod 1-2' },
+  { id: 2, label: 'BOOST', title: 'Booster 1-2' },
+  { id: 3, label: 'VEC', title: 'Vector 2D' },
+];
+
+export const ROUTE_MODES = [
+  { id: 0, label: 'INT', title: 'Internal (DSP)' },
+  { id: 1, label: 'EXT', title: 'External (MIDI)' },
+  { id: 2, label: 'BOTH', title: 'Both (INT+EXT)' },
+];
+
+export const GLIDE_MODES = [
+  { id: 0, label: 'OFF', title: 'Portamento desactivado' },
+  { id: 1, label: 'ALWAYS', title: 'Siempre activo en cada nota' },
+  { id: 2, label: 'LEGATO', title: 'Solo activo en notas ligadas' },
+];
+
+export const DRIVE_TYPES = [
+  { id: 0, label: 'TUBE', title: 'Válvula Analógica' },
+  { id: 1, label: 'TAPE', title: 'Cinta Magnética' },
+  { id: 2, label: 'CLIP', title: 'Hard Clipping' },
+  { id: 3, label: 'FOLD', title: 'Wavefolder' },
+];
 
 export function buildToneDrawerHeaderHtml(partIdx: number, ps: McxPartUiState): string {
   const isDrum = ps.kind === 'drum_map';
@@ -32,96 +70,60 @@ export function buildToneDrawerHeaderHtml(partIdx: number, ps: McxPartUiState): 
   `;
 }
 
-const selectCard = (p: string, lbl: string, opts: string[]) => `
-  <div class="mcx-tone-card" data-param="${p}" data-learnable="true">
-    <span class="mcx-tone-lbl">${lbl}</span>
-    <select class="mcx-tone-select" data-param="${p}">${opts.map((o, i) => `<option value="${i}">${o}</option>`).join('')}</select>
+export const knobCell = (p: string, title: string, initialNum: string) => `
+  <div class="synth-knob-cell" data-param="${p}" data-learnable="true">
+    <div class="synth-knob-mount" id="knob-${p}"></div>
+    <span class="synth-knob-num" id="val-${p}">${initialNum}</span>
+    <span class="synth-knob-title">${title}</span>
   </div>`;
 
-const sliderCard = (p: string, lbl: string, min: number, max: number, step: number, defVal: number, valTxt: string) => `
-  <div class="mcx-tone-card" data-param="${p}" data-learnable="true">
-    <span class="mcx-tone-lbl">${lbl}</span>
-    <input type="range" class="mcx-tone-slider" min="${min}" max="${max}" step="${step}" value="${defVal}" />
-    <span class="mcx-tone-val">${valTxt}</span>
-  </div>`;
-
-const sendCard = (p: string, preKey: string, lbl: string, defVal: number, valTxt: string) => `
-  <div class="mcx-tone-card mcx-send-card" data-param="${p}" data-learnable="true">
-    <div class="mcx-send-header">
-      <span class="mcx-tone-lbl">${lbl}</span>
-      <button type="button" class="mcx-pre-post-btn" data-send-pre="${preKey}" title="${t('mcx.prePostFader')}">POST</button>
+export const renderSegGroup = (
+  param: string,
+  lbl: string,
+  items: ReadonlyArray<{ id: number; label: string; title?: string }>,
+  curVal = 0,
+  extraCls = ''
+) => `
+  <div class="mcx-segmented-ctrl ${extraCls}" data-param-ctrl="${param}">
+    <span class="mcx-segmented-lbl">${lbl}</span>
+    <div class="mcx-segmented-strip">
+      ${items.map((it) => `
+        <button type="button" class="mcx-seg-btn${it.id === curVal ? ' is-active' : ''}"
+          data-param="${param}" data-val="${it.id}" title="${it.title || it.label}">
+          ${it.label}
+        </button>
+      `).join('')}
     </div>
-    <input type="range" class="mcx-tone-slider" min="0" max="1" step="0.01" value="${defVal}" />
-    <span class="mcx-tone-val">${valTxt}</span>
   </div>`;
 
 export function buildToneDrawerBodyHtml(): string {
   return `
     <div class="mcx-drawer-body">
-      <!-- Section 1: Tone, Structure, Routing, Vector & Pitch/Glide -->
-      <section class="mcx-tone-section">
-        <div class="mcx-section-head">
-          <span class="mcx-section-title" data-i18n="mcx.toneGenSection">${t('mcx.toneGenSection')}</span>
-        </div>
-        <div class="mcx-tone-cards-row">
-          ${selectCard('structureMode', `* ${t('mcx.structureMode')} (VOZ)`, STRUCTURE_MODES)}
-          ${selectCard('routeMode', `* ${t('mcx.routeMode')} (REV)`, ROUTE_MODES)}
-          ${sliderCard('vectorX', '* VECTOR X (REV)', -1, 1, 0.02, 0, '0.00')}
-          ${sliderCard('vectorY', '* VECTOR Y (REV)', -1, 1, 0.02, 0, '0.00')}
-          ${sliderCard('pitchCoarse', t('mcx.pitchCoarse'), -24, 24, 1, 0, '0 st')}
-          ${sliderCard('pitchFine', t('mcx.pitchFine'), -50, 50, 1, 0, '0 ct')}
-          ${sliderCard('portaTimeMs', t('mcx.portaTime'), 0, 500, 5, 60, '60 ms')}
-          ${selectCard('portaLegatoOnly', t('mcx.portaLegato'), GLIDE_MODES)}
-        </div>
-      </section>
-
-      <!-- Section 2: Dual Filters & Drive -->
-      <section class="mcx-tone-section">
-        <div class="mcx-section-head">
-          <span class="mcx-section-title" data-i18n="mcx.filterSection">${t('mcx.filterSection')} (DUAL FILTER 1 → 2 SERIE)</span>
-        </div>
-        <div class="mcx-tone-cards-row">
-          ${selectCard('filterModel', `F1 ${t('mcx.filterModel')}`, FILTER_MODELS)}
-          ${sliderCard('filterCutoff', `F1 ${t('mcx.cutoff')}`, 0, 1, 0.01, 0.72, '3200 Hz')}
-          ${sliderCard('filterResonance', `F1 ${t('mcx.resonance')}`, 0, 0.96, 0.01, 0.18, '18%')}
-          ${selectCard('filter2Model', `F2 ${t('mcx.filterModel')}`, FILTER_MODELS)}
-          ${selectCard('filter2Mode', `F2 TIPO / BYPASS`, FILTER_MODES)}
-          ${sliderCard('filter2Cutoff', `F2 ${t('mcx.cutoff')}`, 0, 1, 0.01, 0.85, '8000 Hz')}
-          ${sliderCard('filter2Resonance', `F2 ${t('mcx.resonance')}`, 0, 0.96, 0.01, 0.10, '10%')}
-          ${sliderCard('driveAmount', t('mcx.drive'), 0, 1, 0.01, 0, 'OFF')}
-        </div>
-      </section>
-
-      <!-- Section 3: Amplitude Envelope (VCA) -->
-      <section class="mcx-tone-section">
-        <div class="mcx-section-head">
-          <span class="mcx-section-title">3. ENVOLVENTE AMPLITUD VCA (* MODULACIÓN EN LFO / MATRIZ)</span>
-        </div>
-        <div class="mcx-tone-cards-row">
-          ${sliderCard('ampAttack', t('mcx.attack'), 0, 1, 0.01, 0.04, '5 ms')}
-          ${sliderCard('ampDecay', t('mcx.decay'), 0, 1, 0.01, 0.25, '260 ms')}
-          ${sliderCard('ampSustain', t('mcx.sustain'), 0, 1, 0.01, 0.75, '75%')}
-          ${sliderCard('ampRelease', t('mcx.release'), 0, 1, 0.01, 0.18, '170 ms')}
-        </div>
-      </section>
-
-      <!-- Section 4: Parametric EQ & Auxiliary Sends (Pre/Post) -->
-      <section class="mcx-tone-section">
-        <div class="mcx-section-head">
-          <span class="mcx-section-title" data-i18n="mcx.eqSection">${t('mcx.eqSection')}</span>
-        </div>
-        <div class="mcx-tone-cards-row">
-          ${sliderCard('eqLowGain', t('mcx.eqLow'), -12, 12, 0.5, 0, '0.0 dB')}
-          ${sliderCard('eqMidGain', t('mcx.eqMid'), -12, 12, 0.5, 0, '0.0 dB')}
-          ${sliderCard('eqHighGain', t('mcx.eqHigh'), -12, 12, 0.5, 0, '0.0 dB')}
-          ${sliderCard('partLevel', t('mcx.partLevel'), 0, 1, 0.01, 0.85, '85%')}
-          ${sliderCard('partPan', t('mcx.partPan'), -1, 1, 0.02, 0, 'C')}
-          ${sendCard('reverbSend', 'sendAPre', t('mcx.sendA'), 0.28, '28%')}
-          ${sendCard('chorusSend', 'sendBPre', t('mcx.sendB'), 0.20, '20%')}
-          ${sendCard('delaySend', 'sendCPre', t('mcx.sendC'), 0.0, '0%')}
-          ${sendCard('auxSend', 'sendDPre', t('mcx.sendD'), 0.0, '0%')}
-        </div>
-      </section>
+      ${buildDeck1Html()}
+      ${buildDeck2Html()}
     </div>
   `;
+}
+
+export function applySeriesFilterConstraints(el: HTMLElement, ps: McxPartUiState, bridge: any, currentPart: number): void {
+  const f1M = ps.filterMode ?? 0, f1Mod = ps.filterModel ?? 0;
+  let f2M = ps.filter2Mode ?? 1, f2Mod = ps.filter2Model ?? 0;
+  const chk = checkSeriesFilterConflict(f1M, f1Mod, f2M, f2Mod);
+  if (chk.duplicateType) { f2M = f1M === 0 ? 1 : 0; ps.filter2Mode = f2M; bridge.setParam(currentPart, 'filter2Mode', f2M); }
+  if (chk.duplicateModel) { f2Mod = (f1Mod + 1) % FILTER_MODELS.length; ps.filter2Model = f2Mod; bridge.setParam(currentPart, 'filter2Model', f2Mod); }
+
+  el.querySelectorAll<HTMLButtonElement>('.mcx-seg-btn[data-param="filterModel"]').forEach((b) => {
+    const mDef = FILTER_MODELS.find((m) => m.id === parseInt(b.dataset.val ?? '0', 10));
+    const ok = f1M === 3 || (mDef ? mDef.supportedModes.includes(f1M) : true);
+    b.disabled = !ok; b.classList.toggle('is-disabled', !ok);
+  });
+  el.querySelectorAll<HTMLButtonElement>('.mcx-seg-btn[data-param="filter2Mode"]').forEach((b) => {
+    const isDup = f1M < 3 && parseInt(b.dataset.val ?? '0', 10) === f1M;
+    b.disabled = isDup; b.classList.toggle('is-disabled', isDup); b.classList.toggle('is-conflict', isDup);
+  });
+  el.querySelectorAll<HTMLButtonElement>('.mcx-seg-btn[data-param="filter2Model"]').forEach((b) => {
+    const mId = parseInt(b.dataset.val ?? '0', 10), mDef = FILTER_MODELS.find((m) => m.id === mId);
+    const ok = f2M === 3 || (mDef ? mDef.supportedModes.includes(f2M) : true), isDup = f1M < 3 && f2M < 3 && mId === f1Mod;
+    b.disabled = !ok || isDup; b.classList.toggle('is-disabled', !ok || isDup); b.classList.toggle('is-conflict', isDup);
+  });
 }

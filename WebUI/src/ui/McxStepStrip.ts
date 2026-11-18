@@ -25,6 +25,22 @@ export interface McxStepStripCallbacks {
   setLcdNotice: (text: string) => void;
 }
 
+function buildPadState(mode: StepStripMode, idx: number, focused: number, p: McxPartUiState, s: StepState) {
+  if (mode === 'part-select') {
+    return { active: idx === focused, muted: p.mute, label: `P${String(idx + 1).padStart(2, '0')}`, subLabel: p.kind === 'drum_map' ? 'DRM' : `CH${p.midiChannel}` };
+  }
+  if (mode === 'part-mute') {
+    return { active: !p.mute, muted: p.mute, label: `P${idx + 1}`, subLabel: p.mute ? 'MUTE' : 'PLAY' };
+  }
+  if (mode === 'step-mute') {
+    return { active: s.active, muted: !s.active, label: String(idx + 1), subLabel: s.active ? 'ON' : 'OFF' };
+  }
+  if (mode === 'step-accent') {
+    return { active: s.accent, muted: !s.accent, label: String(idx + 1), subLabel: s.accent ? 'ACC' : '---' };
+  }
+  return { active: s.slide, muted: !s.slide, label: String(idx + 1), subLabel: s.slide ? 'SLD' : '---' };
+}
+
 export class McxStepStrip {
   private strip: StepButtonStrip;
   private bridge: McxHostBridge;
@@ -33,6 +49,9 @@ export class McxStepStrip {
   private partPorta: { enabled: boolean; timeMs: number }[];
   private runningChaser = 0;
   private chaserTimer: number | null = null;
+  private currentBpm = 120;
+  private isRunning = false;
+  private swing = 0.5;
 
   constructor(container: HTMLElement, bridge: McxHostBridge, cbs: McxStepStripCallbacks) {
     this.bridge = bridge;
@@ -60,7 +79,7 @@ export class McxStepStrip {
       onPadClick: (padIdx: number, ev: MouseEvent) => this.handlePadClick(padIdx, ev),
       onPadLabelClick: (padIdx: number) => this.handlePadLabelClick(padIdx),
     });
-    this.startChaser();
+    this.strip.setChaserStep(-1);
     this.refresh();
   }
 
@@ -69,49 +88,8 @@ export class McxStepStrip {
     const focused = this.cbs.getFocusedPart();
     const parts = this.cbs.getPartsState();
     const steps = this.partSteps[focused];
-
     for (let i = 0; i < 16; i++) {
-      if (mode === 'part-select') {
-        const p = parts[i];
-        this.strip.setPadState(i, {
-          active: i === focused,
-          muted: p.mute,
-          label: `P${String(i + 1).padStart(2, '0')}`,
-          subLabel: p.kind === 'drum_map' ? 'DRM' : `CH${p.midiChannel}`,
-        });
-      } else if (mode === 'part-mute') {
-        const p = parts[i];
-        this.strip.setPadState(i, {
-          active: !p.mute,
-          muted: p.mute,
-          label: `P${i + 1}`,
-          subLabel: p.mute ? 'MUTE' : 'PLAY',
-        });
-      } else if (mode === 'step-mute') {
-        const s = steps[i];
-        this.strip.setPadState(i, {
-          active: s.active,
-          muted: !s.active,
-          label: String(i + 1),
-          subLabel: s.active ? 'ON' : 'OFF',
-        });
-      } else if (mode === 'step-accent') {
-        const s = steps[i];
-        this.strip.setPadState(i, {
-          active: s.accent,
-          muted: !s.accent,
-          label: String(i + 1),
-          subLabel: s.accent ? 'ACC' : '---',
-        });
-      } else if (mode === 'step-slide') {
-        const s = steps[i];
-        this.strip.setPadState(i, {
-          active: s.slide,
-          muted: !s.slide,
-          label: String(i + 1),
-          subLabel: s.slide ? 'SLD' : '---',
-        });
-      }
+      this.strip.setPadState(i, buildPadState(mode, i, focused, parts[i], steps[i]));
     }
   }
 
@@ -132,7 +110,6 @@ export class McxStepStrip {
   private handlePadClick(padIdx: number, ev: MouseEvent): void {
     const mode = this.strip.getMode() as StepStripMode;
     const focused = this.cbs.getFocusedPart();
-
     if (mode === 'part-select') {
       if (ev.shiftKey) this.cbs.onToggleMute(padIdx);
       else {
@@ -144,8 +121,7 @@ export class McxStepStrip {
       const p = this.cbs.getPartsState()[padIdx];
       this.cbs.setLcdNotice(`P${String(padIdx + 1).padStart(2, '0')} ${p.mute ? 'MUTED' : 'UNMUTED'}`);
     } else {
-      const isMute = mode === 'step-mute';
-      const isAcc = mode === 'step-accent';
+      const isMute = mode === 'step-mute', isAcc = mode === 'step-accent';
       const prop = isMute ? 'active' : isAcc ? 'accent' : 'slide';
       const paramKey = isMute ? 'stepMute' : isAcc ? 'stepAccent' : 'stepSlide';
       const st = this.partSteps[focused][padIdx];
@@ -171,25 +147,44 @@ export class McxStepStrip {
   }
 
   public setPortaTime(partIdx: number, ms: number): void {
-    if (this.partPorta[partIdx]) {
-      this.partPorta[partIdx].timeMs = Math.max(0, Math.min(1000, ms));
-      this.bridge.setParam(partIdx, 'portaTimeMs', this.partPorta[partIdx].timeMs);
-    }
+    if (!this.partPorta[partIdx]) return;
+    this.partPorta[partIdx].timeMs = Math.max(0, Math.min(1000, ms));
+    this.bridge.setParam(partIdx, 'portaTimeMs', this.partPorta[partIdx].timeMs);
   }
 
   public setPortaEnabled(partIdx: number, enabled: boolean): void {
-    if (this.partPorta[partIdx]) {
-      this.partPorta[partIdx].enabled = enabled;
-      this.bridge.setParam(partIdx, 'portaEnabled', enabled ? 1 : 0);
-    }
+    if (!this.partPorta[partIdx]) return;
+    this.partPorta[partIdx].enabled = enabled;
+    this.bridge.setParam(partIdx, 'portaEnabled', enabled ? 1 : 0);
   }
 
-  private startChaser(): void {
-    if (this.chaserTimer != null) clearInterval(this.chaserTimer);
-    this.chaserTimer = window.setInterval(() => {
-      this.runningChaser = (this.runningChaser + 1) % 16;
-      this.strip.setChaserStep(this.runningChaser);
-    }, 125);
+  public setBpm(bpm: number): void {
+    this.currentBpm = Math.max(20, Math.min(300, bpm));
+    if (this.isRunning) this.setTransportRunning(true, this.currentBpm);
+  }
+
+  public setSwing(swing: number): void {
+    this.swing = Math.max(0, Math.min(1, swing));
+  }
+
+  public getSwing(): number { return this.swing; }
+
+  public setTransportRunning(running: boolean, bpm = this.currentBpm): void {
+    this.isRunning = running;
+    this.currentBpm = Math.max(20, Math.min(300, bpm));
+    if (this.chaserTimer != null) { clearInterval(this.chaserTimer); this.chaserTimer = null; }
+    if (running) {
+      const stepMs = Math.max(20, (60000 / this.currentBpm) / 4);
+      this.runningChaser = 0;
+      this.strip.setChaserStep(0);
+      this.chaserTimer = window.setInterval(() => {
+        this.runningChaser = (this.runningChaser + 1) % 16;
+        this.strip.setChaserStep(this.runningChaser);
+      }, stepMs);
+    } else {
+      this.runningChaser = -1;
+      this.strip.setChaserStep(-1);
+    }
   }
 
   public destroy(): void {

@@ -1,5 +1,6 @@
 /**
- * ABDMCX0X -- WebUI main.ts (Slice 1: Unrestricted 16-Part Groovebox Foundation)
+ * ABDMCX0X -- WebUI main.ts
+ * Application bootstrap orchestrating @abdsynths/shared styles, bridge, drawers, and telemetry.
  */
 
 import '@abdsynths/shared/styles';
@@ -10,342 +11,179 @@ import '@abdsynths/shared/diagnostic-probe/styles';
 import '@abdsynths/midi-keyb/keyboard.css';
 import '@abdsynths/shared/styles/components/step-button-strip.css';
 import '@abdsynths/shared/styles/components/mpc-pad-matrix.css';
+import '@abdsynths/shared/styles/components/multi-bus-fx-rack.css';
+import '@abdsynths/shared/styles/components/global-lfo-modal.css';
+import '@abdsynths/shared/styles/components/compact-transport-bar.css';
+import '@abdsynths/shared/styles/components/compact-stereo-vu.css';
+import '@abdsynths/shared/styles/components/piano-roll.css';
+import '@abdsynths/shared/styles/components/groove-shuffle.css';
 import './styles/mcx0x.css';
 
-import { createKeyboard } from '@abdsynths/midi-keyb';
-import { createDiagnosticProbeModal } from '@abdsynths/shared/diagnostic-probe';
-import { McxHostBridge, type McxSystemSettingsDto } from './bridge/McxHostBridge';
+import { McxHostBridge } from './bridge/McxHostBridge';
 import { applyI18n, getLocale, onLocaleChange, t } from './i18n/mcxI18n';
 import { ThemeManager, type ThemeFamilyKey } from './ui/ThemeManager';
 import { McxNavbar } from './ui/McxNavbar';
 import { McxSettingsModal } from './ui/McxSettingsModal';
-import { McxBankDrawer, type McxCatalogItem } from './ui/McxBankDrawer';
-import { McxSavePresetModal } from './ui/McxSavePresetModal';
-import {
-  renderVoiceLedStrip, wireBankDropZone,
-} from './ui/McxPanels';
-import { renderMixerConsole, createDefaultPartState, type McxPartUiState } from './ui/McxMixerConsole';
+import { wireBankDropZone } from './ui/McxPanels';
 import { McxScopeCanvas } from './ui/McxScopeCanvas';
 import { McxStepStrip } from './ui/McxStepStrip';
 import { McxToneDrawer } from './ui/McxToneDrawer';
 import { McxGlobalDrawer } from './ui/McxGlobalDrawer';
 import { McxPadsDrawer } from './ui/McxPadsDrawer';
+import { McxMasterPanel } from './ui/McxMasterPanel';
+import { McxAppState } from './app/McxAppState';
+import { buildProbeDestinations, createBankDrawer, createProbeModal, createStudioModals, openSavePresetModal } from './app/McxModalsFactory';
+import { bindGlobalShortcuts, bindTelemetry, mountKeyboardDock } from './app/McxInputAndTelemetry';
 
 const bridge = new McxHostBridge();
 const themeMgr = new ThemeManager();
-const partsState: McxPartUiState[] = Array.from({ length: 16 }, (_, i) => createDefaultPartState(i));
-
-let focusedPart = 0;
-let stepStrip: McxStepStrip | null = null;
-let globalSettings: McxSystemSettingsDto = bridge.loadLocalSettingsFallback();
-let scopeView: McxScopeCanvas | null = null;
-let navbar: McxNavbar | null = null;
-let settingsModal: McxSettingsModal | null = null;
-let probeModal: ReturnType<typeof createDiagnosticProbeModal> | null = null;
-let bankDrawer: McxBankDrawer | null = null;
-let toneDrawer: McxToneDrawer | null = null;
-let padsDrawer: McxPadsDrawer | null = null;
-let globalDrawer: McxGlobalDrawer | null = null;
-
-function openSaveModal(type: 'part' | 'multi'): void {
-  new McxSavePresetModal({
-    type,
-    partIndex: focusedPart,
-    initialName: partsState[focusedPart].name,
-    initialCategory: partsState[focusedPart].categoryId,
-    onSave: (payload) => {
-      if (payload.type === 'part') {
-        partsState[focusedPart].name = payload.name;
-        partsState[focusedPart].categoryId = payload.categoryId;
-        refreshPartList();
-      }
-      setLcdLine2(`SAVED ${payload.name} [${payload.sublibrary}]`);
-    },
-  }).open();
-}
-
-function updateLcdLine1(activeVoices = 0): void {
-  const ps = partsState[focusedPart];
-  const budget = Math.max(8, Math.min(64, globalSettings.maxPolyphony || 64));
-  const el = document.getElementById('lcd-line1');
-  if (el) el.textContent = `GROOVEBOX 16P  |  P${String(focusedPart + 1).padStart(2, '0')} (${ps.kind === 'drum_map' ? 'DRM' : 'CHR'}·CH${ps.midiChannel})  |  ${activeVoices}/${budget} ${t('mcx.voices')}  |  ${globalSettings.masterTuneHz.toFixed(1)}Hz  |  ${Math.round(globalSettings.standaloneBpm)} BPM`;
-  const cap = document.getElementById('voice-caption');
-  if (cap) cap.textContent = `${activeVoices} / ${budget} ${t('mcx.voices')}`;
-  const leds = document.getElementById('voice-leds');
-  if (leds) renderVoiceLedStrip(leds, budget, activeVoices);
-}
-
-function setLcdLine2(text: string): void { const el = document.getElementById('lcd-line2'); if (el) el.textContent = text; }
-
-function refreshPartList(): void {
-  const el = document.getElementById('part-list');
-  if (el) renderMixerConsole(el, panelCbs, bridge);
-  stepStrip?.refresh();
-}
-
-const panelCbs = {
-  getFocusedPart: () => focusedPart,
-  setFocusedPart: (idx: number) => {
-    focusedPart = idx;
-    updateLcdLine1(0);
-    stepStrip?.refresh();
-    if (toneDrawer?.isOpen()) toneDrawer.syncPart(idx, partsState[idx]);
-    if (padsDrawer?.isOpen()) padsDrawer.syncPart(idx, partsState[idx]);
-  },
-  getPartsState: () => partsState,
-  onTogglePartKind: (idx: number) => {
-    const next = partsState[idx].kind === 'drum_map' ? 'chromatic' : 'drum_map';
-    partsState[idx].kind = next;
-    bridge.setParam(idx, 'partKind', next === 'drum_map' ? 1 : 0);
-    if (idx === focusedPart) {
-      if (toneDrawer?.isOpen()) toneDrawer.syncPart(idx, partsState[idx]);
-      if (padsDrawer?.isOpen()) padsDrawer.syncPart(idx, partsState[idx]);
-    }
-    refreshPartList(); updateLcdLine1(0);
-    setLcdLine2(`P${String(idx + 1).padStart(2, '0')} -> ${next === 'drum_map' ? t('mcx.partDrumMap') : t('mcx.partChromatic')}`);
-  },
-  onChangePartChannel: (idx: number, ch: number) => {
-    partsState[idx].midiChannel = ch;
-    bridge.setParam(idx, 'partMidiChannel', ch);
-    updateLcdLine1(0); setLcdLine2(`P${String(idx + 1).padStart(2, '0')} MIDI CH ${ch}`);
-  },
-  onToggleFollowTranspose: (idx: number) => {
-    const cur = partsState[idx].followTranspose !== false;
-    const next = !cur;
-    partsState[idx].followTranspose = next;
-    bridge.setParam(idx, 'partFollowTranspose', next ? 1 : 0);
-    refreshPartList();
-    setLcdLine2(`P${String(idx + 1).padStart(2, '0')} TRANSPOSE: ${next ? 'ON' : 'OFF'}`);
-  },
-  onToggleMute: (idx: number) => {
-    partsState[idx].mute = !partsState[idx].mute;
-    bridge.setParam(idx, 'partMute', partsState[idx].mute ? 1 : 0);
-    if (toneDrawer?.isOpen() && toneDrawer.getPart() === idx) toneDrawer.syncPart(idx, partsState[idx]);
-    if (padsDrawer?.isOpen() && padsDrawer.getPart() === idx) padsDrawer.syncPart(idx, partsState[idx]);
-    refreshPartList();
-  },
-  onToggleSolo: (idx: number) => { partsState[idx].solo = !partsState[idx].solo; bridge.setParam(idx, 'partSolo', partsState[idx].solo ? 1 : 0); refreshPartList(); },
-  onOpenBankForPart: (idx: number) => bankDrawer?.open(idx),
-  onOpenToneForPart: (idx: number) => {
-    focusedPart = idx;
-    if (padsDrawer?.isOpen()) padsDrawer.close();
-    toneDrawer?.toggle(idx);
-    refreshPartList();
-  },
-  onOpenPadsForPart: (idx: number) => {
-    focusedPart = idx;
-    if (toneDrawer?.isOpen()) toneDrawer.close();
-    padsDrawer?.toggle(idx);
-    refreshPartList();
-  },
-  onChangeGlide: (idx: number, ms: number) => stepStrip?.setPortaTime(idx, ms),
-  onChangeLevel: (idx: number, lvl: number) => { partsState[idx].partLevel = lvl; bridge.setParam(idx, 'partLevel', lvl); },
-  onChangePan: (idx: number, pan: number) => { partsState[idx].partPan = pan; bridge.setParam(idx, 'partPan', pan); },
-  onChangeSendA: (idx: number, send: number) => { partsState[idx].reverbSend = send; bridge.setParam(idx, 'reverbSend', send); },
-  onChangeSendB: (idx: number, send: number) => { partsState[idx].chorusSend = send; bridge.setParam(idx, 'chorusSend', send); },
-  setLcdLine2,
-};
-
-const buildProbeDestinations = () => [
-  { id: 1, label: t('mcx.probePostMaster'), hint: t('mcx.probePostMasterHint') },
-  { id: 2, label: t('mcx.probePreMaster'), hint: t('mcx.probePreMasterHint') },
-  { id: 3, label: t('mcx.probePreFx'), hint: t('mcx.probePreFxHint') },
-  { id: 4, label: t('mcx.probePreFilter'), hint: t('mcx.probePreFilterHint') },
-  { id: 5, label: t('mcx.probeVoiceDirect'), hint: t('mcx.probeVoiceDirectHint') },
-];
-
-function syncOctaveTooltips(): void {
-  document.getElementById('oct-up')?.setAttribute('title', t('mcx.octaveUp'));
-  document.getElementById('oct-down')?.setAttribute('title', t('mcx.octaveDown'));
-}
-
-function initProbeModal(): void {
-  probeModal = createDiagnosticProbeModal({
-    locale: getLocale(), sampleRate: bridge.getSampleRate(), frequencyHz: globalSettings.masterTuneHz || 440,
-    initialVolume: 0.25, selectionMode: 'multi',
-    destinations: buildProbeDestinations(),
-    onChange: (st: { enabledIds: number[]; enabledMask: number; volume: number; frequencyHz: number; waveform: number }) => {
-      if (st.enabledMask > 0) void bridge.enableAudio();
-      bridge.setParam(focusedPart, 'diagProbeFreq', st.frequencyHz);
-      bridge.setParam(focusedPart, 'diagProbeLevel', st.volume);
-      bridge.setParam(focusedPart, 'diagProbeWave', st.waveform);
-      bridge.setParam(focusedPart, 'diagProbePoint', st.enabledMask);
-      setLcdLine2(st.enabledMask === 0 ? t('mcx.probeOff') : `${t('mcx.probeOn')} [${st.enabledIds.join(',')}] : ${Math.round(st.frequencyHz)} Hz`);
-    },
-  });
-}
+const state = new McxAppState(bridge);
 
 window.addEventListener('DOMContentLoaded', () => {
   applyI18n(document.body);
-  initProbeModal();
-  settingsModal = new McxSettingsModal({ bridge, onSettingsApplied: (s) => { globalSettings = s; updateLcdLine1(0); } });
+  state.syncOctaveTooltips();
 
-  bankDrawer = new McxBankDrawer(bridge, {
-    getTargetPart: () => focusedPart,
-    setTargetPart: (idx) => { focusedPart = idx; updateLcdLine1(0); refreshPartList(); },
-    onSelectModel: (pIdx, item) => {
-      partsState[pIdx].name = item.name;
-      partsState[pIdx].categoryId = item.categoryId;
-      refreshPartList();
-      setLcdLine2(`P${String(pIdx + 1).padStart(2, '0')} LOADED MODEL: ${item.name}`);
-    },
-    onSelectPartPreset: (pIdx, item) => {
-      partsState[pIdx].name = item.name;
-      partsState[pIdx].categoryId = item.categoryId;
-      if (item.engineKind?.includes('drum') && partsState[pIdx].kind !== 'drum_map') {
-        partsState[pIdx].kind = 'drum_map';
-        bridge.setParam(pIdx, 'partKind', 1);
-      }
-      refreshPartList();
-      setLcdLine2(`P${String(pIdx + 1).padStart(2, '0')} PRESET: ${item.name}`);
-    },
-    onSelectMultiPreset: (item) => {
-      setLcdLine2(`LOADED MULTI: ${item.name}`);
-    },
-    onAudition: (pIdx, item) => {
-      void bridge.enableAudio();
-      const note = item.engineKind?.includes('drum') ? 36 : 60;
-      bridge.noteOn(pIdx, note, 0.85);
-      setTimeout(() => bridge.noteOff(pIdx, note), 350);
-    },
-    onOpenSaveModal: (type) => openSaveModal(type),
+  const byId = (id: string) => document.getElementById(id);
+  const probeModal = createProbeModal(bridge, state);
+  const settingsModal = new McxSettingsModal({
+    bridge,
+    onSettingsApplied: (s) => { state.globalSettings = s; state.updateLcdLine1(0); },
+  });
+  const bankDrawer = createBankDrawer(bridge, state);
+  const modals = createStudioModals(bridge, state);
+  state.refs = { ...state.refs, bankDrawer, ...modals };
+
+  const fileInput = byId('bank-file-input') as HTMLInputElement | null;
+  const navHost = byId('mcx-navbar-host');
+  const navbar = navHost ? new McxNavbar(navHost, {
+    themeMgr,
+    onConfigureFolder: () => (bridge.isNative ? bridge.chooseWorkingDir() : settingsModal.open()),
+    onOpenSettings: () => settingsModal.toggle(),
+    onOpenBankManager: () => bankDrawer.toggle(state.focusedPart),
+    onSavePartPreset: () => openSavePresetModal(state, 'part'),
+    onSaveMultiPreset: () => openSavePresetModal(state, 'multi'),
+    onLoadBank: () => fileInput?.click(),
+    onFactoryReset: () => { bridge.resetToFactory(); state.setLcdLine2(t('mcx.factoryReset')); },
+    onPanic: () => { bridge.allNotesOff(); state.setLcdLine2(t('mcx.allNotesOff')); },
+    onEnableAudio: () => { void bridge.enableAudio(); },
+    onToggleProbe: () => probeModal?.toggle({
+      theme: document.documentElement.getAttribute('data-theme'),
+      locale: getLocale(),
+      sampleRate: bridge.getSampleRate(),
+      frequencyHz: state.globalSettings.masterTuneHz || 440,
+    }),
+    onOpenFxRack: () => modals.fxRackModal.toggle(),
+    onOpenGlobalLfo: () => modals.globalLfoModal.toggle(),
+    onOpenPianoRoll: () => { state.syncPianoRollForPart(state.focusedPart); modals.pianoRollModal.toggle(); },
+    onOpenGroove: () => modals.grooveModal.open(-1),
+  }) : null;
+
+  const globalDrawer = new McxGlobalDrawer({
+    hostEl: document.body,
+    bridge,
+    setLcdLine2: state.setLcdLine2,
+    onClose: () => byId('mcx-global-btn')?.classList.remove('is-active'),
+    onOpenFxRack: () => modals.fxRackModal.toggle(),
   });
 
-  const fileInput = document.getElementById('bank-file-input') as HTMLInputElement | null;
-  const navHost = document.getElementById('mcx-navbar-host');
-  if (navHost) {
-    navbar = new McxNavbar(navHost, {
-      themeMgr,
-      onConfigureFolder: () => (bridge.isNative ? bridge.chooseWorkingDir() : settingsModal?.open()),
-      onOpenSettings: () => settingsModal?.toggle(),
-      onOpenBankManager: () => bankDrawer?.toggle(focusedPart),
-      onSavePartPreset: () => openSaveModal('part'),
-      onSaveMultiPreset: () => openSaveModal('multi'),
-      onLoadBank: () => fileInput?.click(),
-      onFactoryReset: () => { bridge.resetToFactory(); setLcdLine2(t('mcx.factoryReset')); },
-      onPanic: () => { bridge.allNotesOff(); setLcdLine2(t('mcx.allNotesOff')); },
-      onEnableAudio: () => { void bridge.enableAudio(); },
-      onToggleProbe: () => probeModal?.toggle({
-        theme: document.documentElement.getAttribute('data-theme'), locale: getLocale(),
-        sampleRate: bridge.getSampleRate(), frequencyHz: globalSettings.masterTuneHz || 440,
-      }),
-      onSelectTab: (tab) => selectCenterTab(tab),
+  const dropZone = byId('mcx-workspace') || document.body;
+  if (fileInput) wireBankDropZone(dropZone, fileInput, bridge, state.setLcdLine2);
+  const scopeCanvas = byId('mcx-scope-canvas') as HTMLCanvasElement | null;
+  const scopeView = scopeCanvas ? new McxScopeCanvas(scopeCanvas) : null;
+
+  const panelCbs = state.getPanelCallbacks();
+  const mainCol = document.querySelector<HTMLElement>('.mcx-main-col');
+  if (mainCol) {
+    state.refs.toneDrawer = new McxToneDrawer({
+      hostEl: mainCol,
+      bridge,
+      getPartState: (idx) => state.partsState[idx],
+      setLcdLine2: state.setLcdLine2,
+      onClose: () => state.refreshPartList(),
+      onChangePartChannel: (idx, ch) => panelCbs.onChangePartChannel(idx, ch),
+      onToggleFollowTranspose: (idx) => panelCbs.onToggleFollowTranspose(idx),
+      onToggleMute: (idx) => panelCbs.onToggleMute(idx),
+      onToggleSolo: (idx) => panelCbs.onToggleSolo(idx),
+      onRouteModeChange: () => state.refreshPartList(),
+    });
+    state.refs.padsDrawer = new McxPadsDrawer({
+      hostEl: mainCol,
+      bridge,
+      getPartState: (idx) => state.partsState[idx],
+      setLcdLine2: state.setLcdLine2,
+      onClose: () => state.refreshPartList(),
+      onPadNote: (note, vel, isRelease) => {
+        if (modals.pianoRollModal.isOpen() && modals.pianoRollModal.isRecording()) {
+          if (isRelease) modals.pianoRollModal.recordNoteOff(note);
+          else modals.pianoRollModal.recordNoteOn(note, vel);
+        }
+      },
     });
   }
 
-  window.addEventListener('keydown', (ev) => {
-    if (ev.key === 'b' || ev.key === 'B') {
-      const tag = (ev.target as HTMLElement)?.tagName;
-      if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
-        ev.preventDefault();
-        bankDrawer?.toggle(focusedPart);
-      }
-    }
-  });
+  const masterHost = byId('mcx-master-panel');
+  if (masterHost) {
+    state.refs.masterPanel = new McxMasterPanel(masterHost, {
+      bridge,
+      setLcdLine2: state.setLcdLine2,
+      initialVolume: 0.85,
+      initialBpm: state.globalSettings.standaloneBpm,
+      onOpenGlobal: () => {
+        globalDrawer.toggle();
+        byId('mcx-global-btn')?.classList.toggle('is-active', globalDrawer.isOpen());
+      },
+      onOpenFxRack: () => modals.fxRackModal.toggle(),
+      onOpenGlobalLfo: () => modals.globalLfoModal.toggle(),
+      onOpenGroove: (partIdx?: number) => modals.grooveModal.open(partIdx ?? -1),
+      onBpmChange: (bpm) => {
+        state.globalSettings.standaloneBpm = bpm;
+        state.updateLcdLine1(0);
+        state.refs.stepStrip?.setTransportRunning(state.refs.masterPanel?.getTransportState()?.playing ?? false, bpm);
+      },
+      onTransportChange: (st) => {
+        modals.pianoRollModal.setPlaying(st.playing);
+        state.refs.stepStrip?.setTransportRunning(st.playing, st.bpm);
+      },
+    });
+  }
 
-  themeMgr.onChange((_f, _sc, themeId) => { probeModal?.setTheme(themeId); settingsModal?.syncTheme(); scopeView?.draw(); navbar?.sync(); });
+  state.refreshPartList();
+  const stripHost = byId('mcx-step-strip-host');
+  if (stripHost) {
+    state.refs.stepStrip = new McxStepStrip(stripHost, bridge, {
+      getFocusedPart: () => state.focusedPart,
+      setFocusedPart: (idx) => panelCbs.setFocusedPart(idx),
+      getPartsState: () => state.partsState,
+      onToggleMute: (partIdx) => { panelCbs.onToggleMute(partIdx); state.refs.stepStrip?.refresh(); },
+      setLcdNotice: state.setLcdLine2,
+    });
+  }
+
+  themeMgr.onChange((_f, _sc, themeId) => { probeModal?.setTheme(themeId); settingsModal.syncTheme(); scopeView?.draw(); navbar?.sync(); });
   bridge.onSystemSettings((s) => {
-    globalSettings = s;
+    state.globalSettings = s;
     if (s.themeFamily) themeMgr.setFamily(s.themeFamily as ThemeFamilyKey);
-    settingsModal?.syncFromHost(s);
-    updateLcdLine1(0);
+    settingsModal.syncFromHost(s);
+    if (s.standaloneBpm) state.refs.masterPanel?.setBpm(s.standaloneBpm);
+    state.updateLcdLine1(0);
   });
   bridge.onAudioStatus((status, detail) => {
     navbar?.setAudioStatus(status, detail);
     if (status === 'ready') probeModal?.setSampleRate(bridge.getSampleRate());
-    if (status === 'error' && detail) setLcdLine2(`WASM ERR: ${detail}`);
+    if (status === 'error' && detail) state.setLcdLine2(`WASM ERR: ${detail}`);
   });
   onLocaleChange(() => {
-    applyI18n(document.body);
-    syncOctaveTooltips();
-    probeModal?.setLocale(getLocale());
-    probeModal?.setDestinations(buildProbeDestinations());
-    settingsModal?.refreshLocale();
-    navbar?.mount();
-    updateLcdLine1(0);
-    refreshPartList();
+    applyI18n(document.body); state.syncOctaveTooltips();
+    probeModal?.setLocale(getLocale()); probeModal?.setDestinations(buildProbeDestinations());
+    settingsModal.refreshLocale(); navbar?.mount(); state.updateLcdLine1(0); state.refreshPartList();
+    modals.fxRackModal.setLocale(getLocale()); modals.globalLfoModal.setLocale(getLocale());
+    modals.pianoRollModal.setLocale(getLocale()); modals.grooveModal.setLocale(getLocale());
   });
-
-  syncOctaveTooltips();
 
   themeMgr.apply();
-  bridge.updateSystemSettings(globalSettings);
-
-  const byId = (id: string) => document.getElementById(id);
-
-  globalDrawer = new McxGlobalDrawer({
-    hostEl: document.body,
-    bridge,
-    setLcdLine2,
-    onClose: () => {
-      byId('mcx-global-btn')?.classList.remove('is-active');
-    },
-  });
-
-  byId('mcx-global-btn')?.addEventListener('click', () => {
-    globalDrawer?.toggle();
-    byId('mcx-global-btn')?.classList.toggle('is-active', globalDrawer?.isOpen());
-  });
-  const dropZone = byId('mcx-workspace') || document.body;
-  if (fileInput) wireBankDropZone(dropZone, fileInput, bridge, setLcdLine2);
-  if (byId('mcx-scope-canvas')) scopeView = new McxScopeCanvas(byId('mcx-scope-canvas') as HTMLCanvasElement);
-
-  const mainCol = document.querySelector<HTMLElement>('.mcx-main-col');
-  if (mainCol) {
-    toneDrawer = new McxToneDrawer({
-      hostEl: mainCol,
-      bridge,
-      getPartState: (idx) => partsState[idx],
-      setLcdLine2,
-      onClose: () => refreshPartList(),
-    });
-    padsDrawer = new McxPadsDrawer({
-      hostEl: mainCol,
-      bridge,
-      getPartState: (idx) => partsState[idx],
-      setLcdLine2,
-      onClose: () => refreshPartList(),
-    });
-  }
-
-  refreshPartList();
-  if (byId('mcx-step-strip-host')) {
-    stepStrip = new McxStepStrip(byId('mcx-step-strip-host')!, bridge, {
-      getFocusedPart: () => focusedPart,
-      setFocusedPart: (idx: number) => {
-        focusedPart = idx;
-        updateLcdLine1(0);
-        if (toneDrawer?.isOpen()) toneDrawer.syncPart(idx, partsState[idx]);
-        if (padsDrawer?.isOpen()) padsDrawer.syncPart(idx, partsState[idx]);
-        refreshPartList();
-      },
-      getPartsState: () => partsState,
-      onToggleMute: (partIdx: number) => {
-        panelCbs.onToggleMute(partIdx);
-        stepStrip?.refresh();
-      },
-      setLcdNotice: setLcdLine2,
-    });
-  }
-  if (byId('vector-pad') && byId('vector-dot')) bindVectorPad(byId('vector-pad')!, byId('vector-dot')!, bridge, panelCbs);
-
-  createKeyboard({
-    containerId: 'piano-keyboard', wheelPitchId: 'pitch-wheel-container', wheelModId: 'mod-wheel-container',
-    octUpId: 'oct-up', octDownId: 'oct-down', ledUpId: 'led-up', ledDownId: 'led-down',
-    onNoteOn: (note: number, vel: number) => bridge.noteOn(focusedPart, note, Math.max(0.05, Math.min(1, vel > 1 ? vel / 127 : vel))),
-    onNoteOff: (note: number) => bridge.noteOff(focusedPart, note),
-    onPanic: () => bridge.allNotesOff(),
-    onCollapseChange: (collapsed: boolean) => {
-      document.querySelector('.mcx-keyboard-dock')?.classList.toggle('is-collapsed', collapsed);
-    },
-    config: {
-      numOctaves: 4, startNote: 36, maxOctaveShift: 3, enableWheels: true, enablePanic: true,
-      enableIvoryTexture: true, enableQwerty: true, showQwertyLabels: true,
-      enableHold: true, enableRetrig: true, enableSustain: true, enableTouch: true, enableResizeObserver: true,
-      enableCollapse: true,
-    },
-  });
-
-  bridge.onTelemetry((tel) => { updateLcdLine1(tel.activeVoices); scopeView?.pushTelemetry(tel); });
+  bridge.updateSystemSettings(state.globalSettings);
+  bindGlobalShortcuts(state);
+  mountKeyboardDock(bridge, state);
+  bindTelemetry(bridge, state, scopeView);
   bridge.notifyReady();
 });

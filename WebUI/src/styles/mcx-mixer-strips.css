@@ -1,0 +1,153 @@
+/* ABDMCX0X -- 16-Part Mixer Console Grid & Channel Strip Headers */
+
+.mcx-mixer-console {
+  display: grid;
+  grid-template-columns: repeat(16, minmax(56px, 1fr));
+  gap: 4px;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: var(--space-1) 2px 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-panel-border) transparent;
+}
+
+.mcx-strip {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 3px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  min-width: 56px;
+  box-sizing: border-box;
+  padding: 6px 4px 6px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-panel-border-dim);
+  background: color-mix(in srgb, var(--color-panel-surface) 40%, transparent);
+  color: var(--color-text-main);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.mcx-strip:hover { border-color: var(--color-panel-border-strong); }
+.mcx-strip.is-active { background: var(--color-accent-dim); border-color: var(--color-accent); }
+.mcx-strip.is-muted { opacity: 0.48; }
+.mcx-strip.is-midi-ext { border-color: color-mix(in srgb, var(--color-cable-midi-out) 65%, var(--color-panel-border)); }
+
+.mcx-strip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+}
+.mcx-strip-num {
+  font-weight: 800;
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.mcx-strip-led {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-panel-border);
+  display: inline-block;
+}
+.mcx-strip.is-active .mcx-strip-led {
+  background: var(--color-accent);
+  box-shadow: 0 0 5px var(--color-accent);
+}
+.mcx-strip-kind-btn {
+  appearance: none;
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel-surface);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 3px;
+  cursor: pointer;
+}
+.mcx-strip-kind-btn.is-drum { border-color: var(--color-warning); color: var(--color-warning); }
+
+.mcx-strip-sound-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 3px 2px;
+  background: color-mix(in srgb, var(--color-panel-surface) 60%, transparent);
+  border: 1px solid var(--color-panel-border-dim);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-main);
+  cursor: pointer;
+  text-align: center;
+  height: 36px;
+  transition: all var(--transition-fast);
+}
+.mcx-strip-sound-btn:hover {
+  background: var(--color-panel-surface-elevated);
+  border-color: var(--color-accent);
+}
+.mcx-strip-cat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+}
+.mcx-strip-sound-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.mcx-strip-drawers-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2px;
+  width: 100%;
+}
+.mcx-strip-drawer-btn {
+  appearance: none;
+  width: 100%;
+  height: 16px;
+  padding: 0;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--color-panel-border-dim);
+  background: var(--color-panel-surface);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+.mcx-strip-drawer-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-panel-surface-elevated);
+}
+.mcx-strip-drawer-btn.is-tone:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.mcx-strip-drawer-btn.is-pads:hover { border-color: var(--color-warning); color: var(--color-warning); }
+.mcx-strip-drawer-btn.is-seq:hover { border-color: var(--color-accent-hover); color: var(--color-accent-hover); }
+.mcx-strip-drawer-btn.is-nuke:hover { border-color: var(--color-danger); color: var(--color-danger); }

@@ -69,6 +69,7 @@ endif()
 
 set(ABDSHARED_BUILD_DSPCORE_TESTS OFF CACHE BOOL "" FORCE)
 set(ABDSHARED_BUILD_SYNTHCORE_TESTS OFF CACHE BOOL "" FORCE)
+set(ABDSHARED_BUILD_SYNTHENGINES_TESTS OFF CACHE BOOL "" FORCE)
 set(ABDSHARED_BUILD_DSPEFFECTS_TESTS OFF CACHE BOOL "" FORCE)
 set(ABDSHARED_BUILD_AUTOUPDATER OFF CACHE BOOL "" FORCE)
 set(ABDSHARED_BUILD_HARDWAREDRIVERS OFF CACHE BOOL "" FORCE)
@@ -91,6 +92,8 @@ target_include_directories(ABDMCX0X_Core PUBLIC
 )
 target_compile_features(ABDMCX0X_Core PUBLIC cxx_std_20)
 target_link_libraries(ABDMCX0X_Core PUBLIC
+    ABDShared::SynthEngines
+    ABDShared::StructuredRompler
     ABDShared::SynthCore
     ABDShared::DspCore
     ABDShared::DspEffects
@@ -123,6 +126,13 @@ add_test(NAME McxPhase4Tests COMMAND McxPhase4Tests)
 add_executable(McxPhase5Tests Tests/McxPhase5Tests.cpp)
 target_link_libraries(McxPhase5Tests PRIVATE ABDMCX0X_Core)
 add_test(NAME McxPhase5Tests COMMAND McxPhase5Tests)
+
+add_executable(McxPhase6CoreInfraTests Tests/McxPhase6CoreInfraTests.cpp)
+target_link_libraries(McxPhase6CoreInfraTests PRIVATE ABDMCX0X_Core)
+target_compile_definitions(McxPhase6CoreInfraTests PRIVATE
+    ABDSHARED_CONTRACTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../ABDShared/Contracts"
+)
+add_test(NAME McxPhase6CoreInfraTests COMMAND McxPhase6CoreInfraTests)
 
 add_executable(McxAudioRenderDemo Tests/McxAudioRenderDemo.cpp)
 target_link_libraries(McxAudioRenderDemo PRIVATE ABDMCX0X_Core)

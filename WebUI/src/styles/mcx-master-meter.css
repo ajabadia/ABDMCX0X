@@ -1,0 +1,126 @@
+/* ABDMCX0X -- Master Compact Stereo Meter, Volume Knob & Transport Dock */
+
+.mcx-master-vu-compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  background: color-mix(in srgb, var(--color-panel-surface) 60%, transparent);
+  border: 1px solid var(--color-panel-border-dim);
+  border-radius: var(--radius-xs);
+  padding: 3px 6px;
+  margin: 3px 0;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+.mcx-master-vu-compact:hover {
+  border-color: var(--color-accent);
+  background: var(--color-panel-surface-elevated);
+}
+.mcx-vu-compact-ch {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.mcx-vu-compact-lbl {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 800;
+  color: var(--color-text-dim);
+}
+.mcx-vu-compact-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-panel-border-dim);
+  transition: background 0.05s ease, box-shadow 0.05s ease;
+}
+.mcx-vu-compact-led.is-off {
+  background: color-mix(in srgb, var(--color-panel-border-dim) 50%, transparent);
+  box-shadow: none;
+}
+.mcx-vu-compact-led.is-low {
+  background: var(--color-success);
+  box-shadow: 0 0 5px var(--color-success);
+}
+.mcx-vu-compact-led.is-mid {
+  background: var(--color-warning);
+  box-shadow: 0 0 6px var(--color-warning);
+}
+.mcx-vu-compact-led.is-hot {
+  background: color-mix(in srgb, var(--color-danger) 60%, var(--color-warning));
+  box-shadow: 0 0 7px var(--color-danger);
+}
+.mcx-vu-compact-led.is-clip {
+  background: var(--color-danger);
+  box-shadow: 0 0 8px var(--color-danger);
+}
+.mcx-vu-compact-expand {
+  font-size: 9px;
+  color: var(--color-text-dim);
+  opacity: 0.6;
+}
+.mcx-master-vu-compact:hover .mcx-vu-compact-expand {
+  color: var(--color-accent);
+  opacity: 1;
+}
+
+.mcx-master-vol-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 2px 0;
+}
+
+.mcx-master-vol-lbl {
+  font-family: var(--font-sans);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+.mcx-master-knob-mount {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
+  margin: 1px 0;
+}
+
+.mcx-master-vol-readout {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--color-accent);
+  letter-spacing: 0.04em;
+}
+
+.mcx-master-db-divider {
+  width: 100%;
+  border-top: 1px solid var(--color-panel-border-dim);
+  margin: 2px 0 1px;
+}
+
+.mcx-master-db-pill {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-panel-surface-elevated) 80%, transparent);
+  border: 1px solid var(--color-panel-border-dim);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-xs);
+  white-space: nowrap;
+}
+
+/* Master Transport Dock (Underneath Master Volume) */
+.mcx-master-transport-mount {
+  width: 100%;
+  margin-top: 4px;
+}

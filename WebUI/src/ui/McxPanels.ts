@@ -145,7 +145,11 @@ export function wireBankDropZone(
     bridge.loadBankBuffer(await file.arrayBuffer());
     setLcdLine2(`${t('mcx.loadBank')}: ${file.name}`);
   };
-  dropZone.addEventListener('click', () => fileInput.click());
+  if (dropZone.classList.contains('mcx-drop-zone')) {
+    dropZone.addEventListener('click', (e) => {
+      if (e.target === dropZone) fileInput.click();
+    });
+  }
   fileInput.addEventListener('change', () => { if (fileInput.files?.[0]) void loadFile(fileInput.files[0]); });
   ['dragenter', 'dragover'].forEach((evt) =>
     dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.add('is-drag'); }),

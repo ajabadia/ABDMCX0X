@@ -8,6 +8,7 @@
 #include "SynthCore/HardwareProfileHydrator.h"
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -54,10 +55,14 @@ public:
 
     void setProfile(const abd::synth::UniversalHardwareProfile& profile);
     void setProfileById(const std::string& profileId);
-    bool autoDetectFromIdentityReply(const std::uint8_t* sysex, std::size_t length);
-    bool autoDetectFromPortName(std::string_view portName);
+    bool setPartHardwareProfile(std::uint8_t partIdx, const std::string& profileId);
+    void setPartMidiPort(std::uint8_t partIdx, std::uint8_t portIndex) noexcept;
+    [[nodiscard]] std::uint8_t getPartMidiPort(std::uint8_t partIdx) const noexcept;
+    bool autoDetectFromIdentityReply(const std::uint8_t* sysex, std::size_t length) noexcept;
+    bool autoDetectFromPortName(std::string_view portName) noexcept;
 
-    [[nodiscard]] const abd::synth::UniversalHardwareProfile& getProfile() const noexcept { return profile_; }
+    [[nodiscard]] const abd::synth::UniversalHardwareProfile& getProfile() const noexcept;
+    [[nodiscard]] const abd::synth::UniversalHardwareProfile& getPartProfile(std::uint8_t partIdx) const noexcept;
     [[nodiscard]] const std::vector<abd::synth::UniversalHardwareProfile>& getRegistry() const noexcept { return registry_; }
 
     void setInboundSemanticCallback(InboundSemanticCallback cb) { inboundSemanticCb_ = std::move(cb); }
@@ -94,17 +99,18 @@ public:
     void routeSynthEnvelope(std::uint8_t partIdx, float attackNorm, float decayNorm, float releaseNorm) noexcept;
 
     // --- Inbound MIDI Parsing (Hardware / MIDI Thread) ---
-    void processInboundMidiByte(std::uint8_t byte) noexcept;
-    void processInboundMidiBuffer(const std::uint8_t* data, std::size_t length) noexcept;
+    void processInboundMidiByte(std::uint8_t byte, bool dispatchNotes = true) noexcept;
+    void processInboundMidiBuffer(const std::uint8_t* data, std::size_t length, bool dispatchNotes = true) noexcept;
     bool processInboundCc(std::uint8_t channel1to16, std::uint8_t cc, std::uint8_t value) noexcept;
 
     // --- Queue Drainage to Hardware Backend ---
     std::size_t drainOutboundQueue(const MidiByteSink& sink) noexcept;
 
 private:
-    void sendCc(std::uint8_t ch1to16, std::uint8_t cc, std::uint8_t val) noexcept;
-    void sendNrpn(std::uint8_t ch1to16, std::uint8_t msb, std::uint8_t lsb, std::uint8_t val) noexcept;
-    void dispatchBinding(std::uint8_t ch, const abd::synth::SemanticControlBinding& binding, float normalizedVal) noexcept;
+    int resolveRegistryIndexById(std::string_view idOrAlias) const noexcept;
+    void sendCc(std::uint8_t ch1to16, std::uint8_t cc, std::uint8_t val, std::uint8_t portIdx = 0) noexcept;
+    void sendNrpn(std::uint8_t ch1to16, std::uint8_t msb, std::uint8_t lsb, std::uint8_t val, std::uint8_t portIdx = 0) noexcept;
+    void dispatchBinding(std::uint8_t ch, std::uint8_t portIdx, const abd::synth::SemanticControlBinding& binding, float normalizedVal) noexcept;
     void applyInternalSemanticParam(std::uint8_t partIdx, std::uint64_t roleHash, float normalizedVal) noexcept;
     void applyInternalDrumParam(std::uint8_t partIdx,
                                 std::uint8_t slotIdx,
@@ -114,13 +120,15 @@ private:
     void handleCompleteInboundNrpn(int channel, int msb, int lsb, int dataVal) noexcept;
 
     McxEngine& engine_;
-    abd::synth::UniversalHardwareProfile profile_;
+    abd::synth::UniversalHardwareProfile fallbackProfile_;
     std::vector<abd::synth::UniversalHardwareProfile> registry_;
+    std::atomic<int> defaultProfileIdx_ { -1 };
+    std::array<std::atomic<int>, McxEngine::kNumParts> partProfileIdx_ {};
     InboundSemanticCallback inboundSemanticCb_;
 
     McxMidiOutQueue<1024> outQueue_;
     McxLatencyCompensator latencyComp_;
-    McxInboundNrpnState nrpnState_;
+    std::array<McxInboundNrpnState, 16> nrpnStates_ {};
 
     std::uint8_t runningStatus_ { 0 };
     std::uint8_t msgPending_[3] {};

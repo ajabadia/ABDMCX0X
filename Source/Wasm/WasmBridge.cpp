@@ -46,14 +46,12 @@ public:
 
     void noteOn(int partIdx, int noteNumber, float velocity) noexcept
     {
-        const int ch = static_cast<int>(engine_.part(partIdx).midiChannel);
-        engine_.routeMidiChannelNoteOn(ch, noteNumber, velocity);
+        engine_.triggerPartNoteOn(partIdx, noteNumber, velocity);
     }
 
     void noteOff(int partIdx, int noteNumber) noexcept
     {
-        const int ch = static_cast<int>(engine_.part(partIdx).midiChannel);
-        engine_.routeMidiChannelNoteOff(ch, noteNumber);
+        engine_.releasePartNoteOff(partIdx, noteNumber);
     }
 
     void allNotesOff() noexcept
@@ -109,6 +107,20 @@ public:
         if (peakL) *peakL = lastPeakL_;
         if (peakR) *peakR = lastPeakR_;
         if (activeVoices) *activeVoices = engine_.getActiveVoiceCount();
+    }
+
+    void getPartPeaks(float* outPeaks16) const noexcept
+    {
+        if (!outPeaks16) return;
+        const auto p = engine_.getPartPeaks();
+        std::copy(p.begin(), p.end(), outPeaks16);
+    }
+
+    void getPartMidiPeaks(float* outPeaks16) const noexcept
+    {
+        if (!outPeaks16) return;
+        const auto p = engine_.getPartMidiPeaks();
+        std::copy(p.begin(), p.end(), outPeaks16);
     }
 
     void resetToFactory() noexcept
@@ -187,6 +199,16 @@ int loadBankFromMemory(const uint8_t* data, int sizeBytes)
 void getAudioSnapshot(float* peakL, float* peakR, int* activeVoices)
 {
     getEngine().getAudioSnapshot(peakL, peakR, activeVoices);
+}
+
+void getPartPeaks(float* outPeaks16)
+{
+    getEngine().getPartPeaks(outPeaks16);
+}
+
+void getPartMidiPeaks(float* outPeaks16)
+{
+    getEngine().getPartMidiPeaks(outPeaks16);
 }
 
 void resetToFactory()

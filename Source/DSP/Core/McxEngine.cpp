@@ -7,28 +7,41 @@
 namespace abdmcx
 {
 
-namespace
+void McxEngine::onRomplerVoiceStolen(void* userData, int ownerSlot, int drumSlotNote) noexcept
 {
-constexpr double kTwoPi = 6.28318530717958647692;
-} // namespace
+    auto* self = static_cast<McxEngine*>(userData);
+    if (self == nullptr || ownerSlot < 0 || ownerSlot >= kNumParts || drumSlotNote < 0 || drumSlotNote >= 128)
+        return;
+    self->parts_[static_cast<std::size_t>(ownerSlot)].drumSlots[static_cast<std::size_t>(drumSlotNote)].activeSounding = false;
+}
 
 McxEngine::McxEngine() noexcept
-    : parts_(static_cast<std::size_t>(kNumParts)),
-      voices_(static_cast<std::size_t>(kMaxVoices))
+    : romplerEngines_(static_cast<std::size_t>(kNumParts))
 {
+    romplerPool_.setVoiceStolenCallback(&McxEngine::onRomplerVoiceStolen, this);
+
     for (int i = 0; i < kNumParts; ++i)
     {
-        auto& p = parts_[static_cast<std::size_t>(i)];
+        auto& rompler = romplerEngines_[static_cast<std::size_t>(i)];
+        rompler.attachVoicePool(&romplerPool_, i);
+        rompler.patch().level = 1.0f;
+        rompler.patch().pan = 0.0f;
+        engineSlots_[static_cast<std::size_t>(i)] = &rompler;
+        cacheSemanticDestIds(i);
+
+        parts_.emplace_back(rompler);
+        auto& p = parts_.back();
         p.midiChannel = static_cast<std::uint8_t>(i + 1);
         p.partials[0].enabled = true;
         p.drumRemapper.initIdentity();
+        p.latchedNoteMap.fill(-1);
     }
+    partMidiPeaks_.fill(0.0f);
 
     McxFactoryBank::applyFactoryDefaults(*this);
     for (int i = 0; i < kNumParts; ++i)
     {
-        auto& p = parts_[static_cast<std::size_t>(i)];
-        p.enabled = true;
+        parts_[static_cast<std::size_t>(i)].enabled = true;
         setPartKind(i, (i == 9) ? McxPartKind::DrumMap : McxPartKind::Chromatic);
     }
 }
@@ -36,12 +49,15 @@ McxEngine::McxEngine() noexcept
 void McxEngine::prepare(double sampleRate) noexcept
 {
     sampleRate_ = (sampleRate > 1000.0) ? sampleRate : 44100.0;
-    for (auto& p : parts_)
-        p.arp.prepare(sampleRate_);
-    for (auto& v : voices_)
-        v.prepare(sampleRate_);
-    for (auto& cs : channelStrips_)
-        cs.prepare(sampleRate_);
+    romplerPool_.prepare(sampleRate_);
+    for (int i = 0; i < kNumParts; ++i)
+    {
+        const auto idx = static_cast<std::size_t>(i);
+        parts_[idx].arp.prepare(sampleRate_);
+        if (engineSlots_[idx] != nullptr)
+            engineSlots_[idx]->prepare(sampleRate_, McxOutputAndFx::kMaxChunk);
+        channelStrips_[idx].prepare(sampleRate_);
+    }
     outputAndFx_.prepare(sampleRate_);
     diagProbe_.prepare(sampleRate_);
     diagFilter_.prepare(sampleRate_);
@@ -50,19 +66,24 @@ void McxEngine::prepare(double sampleRate) noexcept
 
 void McxEngine::reset() noexcept
 {
-    noteCounter_ = 0;
     fxTailSamplesLeft_ = 0;
+    partMidiPeaks_.fill(0.0f);
     mirrorRouter_.clear();
     outputAndFx_.reset();
     diagProbe_.reset();
     diagFilter_.reset();
-    for (auto& v : voices_)
-        v.reset();
-    for (auto& cs : channelStrips_)
-        cs.reset();
-    for (auto& p : parts_)
+    romplerPool_.reset();
+    for (int i = 0; i < kNumParts; ++i)
     {
+        const auto idx = static_cast<std::size_t>(i);
+        if (engineSlots_[idx] != nullptr)
+            engineSlots_[idx]->reset();
+        modRouters_[idx].clearDirectOffsets();
+        lastSemanticOffsets_[idx] = McxTrackSemanticOffsets {};
+        channelStrips_[idx].reset();
+        auto& p = parts_[idx];
         p.arp.reset();
+        p.latchedNoteMap.fill(-1);
         for (auto& slot : p.drumSlots)
             slot.activeSounding = false;
     }
@@ -75,6 +96,7 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
 
     std::fill_n(left, numSamples, 0.0f);
     std::fill_n(right, numSamples, 0.0f);
+    std::fill(partPeaks_.begin(), partPeaks_.end(), 0.0f);
 
     for (int partIdx = 0; partIdx < kNumParts; ++partIdx)
     {
@@ -86,11 +108,11 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
             if (ev.isNoteOn)
             {
                 const float evAccent = std::max(accentAmount_, std::clamp((ev.velocity - 0.85f) * 3.0f, 0.0f, 1.0f));
-                triggerInternalVoice(partIdx, ev.note, ev.velocity, evAccent);
+                dispatchNoteOnToOutputs(partIdx, ev.note, ev.velocity, evAccent, ev.sampleOffset);
             }
             else
             {
-                releaseInternalVoice(partIdx, ev.note);
+                dispatchNoteOffToOutputs(partIdx, ev.note, ev.sampleOffset);
             }
         });
     }
@@ -113,31 +135,18 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
         bool anyVoiceActive = false;
         for (int pIdx = 0; pIdx < kNumParts; ++pIdx)
         {
-            auto& p = parts_[static_cast<std::size_t>(pIdx)];
-            if (!p.enabled) continue;
-            bool partHasVoices = false;
-            std::fill_n(partL_.data(), chunk, 0.0f);
-            std::fill_n(partR_.data(), chunk, 0.0f);
-            auto cfg = buildVoiceConfig(p);
-            cfg.partLevel = 1.0f;
-            cfg.partPan = 0.0f;
+            const auto idx = static_cast<std::size_t>(pIdx);
+            auto& p = parts_[idx];
+            IMcxSoundEngine* eng = engineSlots_[idx];
+            if (!p.enabled || eng == nullptr)
+                continue;
 
-            for (int i = 0; i < maxPolyphony_; ++i)
-            {
-                auto& v = voices_[static_cast<std::size_t>(i)];
-                if (!v.isActive() || v.getPartIndex() != pIdx) continue;
-                anyVoiceActive = true;
-                partHasVoices = true;
-                v.processBlock(partL_.data(), partR_.data(), nullptr, nullptr, nullptr, nullptr, chunk, cfg);
-            }
-            if (!partHasVoices) continue;
+            syncPartEngineControl(pIdx);
+            if (!eng->renderBlock(partL_.data(), partR_.data(), chunk))
+                continue;
 
+            anyVoiceActive = true;
             McxChannelStripParams csp {};
-            csp.filter2Enabled = p.filter2Enabled;
-            csp.filter2Model = p.filter2Model;
-            csp.filter2Mode = p.filter2Mode;
-            csp.filter2CutoffHz = p.filter2CutoffHz;
-            csp.filter2Resonance = p.filter2Resonance;
             csp.eqEnabled = p.eqEnabled;
             csp.eqLowFreqHz = p.eqLowFreqHz;
             csp.eqLowGainDb = p.eqLowGainDb;
@@ -161,7 +170,7 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
             csp.sendD = p.auxSend;
             csp.sendDPre = p.auxSendPre;
 
-            channelStrips_[static_cast<std::size_t>(pIdx)].process(
+            channelStrips_[idx].process(
                 partL_.data(), partR_.data(),
                 revL_.data(), revR_.data(),
                 choL_.data(), choR_.data(),
@@ -169,11 +178,16 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
                 auxL_.data(), auxR_.data(),
                 chunk, csp, isPartAudible(pIdx));
 
+            float pMax = 0.0f;
             for (int s = 0; s < chunk; ++s)
             {
-                dryL_[static_cast<std::size_t>(s)] += partL_[static_cast<std::size_t>(s)];
-                dryR_[static_cast<std::size_t>(s)] += partR_[static_cast<std::size_t>(s)];
+                const float sL = partL_[static_cast<std::size_t>(s)];
+                const float sR = partR_[static_cast<std::size_t>(s)];
+                dryL_[static_cast<std::size_t>(s)] += sL;
+                dryR_[static_cast<std::size_t>(s)] += sR;
+                pMax = std::max(pMax, std::max(std::abs(sL), std::abs(sR)));
             }
+            partPeaks_[idx] = std::max(partPeaks_[idx], pMax);
         }
 
         const bool injFilter = diagProbe_.isInjectingAt(4) || diagProbe_.isInjectingAt(5);
@@ -221,13 +235,17 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
             else if (fxTailSamplesLeft_ > 0)
                 fxTailSamplesLeft_ = std::max(0, fxTailSamplesLeft_ - chunk);
 
+            McxOutputAndFx::ControlFrame fxCtrl;
+            fxCtrl.bpm = static_cast<double>(masterTempoBpm_);
+            fxCtrl.tempoSync = true;
             outputAndFx_.processChunk(
                 dryL_.data(), dryR_.data(),
                 revL_.data(), revR_.data(),
                 choL_.data(), choR_.data(),
                 delL_.data(), delR_.data(),
                 auxL_.data(), auxR_.data(),
-                chunk, (injPreMaster && !anyVoiceActive && !injFilter && !injPreFx) ? 1.0f : masterGain_);
+                chunk, (injPreMaster && !anyVoiceActive && !injFilter && !injPreFx) ? 1.0f : masterGain_,
+                fxCtrl);
             for (int i = 0; i < chunk; ++i)
             {
                 left[offset + i] = dryL_[static_cast<std::size_t>(i)];
@@ -239,6 +257,14 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
             diagProbe_.injectStereoBuffer(1, left + offset, right + offset, chunk, false);
 
         offset += chunk;
+    }
+
+    const float midiDecay = std::exp(-static_cast<float>(numSamples) / static_cast<float>(sampleRate_ * 0.14));
+    for (float& mp : partMidiPeaks_)
+    {
+        mp *= midiDecay;
+        if (mp < 1e-4f)
+            mp = 0.0f;
     }
 }
 

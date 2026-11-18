@@ -1,5 +1,9 @@
 #pragma once
 
+#include "SynthEngines/ISoundEngine.h"
+#include "SynthEngines/TrackModRouter.h"
+#include "SynthEngines/StructuredRompler/StructuredRomplerEngine.h"
+
 #include <array>
 #include <cstdint>
 #include <type_traits>
@@ -7,38 +11,29 @@
 namespace abdmcx
 {
 
-enum class McxOscSourceKind : std::uint8_t
-{
-    SpectralDdsp = 0,
-    PcmZone,
-    VaOsc,
-    Fm2Op,
-    AxionikSurface,
-    DwgsWavetable
-};
+// Suite-level sound engine interface & track modulation router
+using IMcxSoundEngine     = abd::engines::ISoundEngine;
+using McxTrackModRouter   = abd::engines::TrackModRouter;
+
+// Structured Rompler synthesis types & DSP primitives (hosted in ABDShared)
+using McxOscSourceKind    = abd::rompler::OscSourceKind;
+using McxStructureMode    = abd::rompler::StructureMode;
+using McxFilterModel      = abd::rompler::FilterModel;
+using McxDrumMapMode      = abd::rompler::DrumMapMode;
+using McxDrumTriggerMode  = abd::rompler::DrumTriggerMode;
+using McxEnv4T4L          = abd::rompler::Env4T4L;
+using McxPartialConfig    = abd::rompler::PartialConfig;
+using McxDrumSlotConfig   = abd::rompler::DrumSlotConfig;
+using McxDrumNoteRemapper = abd::rompler::DrumNoteRemapper;
+using McxEnvelope5Stage   = abd::rompler::RomplerEnvelope5Stage;
+using McxFilterBank       = abd::rompler::RomplerFilterBank;
+using McxPartialExciter   = abd::rompler::RomplerPartialExciter;
+using McxVoice            = abd::rompler::RomplerVoice;
 
 enum class McxPartKind : std::uint8_t
 {
     Chromatic = 0,
     DrumMap
-};
-
-enum class McxStructureMode : std::uint8_t
-{
-    Parallel = 0,
-    RingMod12,
-    Booster12,
-    Vector2D
-};
-
-enum class McxFilterModel : std::uint8_t
-{
-    SvfClean = 0,
-    RolandTvfZdf,
-    Ms20Acid,
-    LadderDrive,
-    ZPlaneMorph,
-    RolandTc6116Tvf
 };
 
 enum class McxOutputCharacter : std::uint8_t
@@ -65,110 +60,6 @@ enum class McxMachinePersona : std::uint8_t
     EmuOrbit,
     Quasimidi309,
     BossDr5
-};
-
-enum class McxDrumMapMode : std::uint8_t
-{
-    GmStandard = 0,
-    RolandGsMc,
-    YamahaXgXs,
-    KorgAi2N5,
-    HardwareNative,
-    ProprietaryCustom
-};
-
-enum class McxDrumTriggerMode : std::uint8_t
-{
-    OneShot = 0,
-    Gated
-};
-
-struct McxEnv4T4L
-{
-    float l0 { 0.0f };
-    float t0Ms { 0.0f };
-    float t1Ms { 5.0f };
-    float t2Ms { 40.0f };
-    float t3Ms { 180.0f };
-    float t4Ms { 250.0f };
-    float l1 { 1.0f };
-    float l2 { 0.8f };
-    float l3 { 0.65f };
-    float l4 { 0.0f };
-    std::uint8_t rateT1 { 100 };
-    std::uint8_t rateT2 { 70 };
-    std::uint8_t rateT3 { 50 };
-    std::uint8_t rateT4 { 60 };
-    bool useRomLut { false };
-};
-
-struct McxPartialConfig
-{
-    bool enabled { false };
-    McxOscSourceKind sourceKind { McxOscSourceKind::VaOsc };
-    McxFilterModel filterModel { McxFilterModel::RolandTc6116Tvf };
-    std::uint8_t vaWaveform { 0 }; // 0=Saw, 1=Pulse/Square, 2=Tri, 3=Sine, 4=SuperSaw, 5=Noise
-    float pulseWidth { 0.5f };
-    float level { 0.85f };
-    float pan { 0.0f };
-    std::int8_t coarseSemitones { 0 };
-    float fineCents { 0.0f };
-    float cutoffHz { 12000.0f };
-    float resonance { 0.15f };
-    float zplaneMorph { 0.0f };
-    float drive { 0.0f };
-    std::uint8_t velLo { 0 };
-    std::uint8_t velHi { 127 };
-    std::uint8_t filterMode { 0 }; // 0=LPF, 1=HPF, 2=BPF, 3=Bypass
-    std::uint8_t velCurveIndex { 0 };
-    std::uint16_t altStartOffset { 0 };
-    float loopTuneCents { 0.0f };
-    bool pingPongLoop { false };
-    bool oneShotMode { false };
-    float pitchEnvSemitones { 0.0f };
-    float filterEnvOctaves { 2.0f };
-    McxEnv4T4L ampEnv {};
-    McxEnv4T4L filterEnv {};
-    McxEnv4T4L pitchEnv {};
-    const float* externalSampleData { nullptr };
-    int externalSampleLength { 0 };
-    int externalLoopStart { 0 };
-    int externalLoopEnd { 0 };
-};
-
-struct McxDrumSlotConfig
-{
-    std::uint8_t muteGroup { 0 };
-    std::uint8_t coarseKey { 60 };
-    McxDrumTriggerMode triggerMode { McxDrumTriggerMode::OneShot };
-    float level { 1.0f };
-    float pan { 0.0f };
-    float reverbSend { 0.25f };
-    float chorusSend { 0.0f };
-    float cutoffHzOverride { 14000.0f };
-    float resonanceOverride { 0.1f };
-    float decayMs { 280.0f };
-    float pitchKeyTrack { 0.0f };
-    bool activeSounding { false };
-    const float* externalSampleData { nullptr };
-    int externalSampleLength { 0 };
-    int externalLoopStart { 0 };
-    int externalLoopEnd { 0 };
-};
-
-struct McxDrumNoteRemapper
-{
-    std::array<std::uint8_t, 128> inputToSlot {};
-    std::array<std::uint8_t, 128> slotToExternal {};
-
-    void initIdentity() noexcept
-    {
-        for (int i = 0; i < 128; ++i)
-        {
-            inputToSlot[static_cast<std::size_t>(i)] = static_cast<std::uint8_t>(i);
-            slotToExternal[static_cast<std::size_t>(i)] = static_cast<std::uint8_t>(i);
-        }
-    }
 };
 
 struct McxMachinePersonaSpec
@@ -210,15 +101,29 @@ struct McxMachinePersonaSpec
 
 struct McxMidiOutMessage
 {
+    std::uint8_t portIndex { 0 }; // 0 = DAW / Default, 1..N = Physical/Virtual MIDI ports
+    std::uint8_t priority { 1 };  // 0 = Clock/Realtime, 1 = NoteOn/NoteOff, 2 = CC/NRPN/Mod
     std::uint8_t length { 0 };
-    std::uint8_t bytes[16] {};
+    std::uint8_t bytes[32] {};
     std::int32_t sampleOffset { 0 };
+};
+
+struct McxTrackSemanticOffsets
+{
+    float cutoffOctaves { 0.0f }; // bipolar [-1..+1] -> +/-4 octaves non-destructive offset
+    float resonance { 0.0f };     // bipolar [-1..+1] -> +/-0.5 additive offset
+    float envAttack { 0.0f };     // bipolar [-1..+1] -> 2^(val*2) multiplicative scale
+    float envDecay { 0.0f };      // bipolar [-1..+1] -> 2^(val*2) multiplicative scale
+    float envSustain { 0.0f };    // bipolar [-1..+1] -> +/-0.5 additive offset
+    float envRelease { 0.0f };    // bipolar [-1..+1] -> 2^(val*2) multiplicative scale
+    float vibratoDepth { 0.0f };  // bipolar [-1..+1] -> additive LFO1 depth offset
 };
 
 static_assert(std::is_trivially_copyable_v<McxEnv4T4L>, "McxEnv4T4L must be POD/RT-safe");
 static_assert(std::is_trivially_copyable_v<McxPartialConfig>, "McxPartialConfig must be POD/RT-safe");
 static_assert(std::is_trivially_copyable_v<McxDrumSlotConfig>, "McxDrumSlotConfig must be POD/RT-safe");
 static_assert(std::is_trivially_copyable_v<McxDrumNoteRemapper>, "McxDrumNoteRemapper must be POD/RT-safe");
+static_assert(std::is_trivially_copyable_v<McxTrackSemanticOffsets>, "McxTrackSemanticOffsets must be POD/RT-safe");
 static_assert(std::is_trivially_copyable_v<McxMidiOutMessage>,
               "McxMidiOutMessage must remain trivially copyable for SPSC queues");
 

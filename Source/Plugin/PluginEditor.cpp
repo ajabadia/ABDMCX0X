@@ -136,14 +136,41 @@ void McxAudioProcessorEditor::timerCallback() {
     payload->setProperty("type", "telemetry");
     payload->setProperty("peakL", snap.peakL);
     payload->setProperty("peakR", snap.peakR);
+    payload->setProperty("peakSendA", snap.peakSendA);
+    payload->setProperty("peakSendB", snap.peakSendB);
+    payload->setProperty("peakSendC", snap.peakSendC);
+    payload->setProperty("peakSendD", snap.peakSendD);
+    payload->setProperty("limiterGrDb", snap.limiterGrDb);
     payload->setProperty("activeVoices", snap.activeVoices);
     payload->setProperty("focusedPart", snap.focusedPart);
     payload->setProperty("sampleRate", snap.sampleRate);
+    payload->setProperty("lfoPhase", snap.lfoPhase);
+
+    juce::Array<juce::var> mutes;
+    for (bool m : snap.sendBusMutes) mutes.add(m);
+    payload->setProperty("sendBusMutes", mutes);
+
+    juce::DynamicObject::Ptr labels = new juce::DynamicObject();
+    labels->setProperty("sendA", juce::String(snap.sendNameA));
+    labels->setProperty("sendB", juce::String(snap.sendNameB));
+    labels->setProperty("sendC", juce::String(snap.sendNameC));
+    labels->setProperty("sendD", juce::String(snap.sendNameD));
+    payload->setProperty("sendLabels", juce::var(labels.get()));
 
     juce::Array<juce::var> samples;
     samples.ensureStorageAllocated(128);
     for (float s : snap.samplesL) samples.add(s);
     payload->setProperty("samplesL", samples);
+
+    juce::Array<juce::var> pPeaks;
+    pPeaks.ensureStorageAllocated(16);
+    for (float p : snap.partPeaks) pPeaks.add(p);
+    payload->setProperty("partPeaks", pPeaks);
+
+    juce::Array<juce::var> pMidiPeaks;
+    pMidiPeaks.ensureStorageAllocated(16);
+    for (float mp : snap.partMidiPeaks) pMidiPeaks.add(mp);
+    payload->setProperty("partMidiPeaks", pMidiPeaks);
 
     webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", juce::var(payload.get()));
 }
@@ -206,6 +233,11 @@ void McxAudioProcessorEditor::handleJsEvent(const juce::var& msg) {
     }
     if (type == "setMasterVolume") {
         processor_.setMasterVolumeLinear(static_cast<float>(obj->getProperty("volume")));
+        return;
+    }
+    if (type == "setSendBusMute") {
+        processor_.setSendBusMute(static_cast<int>(obj->getProperty("bus")),
+                                  static_cast<bool>(obj->getProperty("mute")));
         return;
     }
     if (type == "setTempo") {

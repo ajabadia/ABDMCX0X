@@ -1,0 +1,125 @@
+/* ABDMCX0X -- Base layout, root color-scheme, navbar, LCD strip, voice LEDs */
+
+:root {
+  color-scheme: light dark;
+  --abd-bg-image: url('/assets/backgrounds/bg_neutral.webp');
+  --abd-bg-blend: soft-light;
+
+  &:has(> head > meta[name="color-scheme"][content="dark"]) { color-scheme: dark; }
+  &:has(> head > meta[name="color-scheme"][content="light"]) { color-scheme: light; }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  color: var(--color-text-main);
+  accent-color: var(--color-accent);
+  user-select: none;
+}
+
+body.mcx-app {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-bg-base);
+  background-image:
+    linear-gradient(
+      color-mix(in srgb, var(--color-bg-base) 58%, transparent),
+      color-mix(in srgb, var(--color-bg-base) 68%, transparent)
+    ),
+    var(--abd-bg-image);
+  background-blend-mode: normal, normal;
+  background-size: cover, cover;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
+}
+
+#mcx-navbar-host .navbar,
+#mcx-navbar-host .abd-synth-navbar {
+  background: color-mix(in srgb, var(--navbar-bg, var(--color-panel-bg)) 58%, transparent);
+}
+
+.mcx-nav-group { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
+
+.mcx-nav-select {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-panel-border);
+  background: var(--color-panel-surface);
+  color: var(--color-text-main);
+  font-size: var(--text-base);
+  font-weight: 600;
+  cursor: pointer;
+}
+.mcx-nav-select:hover { border-color: var(--color-accent); }
+
+.mcx-pill-group {
+  display: inline-flex;
+  background: var(--color-panel-surface);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--radius-chassis);
+  padding: var(--space-1);
+  gap: var(--space-1);
+}
+
+.mcx-btn {
+  appearance: none;
+  border: 1px solid var(--color-panel-border);
+  background: var(--color-panel-surface);
+  color: var(--color-text-main);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-5);
+  font-size: var(--text-base);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+.mcx-btn:hover { border-color: var(--color-accent); }
+.mcx-btn.is-active { background: var(--color-accent); color: var(--color-bg-base); border-color: var(--color-accent); }
+.mcx-btn--audio.is-ready { border-color: var(--color-success); color: var(--color-success); }
+.mcx-btn--panic { border-color: var(--color-danger); color: var(--color-danger); }
+
+.mcx-lcd-strip {
+  display: grid;
+  grid-template-columns: 1fr 244px auto auto auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-6);
+  background: color-mix(in srgb, var(--color-panel-bg) 36%, transparent);
+  border-bottom: 1px solid var(--color-panel-border-dim);
+}
+.mcx-scope-wrap {
+  border: 1px solid var(--color-lcd-border);
+  border-radius: var(--radius-chassis);
+  overflow: hidden;
+  height: 46px;
+  background: var(--color-lcd-bg);
+}
+.mcx-scope-canvas { display: block; width: 242px; height: 44px; }
+
+.mcx-lcd {
+  background: var(--color-lcd-bg);
+  color: var(--color-lcd-text);
+  border: 1px solid var(--color-lcd-border);
+  border-radius: var(--radius-chassis);
+  padding: var(--space-3) var(--space-6);
+  font-family: var(--font-lcd);
+  box-shadow: var(--color-stick-pad-shadow);
+}
+.mcx-lcd-line1 { font-size: var(--text-base); font-weight: 700; letter-spacing: 0.08em; opacity: 0.9; }
+.mcx-lcd-line2 { font-size: var(--text-xl); font-weight: 700; letter-spacing: 0.06em; margin-top: var(--space-1); }
+
+.mcx-voice-meter { display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-end; }
+.mcx-voice-caption { font-size: var(--text-md); font-weight: 700; color: var(--color-text-muted); letter-spacing: 0.08em; }
+.mcx-voice-leds { display: flex; gap: 3px; }
+.mcx-voice-led {
+  width: 6px; height: 12px; border-radius: var(--radius-sm);
+  background: var(--color-panel-surface-elevated);
+  border: 1px solid var(--color-panel-border-dim);
+}
+.mcx-voice-led.is-on { background: var(--color-accent); box-shadow: 0 0 6px var(--color-accent); }
+.mcx-voice-led.is-hot { background: var(--color-danger); box-shadow: 0 0 6px var(--color-danger); }

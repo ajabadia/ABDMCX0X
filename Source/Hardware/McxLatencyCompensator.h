@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -35,6 +36,7 @@ public:
         sampleRate_ = 44100.0;
         delayMs_ = 0.0f;
         delaySamples_ = 0;
+        liveZeroLatency_.store(false, std::memory_order_relaxed);
     }
 
     void prepare(double sampleRate) noexcept
@@ -49,15 +51,29 @@ public:
         updateDelaySamples();
     }
 
+    void setLiveZeroLatency(bool enabled) noexcept
+    {
+        liveZeroLatency_.store(enabled, std::memory_order_relaxed);
+    }
+
+    [[nodiscard]] bool isLiveZeroLatency() const noexcept
+    {
+        return liveZeroLatency_.load(std::memory_order_relaxed);
+    }
+
     [[nodiscard]] float getLatencyMs() const noexcept { return delayMs_; }
     [[nodiscard]] std::size_t getDelaySamples() const noexcept { return delaySamples_; }
+    [[nodiscard]] std::size_t getEffectiveDelaySamples() const noexcept
+    {
+        return isLiveZeroLatency() ? 0u : delaySamples_;
+    }
 
     void process(float* left, float* right, int numSamples) noexcept
     {
         if (numSamples <= 0 || !left || !right)
             return;
 
-        if (delaySamples_ == 0)
+        if (delaySamples_ == 0 || liveZeroLatency_.load(std::memory_order_relaxed))
             return; // Zero latency bypass
 
         const std::size_t d = delaySamples_;
@@ -93,6 +109,7 @@ private:
     std::size_t delaySamples_ { 0 };
     double sampleRate_ { 44100.0 };
     float delayMs_ { 0.0f };
+    std::atomic<bool> liveZeroLatency_ { false };
 };
 
 } // namespace abdmcx

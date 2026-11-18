@@ -5,26 +5,9 @@
  */
 
 import { BridgeWasm, type McxTelemetry } from './BridgeWasm';
+import { WASM_PARAM_ID, type McxParamKey } from './mcxParamIds';
 
-export const WASM_PARAM_ID = {
-  filterCutoff: 0, filterResonance: 1, ampAttack: 2, ampDecay: 3, ampSustain: 4, ampRelease: 5,
-  partLevel: 6, partPan: 7, reverbSend: 8, chorusSend: 9, routeMode: 10, persona: 11,
-  dacCharacter: 12, filterModel: 13, structureMode: 14, vectorX: 15, vectorY: 16,
-  reverbMacro: 17, chorusMacro: 18, reverbTime: 19, chorusRate: 20,
-  diagProbePoint: 21, diagProbeFreq: 22, diagProbeLevel: 23, diagProbeWave: 24,
-  partKind: 25, partMidiChannel: 26, partMute: 27, partSolo: 28, partFollowTranspose: 29,
-  globalMaxPolyphony: 30, globalMasterTuneHz: 31, globalStandaloneBpm: 32,
-  globalTranspose: 33, globalScale: 34, globalScaleRoot: 35, globalScaleQuantize: 36,
-  eqEnabled: 37, eqLowGain: 38, eqLowFreq: 39, eqMidGain: 40, eqMidFreq: 41, eqMidQ: 42,
-  eqHighGain: 43, eqHighFreq: 44, driveEnabled: 45, driveAmount: 46,
-  delaySend: 47, auxSend: 48, sendAPre: 49, sendBPre: 50, sendCPre: 51, sendDPre: 52,
-  pitchCoarse: 53, pitchFine: 54,
-  portaEnabled: 55, portaTimeMs: 56, portaLegatoOnly: 57,
-  arpEnabled: 58, stepMute: 59, stepAccent: 60, stepSlide: 61,
-  filter2Enabled: 62, filter2Model: 63, filter2Mode: 64, filter2Cutoff: 65, filter2Resonance: 66,
-} as const;
-
-export type McxParamKey = keyof typeof WASM_PARAM_ID;
+export { WASM_PARAM_ID, type McxParamKey };
 
 export interface McxSystemSettingsDto {
   workingDirectory: string;
@@ -78,6 +61,16 @@ export class McxHostBridge {
             peakR: Number(data.peakR ?? 0),
             activeVoices: Number(data.activeVoices ?? 0),
             samplesL,
+            peakSendA: Number(data.peakSendA ?? 0),
+            peakSendB: Number(data.peakSendB ?? 0),
+            peakSendC: Number(data.peakSendC ?? 0),
+            peakSendD: Number(data.peakSendD ?? 0),
+            limiterGrDb: Number(data.limiterGrDb ?? 0),
+            sendBusMutes: Array.isArray(data.sendBusMutes) ? data.sendBusMutes.map(Boolean) : undefined,
+            sendLabels: data.sendLabels,
+            partPeaks: Array.isArray(data.partPeaks) ? data.partPeaks.map(Number) : undefined,
+            partMidiPeaks: Array.isArray(data.partMidiPeaks) ? data.partMidiPeaks.map(Number) : undefined,
+            lfoPhase: Number(data.lfoPhase ?? 0),
           });
         } else if (data.type === 'bankLoaded') {
           this.bankLoadedCb?.(Boolean(data.ok), Number(data.sizeBytes ?? 0));
@@ -105,37 +98,13 @@ export class McxHostBridge {
   public getSampleRate(): number { return this.isNative ? this.nativeSampleRate : (this.wasm?.sampleRate ?? 48000); }
   public onTelemetry(cb: (t: McxTelemetry) => void): void { this.telemetryCb = cb; }
   public onSystemSettings(cb: (s: McxSystemSettingsDto) => void): void { this.settingsCb = cb; }
+  public onAudioStatus(cb: (s: 'idle' | 'loading' | 'ready' | 'error', detail?: string) => void): void { this.statusCb = cb; if (this.isNative) cb('ready', `JUCE ${this.nativeSampleRate} Hz`); else this.wasm?.onStatus(cb); }
+  public onBankLoaded(cb: (ok: boolean, sizeBytes: number) => void): void { this.bankLoadedCb = cb; if (!this.isNative) this.wasm?.onBankLoaded(cb); }
+  public async enableAudio(): Promise<boolean> { return this.isNative ? true : ((await this.wasm?.initAudio()) ?? false); }
 
-  public onAudioStatus(cb: (s: 'idle' | 'loading' | 'ready' | 'error', detail?: string) => void): void {
-    this.statusCb = cb;
-    if (this.isNative) cb('ready', `JUCE ${this.nativeSampleRate} Hz`);
-    else this.wasm?.onStatus(cb);
-  }
-
-  public onBankLoaded(cb: (ok: boolean, sizeBytes: number) => void): void {
-    this.bankLoadedCb = cb;
-    if (!this.isNative) this.wasm?.onBankLoaded(cb);
-  }
-
-  public async enableAudio(): Promise<boolean> {
-    if (this.isNative) return true;
-    return (await this.wasm?.initAudio()) ?? false;
-  }
-
-  public noteOn(part: number, note: number, velocity = 0.85): void {
-    if (this.isNative) this.postNative({ type: 'noteOn', part, note, velocity });
-    else this.wasm?.noteOn(part, note, velocity);
-  }
-
-  public noteOff(part: number, note: number): void {
-    if (this.isNative) this.postNative({ type: 'noteOff', part, note });
-    else this.wasm?.noteOff(part, note);
-  }
-
-  public allNotesOff(): void {
-    if (this.isNative) this.postNative({ type: 'allNotesOff' });
-    else this.wasm?.allNotesOff();
-  }
+  public noteOn(part: number, note: number, velocity = 0.85): void { this.isNative ? this.postNative({ type: 'noteOn', part, note, velocity }) : this.wasm?.noteOn(part, note, velocity); }
+  public noteOff(part: number, note: number): void { this.isNative ? this.postNative({ type: 'noteOff', part, note }) : this.wasm?.noteOff(part, note); }
+  public allNotesOff(): void { this.isNative ? this.postNative({ type: 'allNotesOff' }) : this.wasm?.allNotesOff(); }
 
   public setParam(part: number, key: McxParamKey, value: number): void {
     const paramId = WASM_PARAM_ID[key];
@@ -143,24 +112,18 @@ export class McxHostBridge {
     else this.wasm?.setPartParam(part, paramId, value);
   }
 
-  public setTempo(bpm: number): void {
-    if (this.isNative) this.postNative({ type: 'setTempo', bpm });
-    else this.wasm?.setTempo(bpm);
-  }
-
-  public setMasterVolume(volume: number): void {
-    if (this.isNative) this.postNative({ type: 'setMasterVolume', volume });
-    else this.wasm?.setMasterVolume(volume);
-  }
+  public setTempo(bpm: number): void { this.isNative ? this.postNative({ type: 'setTempo', bpm }) : this.wasm?.setTempo(bpm); }
+  public setMasterVolume(volume: number): void { this.isNative ? this.postNative({ type: 'setMasterVolume', volume }) : this.wasm?.setMasterVolume(volume); }
 
   public loadBankBuffer(buffer: ArrayBuffer): void {
     if (this.isNative) this.postNative({ type: 'loadBankBase64', base64: arrayBufferToBase64(buffer) });
     else this.wasm?.loadBankBuffer(buffer);
   }
 
-  public resetToFactory(): void {
-    if (this.isNative) this.postNative({ type: 'resetToFactory' });
-    else this.wasm?.resetToFactory();
+  public resetToFactory(): void { this.isNative ? this.postNative({ type: 'resetToFactory' }) : this.wasm?.resetToFactory(); }
+
+  public setSendBusMute(bus: number, mute: boolean): void {
+    if (this.isNative) this.postNative({ type: 'setSendBusMute', bus, mute });
   }
 
   public loadLocalSettingsFallback(): McxSystemSettingsDto {

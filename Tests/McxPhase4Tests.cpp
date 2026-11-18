@@ -1,5 +1,11 @@
 #include "Core/McxBankLoader.h"
+#include "Core/McxParamRouter.h"
 #include "DSP/Core/McxEngine.h"
+#include "DspEffects/DspMultiBusFxRack.h"
+#include "SynthCore/LfoAnalog.h"
+#include "SynthCore/LcdTextFormatter.h"
+#include "SynthCore/StickPlayer.h"
+#include "SynthCore/VelocitySensitivityCurves.h"
 
 #include <cassert>
 #include <cmath>
@@ -18,60 +24,40 @@ void appendU16LE(std::vector<std::uint8_t>& buf, std::uint16_t val)
 
 void appendU32LE(std::vector<std::uint8_t>& buf, std::uint32_t val)
 {
-    buf.push_back(static_cast<std::uint8_t>(val & 0xFF));
-    buf.push_back(static_cast<std::uint8_t>((val >> 8) & 0xFF));
-    buf.push_back(static_cast<std::uint8_t>((val >> 16) & 0xFF));
-    buf.push_back(static_cast<std::uint8_t>((val >> 24) & 0xFF));
+    appendU16LE(buf, static_cast<std::uint16_t>(val & 0xFFFF));
+    appendU16LE(buf, static_cast<std::uint16_t>((val >> 16) & 0xFFFF));
 }
 
 std::vector<std::uint8_t> createSyntheticPcm16Wav(float freqHz, float durationSec, int sampleRate = 44100)
 {
-    std::vector<std::uint8_t> wav;
+    std::vector<std::uint8_t> wav {'R', 'I', 'F', 'F'};
     const int numSamples = static_cast<int>(durationSec * static_cast<float>(sampleRate));
     const int dataSize = numSamples * 2;
-    const int riffSize = 36 + dataSize;
-
-    wav.insert(wav.end(), {'R', 'I', 'F', 'F'});
-    appendU32LE(wav, static_cast<std::uint32_t>(riffSize));
-    wav.insert(wav.end(), {'W', 'A', 'V', 'E'});
-
-    // fmt chunk
-    wav.insert(wav.end(), {'f', 'm', 't', ' '});
-    appendU32LE(wav, 16);
-    appendU16LE(wav, 1); // PCM
-    appendU16LE(wav, 1); // Mono
+    appendU32LE(wav, static_cast<std::uint32_t>(36 + dataSize));
+    wav.insert(wav.end(), {'W', 'A', 'V', 'E', 'f', 'm', 't', ' '});
+    appendU32LE(wav, 16); appendU16LE(wav, 1); appendU16LE(wav, 1);
     appendU32LE(wav, static_cast<std::uint32_t>(sampleRate));
     appendU32LE(wav, static_cast<std::uint32_t>(sampleRate * 2));
-    appendU16LE(wav, 2);  // Block align
-    appendU16LE(wav, 16); // Bits per sample
-
-    // data chunk
+    appendU16LE(wav, 2); appendU16LE(wav, 16);
     wav.insert(wav.end(), {'d', 'a', 't', 'a'});
     appendU32LE(wav, static_cast<std::uint32_t>(dataSize));
 
     for (int i = 0; i < numSamples; ++i)
     {
-        const float t = static_cast<float>(i) / static_cast<float>(sampleRate);
-        const float s = std::sin(6.2831853f * freqHz * t) * 0.75f;
-        const auto val = static_cast<std::int16_t>(s * 32767.0f);
-        appendU16LE(wav, static_cast<std::uint16_t>(val));
+        const float s = std::sin(6.2831853f * freqHz * (static_cast<float>(i) / static_cast<float>(sampleRate))) * 0.75f;
+        appendU16LE(wav, static_cast<std::uint16_t>(static_cast<std::int16_t>(s * 32767.0f)));
     }
     return wav;
 }
 
 void addZipStoreEntry(std::vector<std::uint8_t>& zip, const std::string& path, const std::vector<std::uint8_t>& data)
 {
-    appendU32LE(zip, 0x04034b50u); // Local header signature
-    appendU16LE(zip, 20);          // Version needed
-    appendU16LE(zip, 0);           // General purpose bit flag
-    appendU16LE(zip, 0);           // Compression method 0 (STORE)
-    appendU16LE(zip, 0);           // Mod time
-    appendU16LE(zip, 0);           // Mod date
-    appendU32LE(zip, 0);           // CRC-32 (0 for simple test)
+    appendU32LE(zip, 0x04034b50u);
+    appendU16LE(zip, 20); appendU16LE(zip, 0); appendU16LE(zip, 0);
+    appendU16LE(zip, 0); appendU16LE(zip, 0); appendU32LE(zip, 0);
     appendU32LE(zip, static_cast<std::uint32_t>(data.size()));
     appendU32LE(zip, static_cast<std::uint32_t>(data.size()));
-    appendU16LE(zip, static_cast<std::uint16_t>(path.length()));
-    appendU16LE(zip, 0);           // Extra field length
+    appendU16LE(zip, static_cast<std::uint16_t>(path.length())); appendU16LE(zip, 0);
     zip.insert(zip.end(), path.begin(), path.end());
     zip.insert(zip.end(), data.begin(), data.end());
 }
@@ -214,6 +200,8 @@ int main()
     engine.releaseNote(0, 60);
     engine.releaseNote(9, 36);
     engine.releaseNote(9, 42);
+    engine.releaseNote(9, 46);
+    engine.allNotesOff();
     for (int b = 0; b < 20; ++b)
         engine.processAudio(outL.data(), outR.data(), 128);
 
@@ -247,19 +235,60 @@ int main()
         ++passed;
 
         abd::dsp::MasterSafetyLimiter limiter;
-        limiter.prepare(44100.0);
-        limiter.setCeilingDb(-0.2f);
-        std::vector<float> hotL(128, 2.5f); // +8 dBFS burst
-        std::vector<float> hotR(128, 2.5f);
+        limiter.prepare(44100.0); limiter.setCeilingDb(-0.2f);
+        std::vector<float> hotL(128, 2.5f), hotR(128, 2.5f);
         limiter.process(hotL.data(), hotR.data(), 128);
-
         float maxHot = 0.0f;
-        for (int i = 0; i < 128; ++i)
-        {
-            maxHot = std::max(maxHot, std::max(std::abs(hotL[static_cast<std::size_t>(i)]), std::abs(hotR[static_cast<std::size_t>(i)])));
-        }
+        for (int i = 0; i < 128; ++i) maxHot = std::max(maxHot, std::max(std::abs(hotL[i]), std::abs(hotR[i])));
         assert(maxHot <= 1.0f);
-        std::cout << "  [PASS] MasterSafetyLimiter strictly bounds +8 dBFS burst to <= 1.0 (peak: " << maxHot << ")" << std::endl;
+        std::cout << "  [PASS] MasterSafetyLimiter strictly bounds +8 dBFS burst <= 1.0" << std::endl;
+        ++passed;
+
+        // Slice 5: DspMultiBusFxRack 4-Topology & Multi-Bus Verification
+        abd::dsp::DspMultiBusFxRack rack;
+        rack.prepare(44100.0);
+        rack.setReturns(0.8f, 0.7f, 0.5f, 0.4f);
+        rack.setCascadeInjections(0.3f, 0.2f);
+
+        std::vector<float> rDryL(64, 0.1f), rDryR(64, 0.1f);
+        std::vector<float> rSendA(64, 0.4f), rSendB(64, 0.3f), rSendC(64, 0.2f), rSendD(64, 0.1f);
+
+        rack.setTopology(abd::dsp::DspMultiBusFxRack::Topology::ParallelSends);
+        rack.processMultiBus(rDryL.data(), rDryR.data(), rSendA.data(), rSendA.data(), rSendB.data(), rSendB.data(), rSendC.data(), rSendC.data(), rSendD.data(), rSendD.data(), 64, 1.0f);
+        assert(std::isfinite(rDryL[10]) && rDryL[10] != 0.1f);
+        rack.setTopology(abd::dsp::DspMultiBusFxRack::Topology::CascadeInjection);
+        rack.processMultiBus(rDryL.data(), rDryR.data(), rSendA.data(), rSendA.data(), rSendB.data(), rSendB.data(), rSendC.data(), rSendC.data(), rSendD.data(), rSendD.data(), 64, 1.0f);
+        rack.setTopology(abd::dsp::DspMultiBusFxRack::Topology::HybridSendInsert);
+        rack.processMultiBus(rDryL.data(), rDryR.data(), rSendA.data(), rSendA.data(), rSendB.data(), rSendB.data(), nullptr, nullptr, nullptr, nullptr, 64, 1.0f);
+        rack.setTopology(abd::dsp::DspMultiBusFxRack::Topology::SerialMaster);
+        rack.processMultiBus(rDryL.data(), rDryR.data(), nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 64, 1.0f);
+        abd::dsp::DspMultiBusFxRack::ControlFrame ctrl; ctrl.bpm = 135.0; ctrl.gates[0] = 1.0f; ctrl.gates[3] = 1.0f;
+        rack.processMultiBus(rDryL.data(), rDryR.data(), rSendA.data(), rSendA.data(), rSendB.data(), rSendB.data(), rSendC.data(), rSendC.data(), rSendD.data(), rSendD.data(), 64, 1.0f, ctrl);
+        assert(std::isfinite(rDryL[10]));
+        std::cout << "  [PASS] DspMultiBusFxRack executes all 4 topologies and ControlFrame RT-safely" << std::endl;
+        ++passed;
+
+        // Slice 6: LfoAnalog & McxParamRouter Dual LFO (IDs 68..81)
+        abd::synth::DspLfoUnit lfo; lfo.prepare(44100.0); lfo.setRateHz(2.0f);
+        lfo.setWaveform(abd::synth::DspLfoUnit::Waveform::Triangle); lfo.trigger();
+        for (int i = 0; i < 200; ++i) assert(std::isfinite(lfo.nextSample()));
+        lfo.setTempoSync(true); lfo.setBpm(120.0); lfo.setSyncDivision(abd::synth::DspLfoUnit::SyncDivision::Div1_4);
+        lfo.setWaveform(abd::synth::DspLfoUnit::Waveform::Sine); lfo.trigger(); assert(std::abs(lfo.nextSample()) <= 0.05f);
+
+        abdmcx::McxEngine engLfo; engLfo.prepare(44100.0);
+        abdmcx::routePartParam(engLfo, 0, 68, 7.0f); abdmcx::routePartParam(engLfo, 0, 71, 3.25f);
+        abdmcx::routePartParam(engLfo, 0, 73, 0.85f); abdmcx::routePartParam(engLfo, 0, 80, -0.6f);
+        assert(engLfo.part(0).lfo1Shape == 7 && engLfo.part(0).lfo1Rate == 3.25f && engLfo.part(0).lfo2Depth == -0.6f);
+        std::cout << "  [PASS] LfoAnalog and McxParamRouter (IDs 68..81) dual LFO verification" << std::endl;
+        ++passed;
+
+        // Slice 7: LcdTextFormatter & StickPlayer & VelocitySensitivityCurves
+        assert(abd::synth::LcdTextFormatter::pad("Test", 16) == "Test            ");
+        assert(abd::synth::LcdTextFormatter::formatCenter("OK", 16).length() == 16);
+        assert(abd::synth::LcdTextFormatter::formatSigned("P", 2, "st", 16).find("+2 st") != std::string::npos);
+        abdsynth::core::StickPlayer sp; sp.prepare(44100.0); assert(!sp.isPlaying());
+        assert(abdsynth::core::VelocitySensitivityProcessor::getPercussiveCurve().amplitudeResponse == 1.0f);
+        std::cout << "  [PASS] LcdTextFormatter, StickPlayer & VelocitySensitivityCurves verified" << std::endl;
         ++passed;
     }
 

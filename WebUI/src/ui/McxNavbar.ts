@@ -22,21 +22,21 @@ export interface McxNavbarCallbacks {
   onPanic: () => void;
   onEnableAudio: () => void;
   onToggleProbe: () => void;
+  onOpenFxRack?: () => void;
+  onOpenGlobalLfo?: () => void;
+  onOpenPianoRoll?: () => void;
+  onOpenGroove?: () => void;
   onSelectTab?: (tab: 'tone' | 'drums') => void;
 }
 
 function buildMenus() {
   return [
-    {
-      name: 'File', nameEs: 'Archivo',
-      items: [
+    { name: 'File', nameEs: 'Archivo', items: [
         { id: 98, label: 'Bank Manager...', labelEs: 'Navegador de Bancos...', action: 'openBankManager', shortcut: 'B' },
-        { separator: true },
         { id: 99, label: 'Save Part Preset (.abdpart)...', labelEs: 'Guardar Preset de Parte (.abdpart)...', action: 'savePartPreset', shortcut: 'Ctrl+S' },
         { id: 105, label: 'Save Multi Preset (.abdmulti)...', labelEs: 'Guardar Multi Preset (.abdmulti)...', action: 'saveMultiPreset' },
         { separator: true },
         { id: 100, label: 'Configure Working Folder...', labelEs: 'Configurar Directorio de Trabajo...', action: 'configureFolder' },
-        { separator: true },
         { id: 101, label: 'Load Soundbank (.abdbank)...', labelEs: 'Cargar Banco (.abdbank)...', action: 'loadBank', shortcut: 'Ctrl+O' },
         { separator: true },
         { id: 102, label: 'Factory Preset Reset', labelEs: 'Restablecer Fábrica', action: 'factoryReset' },
@@ -70,6 +70,10 @@ function buildMenus() {
     {
       name: 'Tools', nameEs: 'Herramientas',
       items: [
+        { id: 300, label: 'Master Multi-Bus FX Rack...', labelEs: 'Rack Multibus de Efectos...', action: 'openFxRack', shortcut: 'Ctrl+F' },
+        { id: 302, label: 'Master Global LFOs...', labelEs: 'LFOs Globales (Master)...', action: 'openGlobalLfo', shortcut: 'Ctrl+L' },
+        { id: 303, label: 'Piano Roll Sequencer...', labelEs: 'Secuenciador Rollo Pianola...', action: 'openPianoRoll', shortcut: 'Ctrl+P' },
+        { id: 304, label: 'Master Groove & Shuffle...', labelEs: 'Groove y Shuffle Maestro...', action: 'openGroove', shortcut: 'Ctrl+G' },
         { id: 301, label: '440 Hz Signal Probe...', labelEs: 'Sonda de Señal 440 Hz...', action: 'toggleProbe', shortcut: 'Ctrl+4' },
       ],
     },
@@ -138,30 +142,24 @@ export class McxNavbar {
     else if (action === 'toggleScheme') this.cb.themeMgr.toggleScheme();
     else if (action === 'themeFamily') this.cb.themeMgr.setFamily(value as ThemeFamilyKey);
     else if (action === 'locale' && (value === 'es' || value === 'en')) setLocale(value);
+    else if (action === 'openFxRack') this.cb.onOpenFxRack?.();
+    else if (action === 'openGlobalLfo') this.cb.onOpenGlobalLfo?.();
+    else if (action === 'openPianoRoll') this.cb.onOpenPianoRoll?.();
+    else if (action === 'openGroove') this.cb.onOpenGroove?.();
     else if (action === 'toggleProbe') this.cb.onToggleProbe();
-    else if (action === 'tab' && (value === 'tone' || value === 'drums')) this.cb.onSelectTab(value);
+    else if (action === 'tab' && (value === 'tone' || value === 'drums')) this.cb.onSelectTab?.(value);
   }
 
   public mount(): void {
     this.navBar?.destroy?.();
     this.container.innerHTML = '';
     this.navBar = createSynthNavBar({
-      container: this.container,
-      locale: getLocale(),
-      brand: { title: 'ABDMCX0X', subtitle: '' },
-      menus: buildMenus(),
-      centerSlot: this.createCenterSlot(),
-      rightSlot: this.createRightSlot(),
-      enableGlobalShortcuts: false,
-      activeValues: { themeFamily: this.cb.themeMgr.getFamily(), locale: getLocale() },
+      container: this.container, locale: getLocale(), brand: { title: 'ABDMCX0X', subtitle: '' },
+      menus: buildMenus(), centerSlot: this.createCenterSlot(), rightSlot: this.createRightSlot(),
+      enableGlobalShortcuts: false, activeValues: { themeFamily: this.cb.themeMgr.getFamily(), locale: getLocale() },
       aboutDialog: {
-        appName: 'ABDMCX0X',
-        subtitle: t('mcx.subtitle'),
-        version: '1.0.0',
-        repo: 'ajabadia/ABDMCX0X',
-        buildInfo: t('mcx.aboutBuildInfo'),
-        author: 'ABDSynths',
-        copyright: '© 2026 ABDSynths',
+        appName: 'ABDMCX0X', subtitle: t('mcx.subtitle'), version: '1.0.0',
+        repo: 'ajabadia/ABDMCX0X', buildInfo: t('mcx.aboutBuildInfo'), author: 'ABDSynths', copyright: '© 2026 ABDSynths',
       },
       onAction: (action: string, value?: unknown) => this.dispatch(action, value),
     });
@@ -174,15 +172,13 @@ export class McxNavbar {
   }
 
   public sync(): void {
-    const family = this.cb.themeMgr.getFamily();
-    const scheme = this.cb.themeMgr.getRenderedScheme();
+    const family = this.cb.themeMgr.getFamily(), scheme = this.cb.themeMgr.getRenderedScheme();
     const sel = this.container.querySelector('#nav-theme-select') as HTMLSelectElement | null;
     if (sel) sel.value = family;
     const q = (s: string) => this.container.querySelector(s);
-    if (q('#btn-scheme')) q('#btn-scheme')!.textContent = scheme === 'dark' ? t('mcx.themeLight') : t('mcx.themeDark');
-    if (q('#btn-settings')) q('#btn-settings')!.textContent = t('mcx.settingsBtn');
-    if (q('#btn-locale')) q('#btn-locale')!.textContent = getLocale().toUpperCase();
-    if (q('#btn-panic')) q('#btn-panic')!.textContent = t('mcx.panic');
+    const bSch = q('#btn-scheme'), bSet = q('#btn-settings'), bLoc = q('#btn-locale'), bPan = q('#btn-panic');
+    if (bSch) bSch.textContent = scheme === 'dark' ? t('mcx.themeLight') : t('mcx.themeDark');
+    if (bSet) bSet.textContent = t('mcx.settingsBtn'); if (bLoc) bLoc.textContent = getLocale().toUpperCase(); if (bPan) bPan.textContent = t('mcx.panic');
     const btnAudio = q('#btn-audio');
     if (btnAudio) {
       const { state, detail } = this.audioStatus;

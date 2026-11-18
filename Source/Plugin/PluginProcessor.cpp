@@ -3,10 +3,11 @@
 #include "../Core/McxBankLoader.h"
 #include "../Core/McxFactoryBank.h"
 #include "../Core/McxParamRouter.h"
-#include "../State/Conversion.gen.h"
+#include "../State/McxApvtsApplier.h"
 
 #include <algorithm>
 #include <cmath>
+#include <string_view>
 
 namespace abdmcx {
 
@@ -33,15 +34,11 @@ McxAudioProcessor::~McxAudioProcessor() {
 void McxAudioProcessor::hydrateSharedContracts() {
 #ifdef ABDSHARED_CONTRACTS_DIR
     const juce::File contractsDir(ABDSHARED_CONTRACTS_DIR);
-    if (contractsDir.isDirectory()) {
-        hardwareBridge_.loadContractsDirectory(contractsDir.getFullPathName().toStdString());
-        return;
-    }
+    if (contractsDir.isDirectory()) { hardwareBridge_.loadContractsDirectory(contractsDir.getFullPathName().toStdString()); return; }
 #endif
     const auto exeDir = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory();
-    const auto siblingContracts = exeDir.getChildFile("Contracts");
-    if (siblingContracts.isDirectory()) {
-        hardwareBridge_.loadContractsDirectory(siblingContracts.getFullPathName().toStdString());
+    if (const auto sib = exeDir.getChildFile("Contracts"); sib.isDirectory()) {
+        hardwareBridge_.loadContractsDirectory(sib.getFullPathName().toStdString());
     }
 }
 
@@ -55,7 +52,8 @@ void McxAudioProcessor::prepareToPlay(double sampleRate, int /*samplesPerBlock*/
     currentSampleRate_.store(sr, std::memory_order_release);
     engine_.prepare(sr);
     hardwareBridge_.getLatencyCompensator().prepare(sr);
-    uiMidiCollector_.reset(sr);
+    uiCommandQueue_.clear();
+    syncHostLatencyReport();
 }
 
 void McxAudioProcessor::releaseResources() {
@@ -71,8 +69,10 @@ void McxAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
         buffer.clear(i, 0, numSamples);
     }
 
-    // Merge lock-free UI keyboard / drum pad MIDI events into the block
-    uiMidiCollector_.removeNextBlockOfMessages(midiMessages, numSamples);
+    // Drain lock-free UI/WebView commands on audio thread (exact partIdx, zero allocations)
+    drainCommandQueue(uiCommandQueue_, engine_, [this](std::uint32_t idx, float v) noexcept {
+        applyApvtsIndexToEngine(idx, v);
+    });
 
     // Sync host tempo if available
     if (auto* playHead = getPlayHead()) {
@@ -81,7 +81,7 @@ void McxAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
         }
     }
 
-    // Process incoming MIDI (DAW + UI + Hardware inbound)
+    // Process incoming DAW MIDI (notes -> engine, CCs/NRPNs/SysEx -> hardwareBridge without double-trigger)
     for (const auto metadata : midiMessages) {
         const auto msg = metadata.getMessage();
         const int ch1to16 = std::clamp(msg.getChannel(), 1, 16);
@@ -93,8 +93,10 @@ void McxAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
             engine_.allNotesOff();
         }
         hardwareBridge_.processInboundMidiBuffer(
-            msg.getRawData(), static_cast<std::size_t>(msg.getRawDataSize()));
+            msg.getRawData(), static_cast<std::size_t>(msg.getRawDataSize()), false);
     }
+    // Clear inbound buffer before emitting outbound MIDI to prevent VST3 host echo/feedback loops
+    midiMessages.clear();
 
     // Render internal DSP audio
     float* left = buffer.getWritePointer(0);
@@ -114,6 +116,13 @@ void McxAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
     lastPeakR_.store(peakR, std::memory_order_relaxed);
     lastActiveVoices_.store(engine_.getActiveVoiceCount(), std::memory_order_relaxed);
 
+    const auto pPeaks = engine_.getPartPeaks();
+    const auto pMidiPeaks = engine_.getPartMidiPeaks();
+    for (std::size_t p = 0; p < 16; ++p) {
+        lastPartPeaks_[p].store(pPeaks[p], std::memory_order_relaxed);
+        lastPartMidiPeaks_[p].store(pMidiPeaks[p], std::memory_order_relaxed);
+    }
+
     const int writeIdx = 1 - scopeReadBufferIndex_.load(std::memory_order_relaxed);
     auto& dst = scopeBuffers_[static_cast<std::size_t>(writeIdx)];
     const int copyN = std::min(numSamples, 128);
@@ -132,39 +141,42 @@ void McxAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
 }
 
 void McxAudioProcessor::enqueueUiNoteOn(int partIdx, int midiNote, float velocity) {
-    const int ch = std::clamp(static_cast<int>(engine_.part(partIdx).midiChannel), 1, 16);
-    const auto vel = std::clamp(velocity, 0.01f, 1.0f);
-    auto msg = juce::MidiMessage::noteOn(ch, std::clamp(midiNote, 0, 127), vel);
-    msg.setTimeStamp(juce::Time::getMillisecondCounterHiRes() * 0.001);
-    uiMidiCollector_.addMessageToQueue(msg);
+    uiCommandQueue_.push({ McxUiCommand::Type::PartNoteOn, static_cast<std::uint8_t>(std::clamp(partIdx, 0, McxEngine::kNumParts - 1)),
+                           static_cast<std::uint8_t>(std::clamp(midiNote, 0, 127)), 0, -1, std::clamp(velocity, 0.01f, 1.0f) });
 }
-
 void McxAudioProcessor::enqueueUiNoteOff(int partIdx, int midiNote) {
-    const int ch = std::clamp(static_cast<int>(engine_.part(partIdx).midiChannel), 1, 16);
-    auto msg = juce::MidiMessage::noteOff(ch, std::clamp(midiNote, 0, 127));
-    msg.setTimeStamp(juce::Time::getMillisecondCounterHiRes() * 0.001);
-    uiMidiCollector_.addMessageToQueue(msg);
+    uiCommandQueue_.push({ McxUiCommand::Type::PartNoteOff, static_cast<std::uint8_t>(std::clamp(partIdx, 0, McxEngine::kNumParts - 1)),
+                           static_cast<std::uint8_t>(std::clamp(midiNote, 0, 127)), 0, -1, 0.0f });
 }
-
 void McxAudioProcessor::enqueueUiAllNotesOff() {
-    auto msg = juce::MidiMessage::allNotesOff(1);
-    msg.setTimeStamp(juce::Time::getMillisecondCounterHiRes() * 0.001);
-    uiMidiCollector_.addMessageToQueue(msg);
+    uiCommandQueue_.push({ McxUiCommand::Type::AllNotesOff, 0, 0, 0, -1, 0.0f });
 }
-
+void McxAudioProcessor::enqueuePartRoute(int partIdx, int routeMode, int midiChannel, int midiPort, int kind) {
+    uiCommandQueue_.push({ McxUiCommand::Type::SetPartRoute, static_cast<std::uint8_t>(std::clamp(partIdx, 0, McxEngine::kNumParts - 1)),
+                           static_cast<std::uint8_t>(std::clamp(routeMode, 0, 2)), static_cast<std::uint8_t>(std::clamp(midiChannel, 0, 16)),
+                           static_cast<std::int16_t>(midiPort), static_cast<float>(kind) });
+}
 void McxAudioProcessor::applyWebParam(int partIdx, int paramId, float value) {
-    if (partIdx >= 0 && partIdx < McxEngine::kNumParts) {
+    if (partIdx >= 0 && partIdx < McxEngine::kNumParts)
         focusedPartIndex_.store(static_cast<uint32_t>(partIdx), std::memory_order_relaxed);
-    }
-    applyWebPartParam(engine_, partIdx, paramId, value);
+    uiCommandQueue_.push({ McxUiCommand::Type::SetPartParam, static_cast<std::uint8_t>(std::clamp(partIdx, 0, McxEngine::kNumParts - 1)),
+                           0, 0, static_cast<std::int16_t>(paramId), value });
 }
-
 void McxAudioProcessor::setMasterVolumeLinear(float linearGain) {
-    engine_.setMasterVolume(std::clamp(linearGain, 0.0f, 1.5f));
+    uiCommandQueue_.push({ McxUiCommand::Type::SetMasterVolume, 0, 0, 0, -1, linearGain });
 }
-
 void McxAudioProcessor::setTempoBpm(double bpm) {
-    engine_.setTempoBpm(std::clamp(bpm, 20.0, 300.0));
+    uiCommandQueue_.push({ McxUiCommand::Type::SetTempoBpm, 0, 0, 0, -1, static_cast<float>(bpm) });
+}
+void McxAudioProcessor::setSendBusMute(int busIdx, bool muted) {
+    uiCommandQueue_.push({ McxUiCommand::Type::SetSendBusMute, 0, static_cast<std::uint8_t>(std::clamp(busIdx, 0, 3)), 0, -1, muted ? 1.0f : 0.0f });
+}
+void McxAudioProcessor::setLiveZeroLatency(bool enabled) {
+    hardwareBridge_.getLatencyCompensator().setLiveZeroLatency(enabled);
+    syncHostLatencyReport();
+}
+void McxAudioProcessor::syncHostLatencyReport() {
+    setLatencySamples(static_cast<int>(hardwareBridge_.getLatencyCompensator().getEffectiveDelaySamples()));
 }
 
 void McxAudioProcessor::resetToFactory() {
@@ -197,6 +209,21 @@ McxTelemetrySnapshot McxAudioProcessor::readTelemetrySnapshot() const noexcept {
     snap.sampleRate = currentSampleRate_.load(std::memory_order_acquire);
     const int readIdx = scopeReadBufferIndex_.load(std::memory_order_acquire);
     snap.samplesL = scopeBuffers_[static_cast<std::size_t>(readIdx)];
+
+    const auto& fx = const_cast<McxEngine&>(engine_).getOutputAndFx();
+    const auto t = fx.getTelemetry();
+    snap.peakSendA = t.peakSendA; snap.peakSendB = t.peakSendB;
+    snap.peakSendC = t.peakSendC; snap.peakSendD = t.peakSendD;
+    snap.limiterGrDb = t.limiterGainReductionDb;
+    for (int b = 0; b < 4; ++b) snap.sendBusMutes[static_cast<std::size_t>(b)] = fx.isSendBusMuted(b);
+    const auto l = fx.getActiveSendLabels();
+    snap.sendNameA = l.sendA; snap.sendNameB = l.sendB;
+    snap.sendNameC = l.sendC; snap.sendNameD = l.sendD;
+    snap.lfoPhase = (snap.activeVoices > 0) ? 1.0f : 0.0f;
+    for (std::size_t p = 0; p < 16; ++p) {
+        snap.partPeaks[p] = lastPartPeaks_[p].load(std::memory_order_relaxed);
+        snap.partMidiPeaks[p] = lastPartMidiPeaks_[p].load(std::memory_order_relaxed);
+    }
     return snap;
 }
 
@@ -205,18 +232,12 @@ void McxAudioProcessor::updateSystemSettings(const McxSystemSettings& next) {
     settings_.maxPolyphony = std::clamp(settings_.maxPolyphony, 8, 64);
     settings_.masterTuneHz = std::clamp(settings_.masterTuneHz, 415.0f, 466.0f);
     settings_.standaloneBpm = std::clamp(settings_.standaloneBpm, 40.0f, 240.0f);
-    if (!settings_.workingDirectory.empty()) {
-        McxSystemSettings::ensureWorkingDirScaffold(settings_.workingDirectory);
-    }
-    engine_.setMaxPolyphony(settings_.maxPolyphony);
-    engine_.setMasterTuneHz(settings_.masterTuneHz);
-    engine_.setMasterTempoBpm(settings_.standaloneBpm);
-    settings_.saveToDisk();
+    if (!settings_.workingDirectory.empty()) McxSystemSettings::ensureWorkingDirScaffold(settings_.workingDirectory);
+    engine_.setMaxPolyphony(settings_.maxPolyphony); engine_.setMasterTuneHz(settings_.masterTuneHz);
+    engine_.setMasterTempoBpm(settings_.standaloneBpm); settings_.saveToDisk();
 }
 
-juce::AudioProcessorEditor* McxAudioProcessor::createEditor() {
-    return new McxAudioProcessorEditor(*this);
-}
+juce::AudioProcessorEditor* McxAudioProcessor::createEditor() { return new McxAudioProcessorEditor(*this); }
 
 void McxAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
     juce::ValueTree root("ABDMCX0XState");
@@ -243,47 +264,25 @@ void McxAudioProcessor::setStateInformation(const void* data, int sizeInBytes) {
     if (tree.hasProperty("mcxPresetJson")) {
         McxBankManagerBridge::deserializeFromJson(
             engine_, hardwareBridge_, tree.getProperty("mcxPresetJson").toString().toStdString());
+        syncHostLatencyReport();
     }
 }
 
 void McxAudioProcessor::parameterChanged(const juce::String& parameterID, float newValue) {
-    applyParameterToEngine(parameterID, newValue);
+    const std::string_view idView(parameterID.toRawUTF8());
+    std::int16_t foundIdx = -1;
+    for (const auto& d : kParameterDescriptors) {
+        if (idView == d.id) { foundIdx = static_cast<std::int16_t>(d.index); break; }
+    }
+    if (foundIdx < 0) return;
+    if (auto* mm = juce::MessageManager::getInstanceWithoutCreating(); mm != nullptr && mm->isThisTheMessageThread())
+        uiCommandQueue_.push({ McxUiCommand::Type::SetApvtsParam, 0, 0, 0, foundIdx, newValue });
+    else
+        applyApvtsIndexToEngine(static_cast<std::uint32_t>(foundIdx), newValue);
 }
 
-void McxAudioProcessor::applyParameterToEngine(const juce::String& paramId, float value) {
-    if (paramId == ParamId::FocusedPartIndex) {
-        focusedPartIndex_.store(static_cast<uint32_t>(std::clamp(static_cast<int>(value), 0, 15)));
-        engine_.setFocusedPart(static_cast<int>(focusedPartIndex_.load()));
-        return;
-    }
-    if (paramId == ParamId::MasterVolumeDb) { engine_.setMasterVolume(dbToGain(value)); return; }
-    if (paramId == ParamId::OutputCharacter) { engine_.setOutputCharacter(static_cast<McxOutputCharacter>(static_cast<int>(value))); return; }
-    if (paramId == ParamId::PartialBudgetMode) {
-        const int idx = static_cast<int>(value);
-        engine_.setPartialBudget(idx == 1 ? 28 : (idx == 2 ? 64 : (idx == 3 ? 32 : 128)));
-        return;
-    }
-    if (paramId == ParamId::MachinePersona) { engine_.setMachinePersona(static_cast<McxMachinePersona>(static_cast<int>(value))); return; }
-    if (paramId == ParamId::PolyphonyVoices) { engine_.setMaxPolyphony(static_cast<int>(value)); return; }
-
-    auto& p = engine_.part(static_cast<int>(focusedPartIndex_.load()));
-    if (paramId == ParamId::PartRouteMode) p.routeMode = static_cast<McxPartRouteMode>(static_cast<int>(value));
-    else if (paramId == ParamId::PartLevel) p.level = std::clamp(value, 0.0f, 1.0f);
-    else if (paramId == ParamId::PartPan) p.pan = std::clamp(value, -1.0f, 1.0f);
-    else if (paramId == ParamId::PartFilterModel) {
-        p.filterModel = static_cast<McxFilterModel>(std::clamp(static_cast<int>(value), 0, 5));
-        for (auto& partial : p.partials) partial.filterModel = p.filterModel;
-    } else if (paramId == ParamId::TvfCutoffOffset) {
-        for (auto& partial : p.partials) partial.cutoffHz = std::clamp(12000.0f + value * 100.0f, 20.0f, 20000.0f);
-    } else if (paramId == ParamId::TvfResonanceOffset) {
-        for (auto& partial : p.partials) partial.resonance = std::clamp(0.15f + value * 0.01f, 0.0f, 0.98f);
-    } else if (paramId == ParamId::ZplaneMorph) {
-        for (auto& partial : p.partials) partial.zplaneMorph = value;
-    } else if (paramId == ParamId::PartReverbSend) p.reverbSend = std::clamp(value * 0.01f, 0.0f, 1.0f);
-    else if (paramId == ParamId::PartChorusSend) p.chorusSend = std::clamp(value * 0.01f, 0.0f, 1.0f);
-    else if (paramId == ParamId::VectorX) p.vectorX = std::clamp(value, -1.0f, 1.0f);
-    else if (paramId == ParamId::VectorY) p.vectorY = std::clamp(value, -1.0f, 1.0f);
-    else if (paramId == ParamId::DrumMapMode) p.drumMapMode = static_cast<McxDrumMapMode>(static_cast<int>(value));
+void McxAudioProcessor::applyApvtsIndexToEngine(std::uint32_t paramIdx, float value) noexcept {
+    applyApvtsParamIndex(engine_, focusedPartIndex_, paramIdx, value);
 }
 
 } // namespace abdmcx

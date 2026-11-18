@@ -1,0 +1,126 @@
+/* ABDMCX0X -- Channel Strip Mute/Solo, Vertical Fader & Dual Audio/MIDI VU Tower */
+
+.mcx-strip-ms-row {
+  display: flex;
+  gap: 2px;
+  width: 100%;
+  justify-content: center;
+}
+.mcx-strip-ms-btn {
+  appearance: none;
+  flex: 1;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-panel-border-dim);
+  background: var(--color-panel-surface);
+  color: var(--color-text-dim);
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 0;
+  text-align: center;
+}
+.mcx-strip-ms-btn.is-mute { background: var(--color-danger); border-color: var(--color-danger); color: var(--color-bg-base); }
+.mcx-strip-ms-btn.is-solo { background: var(--color-warning); border-color: var(--color-warning); color: var(--color-bg-base); }
+
+.mcx-strip-fader-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  flex: 1;
+  min-height: 110px;
+  justify-content: flex-end;
+  padding: 2px 0 0;
+}
+.mcx-strip-fader-row {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  flex: 1;
+  min-height: 100px;
+  max-height: 175px;
+  height: 100%;
+}
+.mcx-strip-fader {
+  appearance: slider-vertical;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 22px;
+  height: 100%;
+  min-height: 90px;
+  cursor: pointer;
+}
+.mcx-strip-vumeter {
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-start;
+  gap: 1.5px;
+  width: 7px;
+  height: 100%;
+  min-height: 90px;
+  padding: 2px 1.5px;
+  box-sizing: border-box;
+  background: var(--color-lcd-bg);
+  border: 1px solid rgba(var(--color-scrim-rgb), 0.85);
+  border-radius: 2px;
+  box-shadow: inset 0 1px 3px rgba(var(--color-scrim-rgb), 0.9);
+}
+.mcx-vu-seg {
+  width: 100%;
+  flex: 1;
+  min-height: 4px;
+  border-radius: 1px;
+  opacity: 0.25;
+  border: 1px solid rgba(var(--color-scrim-rgb), 0.45);
+  transition: opacity 0.04s ease-out, box-shadow 0.04s ease-out;
+}
+/* Audio zone tints */
+.mcx-vu-seg.is-low { background: var(--color-accent); }
+.mcx-vu-seg.is-mid { background: var(--color-warning); }
+.mcx-vu-seg.is-hot { background: color-mix(in srgb, var(--color-warning) 55%, var(--color-danger)); }
+.mcx-vu-seg.is-peak { background: var(--color-danger); }
+
+/* Lit states with hardware specular highlight */
+.mcx-vu-seg.is-lit { opacity: 1; }
+.mcx-vu-seg.is-lit.is-low {
+  background: var(--color-accent);
+  box-shadow: 0 0 5px var(--color-accent), inset 0 1px 1px rgba(var(--color-text-main-rgb), 0.55);
+}
+.mcx-vu-seg.is-lit.is-mid {
+  background: var(--color-warning);
+  box-shadow: 0 0 5px var(--color-warning), inset 0 1px 1px rgba(var(--color-text-main-rgb), 0.65);
+}
+.mcx-vu-seg.is-lit.is-hot {
+  background: color-mix(in srgb, var(--color-warning) 55%, var(--color-danger));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-warning) 55%, var(--color-danger)), inset 0 1px 1px rgba(var(--color-text-main-rgb), 0.75);
+}
+.mcx-vu-seg.is-lit.is-peak {
+  background: var(--color-danger);
+  box-shadow: 0 0 7px var(--color-danger), inset 0 1px 1px var(--color-text-main);
+}
+
+/* External MIDI activity telemetry mode */
+.mcx-strip-vumeter.is-midi-mode .mcx-vu-seg {
+  background: var(--color-cable-midi-out);
+}
+.mcx-strip-vumeter.is-midi-mode .mcx-vu-seg.is-peak {
+  background: color-mix(in srgb, var(--color-cable-midi-out) 60%, var(--color-text-main));
+}
+.mcx-strip-vumeter.is-midi-mode .mcx-vu-seg.is-lit {
+  background: var(--color-cable-midi-out);
+  box-shadow: 0 0 6px var(--color-cable-midi-out), inset 0 1px 1px rgba(var(--color-text-main-rgb), 0.65);
+}
+
+.mcx-strip-lvl-val {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+.mcx-part-list,
+.mcx-part-row { display: none; }

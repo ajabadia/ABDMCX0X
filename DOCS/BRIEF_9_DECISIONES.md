@@ -1,59 +1,82 @@
 # Brief de Diseño y Arquitectura en 9 Decisiones — ABDMCX0X
 
-> **Propósito:** Fijar de forma inequívoca el alcance, la arquitectura y los límites de **ABDMCX0X** antes de construir cada capa (plantilla de *9 Decisiones* + decisiones técnicas del ecosistema `ABDSynths`), evitando iteraciones innecesarias y retrabajo.
+> **Propósito:** Fijar de forma inequívoca el alcance, la arquitectura y los límites de **ABDMCX0X** (plantilla de *9 Decisiones* + decisiones técnicas del ecosistema `ABDSynths`), armonizado con la visión consolidada v5 de Groovebox Multi-Motor de 16 Partes y Chasis Host Modular.  
+> **Estado:** Documento vivo de diseño y alcance consolidado (v3 — sincronizado con `VISION_GROOVEBOX_16P.md` y arquitectura multi-motor `IMcxSoundEngine`).  
+> **Última actualización:** 2026-11-18
 
 ---
 
 ## TU FRASE · HIPÓTESIS DEL PRODUCTO
 
-> *«Un Groove-Rompler estructurado de 4 Partials Estéreo y Controlador universal de módulos de los 90 (VST3 / Standalone / WASM), libre de ROMs y muestras protegidas, con partes de síntesis e intercambio de filtros/DAC modulares y modo espejo MIDI/NRPN/SysEx en vivo (`INT | EXT | A-B`) gobernado por contratos.»*
+> *«Una Groovebox Modular Autónoma de 16 Partes Libres con Chasis Host Multi-Motor (Structured Rompler, VA Juno, Control Hardware MIDI Out por Contratos y futuros motores de la suite), Secuenciador Piano-Roll PPQ, Consola Mezclador Full-Height y Controlador universal (VST3 / Standalone / WASM), libre de ROMs protegidas, con filtros/DAC modulares, transporte integrado y piezas transversales DRY de ABDShared.»*
 
 ---
 
 ## Las 9 Decisiones Cerradas
 
 ### 1. ¿Qué tipo de instrumento es?
-- Instrumento híbrido **Structured Rompler + Drum Synth Rack + Controlador Hardware MIDI/NRPN/SysEx**, en formatos **VST3**, **Standalone** y **WASM (`AudioWorklet`)**.
-- Interfaz gráfica obligatoria en **WebView2** (enlazado estático en Windows) usando componentes Zero-Fork de `ABDShared` (`SynthNavBar`, `LcdDisplay`, `Scope`, `FitStage`, `StepMatrix`, `@abdsynths/midi-keyb`, `ABDBankManager`).
-- **Salida de audio:** Bus **Estéreo `2.0`** único en v1 (basta para mezcla en DAW; entradas de audio desactivadas por defecto siguiendo la regla de arranque WASAPI/CoreAudio).
-- **Producto único:** sin variantes de compilación (`CLASSIC`/`PLUS`/`EXPANDED`). Los módulos internos (**filtro**, **etapa DAC/cuantización**, **estructura de 4 Partials**, **matriz FX**) se intercambian en caliente por parte/preset.
-- **Modos de Máquina (*Personas*) vs Modo Libre (`FreeSuper`):** además del **Modo Libre / Super** (hasta 4 Partials, 64 voces dinámicas, 6 filtros y mapa de batería libre `0..127`), la interfaz permite activar modos presintonizados que aplican tema visual y límites curados de máquina (*Roland MC-303* con presupuesto auténtico de 28 Partials, *MC-505/D-2*, *Yamaha CS2x/XG*, *Korg N5/AI2*, *E-mu Orbit*, *Quasimidi 309*). La polifonía es dinámica desde Settings y las voces/partials inactivos consumen `0 %` de CPU.
+- Instrumento híbrido **Groovebox Modular Completa de 16 Partes + Chasis Host Multi-Motor (`IMcxSoundEngine`) + Rompler Estructurado Independiente + Control Hardware MIDI Out + Secuenciador PPQ + Consola Mezcladora**, en formatos **VST3**, **Standalone** y **WASM (`AudioWorklet`)**.
+- **Chasis Host Multi-Motor Aséptico:** ABDMCX0X desacopla la workstation de cualquier motor sonoro específico. Las 16 pistas alojan motores intercambiables que implementan la interfaz C++20 `IMcxSoundEngine`:
+  - **`StructuredRomplerEngine`**: motor nativo de 4 parciales PCM estéreo, doble filtro en serie, envolventes 4T4L y vector mixing (gobernado por `abd_structured_rompler.schema.json`).
+  - **`JunoEngine`**: motor analógico virtual de topología completa (DCO, IR3109 VCF, HPF Bass Boost, Chorus BBD I/II) importado de `ABDJUNiO601` con sus 128 patches de fábrica intactos.
+  - **`ExternalMidiEngine`**: puente de control directo a hardware MIDI externo mediante contratos JSON asépticos (`HardwareMirrorRouter`).
+  - **Futuros motores de la suite**: `Ms2000Engine` (DWGS / VA), `CzEngine` (Phase Distortion), etc.
+- Interfaz gráfica obligatoria en **WebView2** (enlazado estático en Windows) usando componentes Zero-Fork de `ABDShared` (`SynthNavBar`, `CompactTransportBar`, `StepButtonStrip`, `MpcPadMatrix`, `MultiBusFxRackModal`, `GlobalLfoModal`, `PianoRollModal`, `GrooveShuffleModal`, `@abdsynths/midi-keyb`, `Scope`, `ABDBankManager`).
+- **Salida de audio:** Bus **Estéreo `2.0`** único en v1 con etapa protectora `MasterSafetyLimiter` (entradas de audio desactivadas por defecto siguiendo la regla de arranque WASAPI/CoreAudio).
+- **Producto único con motor libre:** sin variantes de compilación ni modos limitadores artificiales de polifonía o partials. Las 16 partes operan a motor libre (hasta 64 voces dinámicas con `0 %` de CPU en reposo).
+- **Temas Visuales Vintage:** la personalidad y estética de las máquinas de referencia (*Roland MC-303*, *Boss DR-5*, *Korg MS2000*, *Neuron*) se disfrutan como **Temas Visuales** intercambiables en Claro y Oscuro desde el `ThemeManager`.
 
 ### 2. ¿Para quién es y dónde se usa?
-- Productores de estudio y directo que buscan la pegada e inmediatez de los módulos y grooveboxes de los 90/2000 (MC-303/505/909, D-2, SC-55, DR-5, Quasimidi Rave-O-Lution 309, E-mu Orbit/Carnival, Yamaha TG33, Korg M1/Wavestation) tanto en software autónomo como controlando y comparando en A/B el hardware real desde el mismo plugin.
+- Productores de estudio y músicos de directo que buscan la pegada, inmediatez y flujo de trabajo de las grooveboxes y cajas de ritmo de los 90/2000 (Roland MC-303/505/909, D-2, Boss DR-5, Akai MPC, Quasimidi 309, E-mu Orbit) tanto de forma autónoma en directo/bocetado (con su secuenciador, pads y metrónomo propios) como integrado en DAW vía VST3.
 
 ### 3. ¿De dónde sale el sonido? (Seguridad Legal y Propiedad Intelectual)
-- **Cero Mask ROMs y cero PCM protegido de fábrica:** jamás se incrustan ni ejecutan ROMs de fabricantes (`IC3`, `SC-55`, etc.) ni librerías con copyright de terceros ni código GPLv3 (`grvbox-main`) o sin licencia (`MC3o3-arpegiator`).
-- **Estrategia de *De-Baking* (des-horneado):** los WAVs externos o capturas de referencia llevan impresos el Pitch Env, el TVF y el TVA. Con `ABDNeuModMakr` y `ABDAudioLab` destilamos **ondas base crudas y estacionarias** (síntesis espectral + residuo DDSP Bark en 24 bandas + VA `PolyBLEP`), y `ABDMCX0X` reconstruye la envolvente `4T4L` y el filtrado en tiempo real para permitir edición libre completa.
-- **Formato propietario evolucionado ([`abd_structured_rompler.schema.json`](../../ABDShared/Contracts/abd_structured_rompler.schema.json)):** supera a `SF2` y `SFZ` uniendo en una cápsula: `wavePool` (*spectral DDSP*, *PCM*, *VA*, *FM*, *Axionik Surface*), hasta **4 Partials Estéreo**, estructuras `RingMod`/`Booster`/`Parallel`/`Vector 2D (X,Y)`, **6 modelos de filtro** (incl. `RolandTc6116Tvf` y `ZPlaneMorph`), envolventes de **5 etapas** (`L0..L4`/`T0..T4` con LUTs `IC7`), *PatchCords* (`ModMatrixT`) y **Drum Maps multi-estándar** (`gm_standard`, `roland_gs_mc`, `yamaha_xg_xs`, `korg_ai2_n5`, `hardware_native`, `proprietary_custom` `0..127`) con *mute groups* `1..31`, disparo `OneShot`/`Gated` y remapeador bidireccional (`DrumNoteRemapper`).
-- **Librerías Akai / E-mu / Yamaha / Roland del usuario:** en v1 se convierten offline con `ABDNeuModMakr` al formato propietario. Dado que el motor de formatos vive ya en TypeScript en `ABDShared/Code/SamplerFormats`, cuando el núcleo C++ de `ABDMCX0X` esté pulido bastará exponer el cargador del contrato propietario al bridge JS sin rehacer una línea del DSP.
+- **Cero Mask ROMs y cero PCM protegido de fábrica:** jamás se incrustan ni ejecutan ROMs de fabricantes ni librerías con copyright de terceros ni código GPLv3 o sin licencia.
+- **Estrategia de *De-Baking* (des-horneado):** las ondas base crudas y estacionarias se destilan con herramientas offline (`ABDNeuModMakr` / `ABDAudioLab`), y `ABDMCX0X` reconstruye envolventes `4T4L`, modulación y doble filtrado en tiempo real para edición completa.
+- **Formato propietario evolucionado ([`abd_structured_rompler.schema.json`](../../ABDShared/Contracts/abd_structured_rompler.schema.json)):** une en una cápsula: `wavePool`, hasta **4 Partials Estéreo**, estructuras `RingMod`/`Booster`/`Parallel`/`Vector 2D`, **doble filtro en serie** (6 modelos, incl. `RolandTc6116Tvf` y `ZPlaneMorph`), envolventes `4T4L`, ModMatrix y **Drum Maps multi-estándar** (`0..127`) con *choke groups `0..15`*, disparo `OneShot`/`Gated` y envíos independientes a los 4 buses auxiliares FX.
+- **Motores de Síntesis de Topología Completa de la Suite:** integración limpia de motores terminados de otros proyectos (ej. `JunoEngine` con sus 128 patches de fábrica) sin descomponerlos en bloques genéricos, preservando sus circuitos de modelado, curvas de calibración (LUTs) y carácter sonoro original.
+- **Integración con `ABDBankManager`:** gestión unificada de bancos de muestras (`.abdbank`), compatibilidad futura con bancos sliceados tipo REX2 con secuencias MIDI embebidas, y carga de presets de sintetizadores de la suite.
 
 ### 4. ¿Cuántas pistas (Partes) y qué hace cada una?
-- **Motor C++ pre-asignado para 16 Partes** desde el Día 0 (`std::array<McxPartState, 16>`, zero-alloc; las partes inactivas consumen `0 %` de CPU).
-- **Truco de escalado sin saturar el `APVTS` ni la UI:**
-  - Fase inicial ergonómica con **1 Parte melódica enfocada + 1 Parte Drum Kit (Canal 10)** mediante patrón **Focused-Part Proxy** (`APVTS` expone edición profunda de la parte enfocada + mezcla/mute/routing ligero de las 16 partes).
-  - La infraestructura interna y de estado (`BankManager`) queda preparada para desplegar las 8 o 16 partes completas (modo módulo GS completo) cuando sea necesario sin romper presets ni contratos.
-- Cada Parte tiene conmutador **`INT` (motor interno) | `EXT` (controlador MIDI/NRPN/SysEx) | `BOTH` (comparación A/B en vivo)**.
+- **16 Partes Libres simultáneas** asignadas en C++20 (`std::array<McxPartState, 16>`, zero-alloc; voces inactivas consumen `0 %` de CPU).
+- **Selector Ortogonal de Instrumento & Destino por Pista:** el antiguo selector binario DRM/CHR se sustituye por una asignación desacoplada en dos dimensiones:
+  1. **Destino / Motor:** `Internal: Structured Rompler`, `Internal: Juno-106 VA`, `External: Hardware MIDI Out (puerto y canal asignado)`, `Both A+B (Layer híbrido)`.
+  2. **Formato Musical:** `Chromatic` (escala continua) o `DrumMap` (slots de percusión con notas fijas C1..B2).
+- **Consola Mezclador 16 Canales de Altura Completa (Full-Height):** 16 tiras verticales simultáneas (`McxMixerConsole.ts`) con faders de largo recorrido, vúmetros duales (dBFS para audio / actividad para MIDI), panorámica, mute, solo, badge interactivo de instrumento (`INT:ROM`, `INT:JUNO`, `EXT:CH01`, `A+B`), canal MIDI (`1..16`), `TR` (seguir transposición global), potenciómetro de Glide (`0..500 ms`), envíos auxiliares y lanzaderas contextuales `[ TONE ]` y `[ PADS ]`.
+- **Paneles Deslizantes Inferiores (Bottom Drawers):** utilidades independientes de síntesis profunda (`Tono & FX`) y ritmo (`MpcPadMatrix`) que emergen sobre la consola, sincronizadas directamente con la tira superior de 16 botones hardware. En modo `[ ENGINE ]`, la interfaz del cajón muta dinámicamente según el motor asignado a la pista.
 
 ### 5. ¿Cómo se ordena en el tiempo?
-- **Sin secuenciador completo de canciones/patrones** en el plugin: el DAW ya cumple esa función con creces (la puerta queda abierta en arquitectura para una fase posterior).
-- **Arpegiador Groove DRY (`abd::synth::GrooveArpeggiator` en `ABDShared::SynthCore`):** implementación limpia desde cero con **12 motivos**, **16 divisores de reloj** (`1/48..4/1`), **swing bipolar `-100%..+100%`** con media temporal invariante, `LatchReArm`, *strum* en ms, acento y **patrón/máscara rítmica programable de hasta 32 pasos** (superando al arpegiador de MC-303/MS2000 y reutilizado también por `ABDMS2000`).
+- **Transporte Autónomo Completo (`CompactTransportBar` en `ABDShared`):** controles de transporte (`Play`, `Stop`, `Record`, `Loop`), BPM (reloj interno / sincronización con host VST3) y **Metrónomo Triple-Modo** (`OFF` ➔ `BOTH` [Play+Rec] ➔ `REC` [Solo Grabación] ➔ `OFF`) con generador de audio WebAudio aséptico (`metronomeClicker.js`).
+- **Secuenciador Piano-Roll Modal (`PianoRollModal` en `ABDShared`):** editor de secuencias basado en ticks PPQ (96/480 PPQ) para 1, 2, 4, 8... compases. Vistas automáticas según el tipo de parte: **Piano Roll Cromático** y **Drum Grid / TR-REC**, carril inferior de velocidad con detección de **Acento Roland (`velocity > 100`)**, y grabación de automatización de parámetros en tiempo real.
+- **Groove & Shuffle Universal (`GrooveShuffleEngine` en `ABDShared`):** arquitectura jerárquica con **Master Groove** y anulación por parte (**`GLOBAL` \| `CUSTOM` \| `OFF`** para bombos y bajos rectos), con algoritmos canónicos de la industria (MPC 60/3000 de Roger Linn, Roland TR-909, E-mu SP-1200, Triplet y Dilla).
+- **Arpegiador Groove DRY (`GrooveArpeggiator.h`):** 12 motivos, divisores de reloj, swing bipolar y máscara de hasta 32 pasos.
+- **Modo Canción (`Song Mode`):** arquitectura preparada para estructurar bloques/escenas de patrones con repeticiones, máscara de mute y transposición por bloque.
 
 ### 6. ¿Cómo se controla?
-- **Gobernado por Contrato (`abdmcx0x_parameter_spec.json` bajo `CDD v2.0` + `hardware_profile.schema.json`):** `SymBipolar` con `wireZeroCenter: 64` en parámetros MIDI/NRPN de rango `0..127` / `14..114`.
-- **`HardwareMirrorRouter` estrictamente ordenado:** corrige bugs clásicos de editores externos emitiendo siempre `CC99 (MSB) -> CC98 (LSB) -> CC6 (Data)` antes que el valor, tanto para canales melódicos (`CC99=1`) como por tecla de batería (`CC99=24/26/28/29/30`), además de checksum exacto Roland 7-bit `DT1` (`(0x80 - (sum & 0x7F)) & 0x7F`).
-- **Primeros perfiles en `ABDShared/Contracts/`:** **`boss_dr5.json`** (hardware disponible ya en mesa para pruebas en vivo), **`roland_mc303.json`**, **`roland_d2.json`** y **`roland_sc55.json`**.
+- **Gobernado por Contrato (`abdmcx0x_parameter_spec.json` bajo CDD v2.0):** ruteo ordenado de parámetros e integridad de tipos.
+- **Tira Hardware de 16 Pasos (`StepButtonStrip` en `ABDShared`):** situada bajo la pantalla LCD con 5 modos operativos (`PART SEL`, `PART MUTE`, `STEP MUTE`, `ACCENT`, `SLIDE / GLIDE`) y chaser animado en tiempo real.
+- **Matriz de Pads Universal (`MpcPadMatrix` en `ABDShared`):** cuadrícula táctil 4x4 con Modo Ritmo, Modo Cromático (escalas/In-Key) y función clásica *16-Levels* de Akai MPC.
+- **Perfiles de MIDI Learn:** compatibilidad con controladores y teclados hardware mediante perfiles externos de mapeo (`MidiLearnManager.h` en `ABDShared`), prescindiendo de espejos SysEx bidireccionales complejos en el núcleo del DSP.
 
 ### 7. ¿Qué muestra la pantalla?
-- `SynthNavBar` arriba + pantalla central (`LcdDisplay` + **`ABDShared/Code/Scope`** via `ABDShared::ScopeCore` / `@abdsynths/shared/scope` `createScope()` en modo multirraíl osciloscopio, espectro FFT, espectrograma y `VuMeterRenderer`) + tira de parte (`INT/EXT/AB`, filtro intercambiable, carácter de salida) + pestañas modulares (`4-Partial / Vector XY`, `Drum Rack 128`, `Groove Arp`, `Hardware Mirror / LiveSysExInspector`, `ABDBankManager`).
-- Zona inferior con **`ABDShared/Code/MidiKeyboard`** (`@abdsynths/midi-keyb` / `createKeyboard()`, con ruedas Pitch/Mod, Chord Memory, animación de LEDs, resaltado de ranuras Drum Rack y contrato de franja CSS registrado en `host-strip-height.test.js` para WebView2).
+- Barra superior: `SynthNavBar` con menús completos, selector de temas y atajos globales.
+- Sub-barra de transporte e indicadores: `CompactTransportBar`, LCD de dos líneas y `StepButtonStrip` (16 botones físicos con chaser activo).
+- Zona central: **Consola Mezclador de 16 Canales** de altura completa optimizada para resolución de referencia 1280x720 y tablets táctiles de 10 pulgadas.
+- Paneles deslizantes inferiores (Bottom Drawers): `Tono & FX` y `MpcPadMatrix`, que se despliegan sobre la consola y se cierran desde su propio botón `[ ✕ ]`.
+- Modales flotantes universales de `ABDShared`: `MultiBusFxRackModal`, `GlobalLfoModal`, `PianoRollModal`, `GrooveShuffleModal` y `DiagnosticProbeModal`.
+- Zona inferior: Teclado cromático virtual (`@abdsynths/midi-keyb`) con ruedas Pitch/Mod y botón de **colapsar / descolapsar** para maximizar el área de trabajo en pantallas táctiles o uso con teclado MIDI externo.
 
 ### 8. ¿Qué se guarda y cómo se conecta?
-- **`ABDBankManager`** es el sistema canónico de presets y bancos tanto en modo Plugin Host (blob serializado en el chunk DAW) como en modo Standalone Librarian.
-- Carga de cápsulas `.abdrompler.json` (`abd_structured_rompler.schema.json`) y perfiles hardware desde `ABDShared/Contracts/`.
+- **Jerarquía de 3 Niveles:**
+  1. *Global / Sistema:* Configuración del sinte (directorio de trabajo, audio/MIDI, polifonía, tema e idioma).
+  2. *MultiPreset (.abdmulti):* Estado completo de las 16 partes, Rack FX Master, LFOs Globales y Groove Master.
+  3. *PartPreset (.abdpart):* Sonido y configuración individual de una parte cromática o kit de batería.
+- **Directorio de Trabajo Unificado:** compatible con `AxionikDB` (`Models/`, `Presets/Parts/`, `Presets/Multis/`, `Presets/Patterns/`, `Banks/`, `MidiLearn/`).
+- **`ABDBankManager`:** gestión canónica de bancos `.abdbank` y presets con pre-escucha.
 
 ### 9. ¿Sobre qué base lo construimos?
-- **100 % propietario en C++20 + JUCE 9 (Static WebView2) + Emscripten WASM + `ABDShared` + `ABDBankManager`**, compartiendo `DspSources.cmake` entre Nativo y WASM. Archivos pequeños (`< 300` líneas C++, `< 200` líneas JS/TS), código/identificadores en inglés y cero asignaciones en el hilo de audio.
+- **C++20 + JUCE 9 (Static WebView2) + Emscripten WASM + `ABDShared`**, compartiendo `DspSources.cmake` entre nativo y Web.
+- **Filosofía DRY y Módulos Asépticos:** toda funcionalidad compartida reside en `ABDShared` (DSP, componentes UI, estilos y contratos).
+- **Límites estrictos de código:** archivos C++ `< 300` líneas, archivos TS/JS/CSS `< 200` líneas, 100% token-driven sin colores hardcodeados y cero asignaciones de memoria dinámica en el hilo de audio.
 
 ---
 
@@ -61,19 +84,21 @@
 
 | Equipo | Capas/Partials | Qué aporta al motor común `ABDMCX0X` |
 | :--- | :--- | :--- |
-| **MC-303 / SC-55 / DR-5 / M1** | 1–2 Partials | Base Tono→Partial→Multisample→Wave, `4T4L`, `muteGroup`, NRPN `CC99=1` y Drum NRPN |
-| **Roland D-2 / MC-505** | 4 Partials Mono | 10 Estructuras (`RingMod`, `Booster`), TVF multimodo, edición TVF/TVA por tecla |
-| **Roland MC-909 / XV** | **4 Partials Estéreo** | Pares de ondas `L/R` nativas por Partial |
-| **Quasimidi Rave-O-Lution 309** | Híbrido ROM + VA | *Overdrive* por voz, filtros ácidos resonantes (`ms20_acid` / `ladder_drive`) |
-| **E-mu Orbit / Carnival** | 4 Capas + Matrix | *PatchCords* (`ModMatrixT`) + filtro **`zplane_morph`** entre dos marcos espectrales |
-| **Yamaha TG33 / Korg Wavestation** | 4 Elementos Vector | Mezcla espacial **`vector_2d (X,Y)`** con envolvente multipunto |
+| **MC-303 / SC-55 / DR-5** | 1–2 Partials | Base Tono→Partial→Wave, `4T4L`, choke groups, Acento Roland (`vel > 100`), paleta sonora de los 90. |
+| **Roland D-2 / MC-505** | 4 Partials Mono | 10 Estructuras (`RingMod`, `Booster`), TVF multimodo, edición TVF/TVA por tecla. |
+| **Roland MC-909 / XV** | **4 Partials Estéreo** | Pares de ondas `L/R` nativas por Partial, Drum Maps ampliados. |
+| **Akai MPC (60/3000/Live)** | Pads y Groove | Matriz 4x4, 16-Levels, algoritmos de Swing/Shuffle y pads táctiles. |
+| **Quasimidi 309** | Híbrido ROM + VA | *Overdrive* por voz, filtros ácidos resonantes (`ms20_acid`, doble filtro en serie). |
+| **E-mu Orbit / Carnival** | 4 Capas + Matrix | ModMatrix con Via-Attenuators + filtro `zplane_morph` espectral. |
+| **Yamaha TG33 / Wavestation** | 4 Elementos Vector | Mezcla espacial `vector_2d (X,Y)` con envolvente multipunto. |
 
 ---
 
 ## FUERA DE LA VERSIÓN v1 · BACKLOG BLINDADO
 
 Lo que **NO** entra hasta cerrar el núcleo v1 estable:
-1. Emulación de CPU hardware (`MB90705`) ni ejecución/inclusión de ROMs binarias originales.
-2. Secuenciador lineal completo de canciones, compases RPS o importador directo de `.mid` canciones dentro del plugin.
-3. Motor de análisis pesado / *de-baking* neural o lectores ISO SCSI Akai/E-mu dentro del binario VST3 (en v1 viven en `ABDNeuModMakr`; en fase posterior se conectarán vía puente WebUI si conviene).
-4. Salidas físicas multi-bus (`> 2` canales VST3) — v1 trabaja íntegramente en Estéreo `2.0`.
+1. Emulación de CPU hardware binaria (`MB90705`) o inclusión de ROMs binarias originales protegidas.
+2. Salidas físicas multi-bus (`> 2` canales de audio VST3) — v1 trabaja íntegramente en bus Estéreo `2.0` con el limitador `MasterSafetyLimiter`.
+3. Motor de análisis pesado / *de-baking* neural o lectores ISO SCSI Akai/E-mu dentro del plugin VST3 (viven en `ABDNeuModMakr`).
+4. Espejo bidireccional SysEx complejo con sincronización hardware de vuelta (se utiliza la arquitectura simplificada de perfiles `MidiLearn` y emisión directa de contratos).
+5. **Hosting de plugins VST/VST3 de terceros dentro de las pistas:** formalmente descartado para v1. Razones técnicas: conflicto de ventanas nativas flotantes sobre WebView2, gestión de Plugin Delay Compensation (PDC) dinámica, riesgo crítico de crashes externos que tiran la sesión completa y 0 % de compatibilidad con WASM/Web. La necesidad de sonidos externos se cubre al 100 % mediante **Ruteo MIDI Out por Contratos (`ExternalMidiEngine`)** hacia el DAW o hardware físico, y mediante la familia de **Motores Internos de la Suite (`IMcxSoundEngine`)**.

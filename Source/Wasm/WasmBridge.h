@@ -64,6 +64,16 @@ extern "C"
     WASM_EXPORT void getAudioSnapshot(float* peakL, float* peakR, int* activeVoices);
 
     /**
+     * Retrieves 16 channel peak levels for the mixer console VU meter towers.
+     */
+    WASM_EXPORT void getPartPeaks(float* outPeaks16);
+
+    /**
+     * Retrieves 16 channel MIDI activity peak levels for external MIDI VU meter towers.
+     */
+    WASM_EXPORT void getPartMidiPeaks(float* outPeaks16);
+
+    /**
      * Resets engine to internal factory default presets & patches.
      */
     WASM_EXPORT void resetToFactory();

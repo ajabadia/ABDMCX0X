@@ -22,6 +22,7 @@ if(DEFINED ABDSHARED_CODE_DIR)
     set(ABDSHAREDCODE_BUILD_HARDWAREDRIVERS OFF CACHE BOOL "" FORCE)
     set(ABDSHAREDCODE_BUILD_HARDWAREMIDIDETECT OFF CACHE BOOL "" FORCE)
     set(ABDSHARED_BUILD_SYNTHCORE_TESTS OFF CACHE BOOL "" FORCE)
+    set(ABDSHARED_BUILD_SYNTHENGINES_TESTS OFF CACHE BOOL "" FORCE)
     set(ABDSHARED_BUILD_DSPCORE_TESTS OFF CACHE BOOL "" FORCE)
     set(ABDSHARED_BUILD_DSPEFFECTS_TESTS OFF CACHE BOOL "" FORCE)
     set(ABDSHARED_BUILD_AUTOUPDATER OFF CACHE BOOL "" FORCE)
@@ -44,6 +45,8 @@ set(WASM_DSP_SOURCES
 add_executable(mcx0x_dsp ${WASM_DSP_SOURCES})
 
 target_link_libraries(mcx0x_dsp PRIVATE 
+    ABDShared::SynthEngines
+    ABDShared::StructuredRompler
     ABDShared::SynthCore 
     ABDShared::DspCore 
     ABDShared::DspEffects
@@ -72,5 +75,5 @@ target_compile_definitions(mcx0x_dsp PRIVATE
 set_target_properties(mcx0x_dsp PROPERTIES
     OUTPUT_NAME "mcx0x_dsp"
     SUFFIX ".js"
-    LINK_FLAGS "-s WASM=1 -s MALLOC=emmalloc -s ALLOW_MEMORY_GROWTH=1 -s INITIAL_MEMORY=33554432 -s FILESYSTEM=0 -s EXPORTED_RUNTIME_METHODS=['ccall','cwrap','getValue','setValue','HEAPF32','HEAPU8'] -s EXPORTED_FUNCTIONS=['_initEngine','_processAudio','_noteOn','_noteOff','_allNotesOff','_setTempoBPM','_setPartParam','_setMasterVolume','_loadBankFromMemory','_getAudioSnapshot','_resetToFactory','_malloc','_free'] -O2"
+    LINK_FLAGS "-s WASM=1 -s MALLOC=emmalloc -s ALLOW_MEMORY_GROWTH=1 -s INITIAL_MEMORY=33554432 -s FILESYSTEM=0 -s EXPORTED_RUNTIME_METHODS=['ccall','cwrap','getValue','setValue','HEAPF32','HEAPU8'] -s EXPORTED_FUNCTIONS=['_initEngine','_processAudio','_noteOn','_noteOff','_allNotesOff','_setTempoBPM','_setPartParam','_setMasterVolume','_loadBankFromMemory','_getAudioSnapshot','_getPartPeaks','_getPartMidiPeaks','_resetToFactory','_malloc','_free'] -O2"
 )

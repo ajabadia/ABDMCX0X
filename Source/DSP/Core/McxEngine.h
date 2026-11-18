@@ -3,9 +3,11 @@
 #include "McxTypes.h"
 #include "../FX/McxOutputAndFx.h"
 #include "../Synth/McxVoice.h"
+#include "../Synth/McxChannelStrip.h"
 #include "../../MIDI/HardwareMirrorRouter.h"
 #include "SynthCore/DiagnosticSignalProbe.h"
 #include "SynthCore/GrooveArpeggiator.h"
+#include "SynthCore/MusicalScaleTransposer.h"
 
 #include <array>
 #include <atomic>
@@ -34,8 +36,28 @@ struct McxPartState
     float pan { 0.0f };
     float vectorX { 0.0f };
     float vectorY { 0.0f };
-    float reverbSend { 0.25f };
-    float chorusSend { 0.10f };
+    float reverbSend { 0.25f }; // Send A
+    float chorusSend { 0.10f }; // Send B
+    float delaySend { 0.0f };   // Send C
+    float auxSend { 0.0f };     // Send D
+    bool reverbSendPre { false };
+    bool chorusSendPre { false };
+    bool delaySendPre { false };
+    bool auxSendPre { false };
+
+    // Channel strip EQ
+    bool eqEnabled { false };
+    float eqLowFreqHz { 100.0f };
+    float eqLowGainDb { 0.0f };
+    float eqMidFreqHz { 1000.0f };
+    float eqMidGainDb { 0.0f };
+    float eqMidQ { 1.0f };
+    float eqHighFreqHz { 8000.0f };
+    float eqHighGainDb { 0.0f };
+
+    // Channel strip Drive
+    bool driveEnabled { false };
+    float driveAmount { 0.0f };
     std::array<McxPartialConfig, 4> partials {};
     std::array<McxDrumSlotConfig, 128> drumSlots {};
     McxDrumNoteRemapper drumRemapper {};
@@ -100,6 +122,16 @@ public:
     void setMasterTuneHz(float a4Hz) noexcept;
     [[nodiscard]] float getMasterTuneHz() const noexcept { return masterTuneHz_; }
 
+    [[nodiscard]] abd::synth::MusicalScaleTransposer& getTransposer() noexcept { return transposer_; }
+    [[nodiscard]] const abd::synth::MusicalScaleTransposer& getTransposer() const noexcept { return transposer_; }
+    void setGlobalTranspose(int semitones) noexcept { transposer_.setTransposeSemitones(semitones); }
+    void setGlobalScale(abd::synth::MusicalScale scale, int rootNote = 0) noexcept
+    {
+        transposer_.setScale(scale);
+        transposer_.setRootNote(rootNote);
+        transposer_.setQuantizeEnabled(scale != abd::synth::MusicalScale::Off);
+    }
+
     void setPartKind(int partIndex, McxPartKind kind) noexcept;
     [[nodiscard]] bool isAnyPartSoloed() const noexcept;
     [[nodiscard]] bool isPartAudible(int partIndex) const noexcept;
@@ -115,6 +147,15 @@ public:
 
     [[nodiscard]] int getActiveVoiceCount() const noexcept;
     [[nodiscard]] int getActivePartialCount() const noexcept;
+
+    [[nodiscard]] McxChannelStrip& channelStrip(int partIndex) noexcept
+    {
+        return channelStrips_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))];
+    }
+    [[nodiscard]] const McxChannelStrip& channelStrip(int partIndex) const noexcept
+    {
+        return channelStrips_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))];
+    }
 
     [[nodiscard]] HardwareMirrorRouter& getMirrorRouter() noexcept { return mirrorRouter_; }
     [[nodiscard]] const HardwareMirrorRouter& getMirrorRouter() const noexcept { return mirrorRouter_; }
@@ -148,10 +189,12 @@ private:
 
     McxOutputCharacter outputCharacter_ { McxOutputCharacter::HdStudio };
     abd::synth::DiagnosticSignalProbe diagProbe_ {};
+    abd::synth::MusicalScaleTransposer transposer_ {};
     McxFilterBank diagFilter_ {};
 
     std::vector<McxPartState> parts_;
     std::vector<McxVoice> voices_;
+    std::array<McxChannelStrip, kNumParts> channelStrips_ {};
     McxOutputAndFx outputAndFx_ {};
     HardwareMirrorRouter mirrorRouter_ {};
 
@@ -161,6 +204,12 @@ private:
     std::array<float, McxOutputAndFx::kMaxChunk> choR_ {};
     std::array<float, McxOutputAndFx::kMaxChunk> revL_ {};
     std::array<float, McxOutputAndFx::kMaxChunk> revR_ {};
+    std::array<float, McxOutputAndFx::kMaxChunk> delL_ {};
+    std::array<float, McxOutputAndFx::kMaxChunk> delR_ {};
+    std::array<float, McxOutputAndFx::kMaxChunk> auxL_ {};
+    std::array<float, McxOutputAndFx::kMaxChunk> auxR_ {};
+    std::array<float, McxOutputAndFx::kMaxChunk> partL_ {};
+    std::array<float, McxOutputAndFx::kMaxChunk> partR_ {};
 };
 
 } // namespace abdmcx

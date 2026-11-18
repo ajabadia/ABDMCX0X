@@ -17,6 +17,8 @@ import { applyI18n, getLocale, onLocaleChange, t } from './i18n/mcxI18n';
 import { ThemeManager, type ThemeFamilyKey } from './ui/ThemeManager';
 import { McxNavbar } from './ui/McxNavbar';
 import { McxSettingsModal } from './ui/McxSettingsModal';
+import { McxBankDrawer, type McxCatalogItem } from './ui/McxBankDrawer';
+import { McxSavePresetModal } from './ui/McxSavePresetModal';
 import {
   bindVectorPad, renderFxAndSelectors, renderMacroDeck, renderPartMixer,
   renderVoiceLedStrip, wireBankDropZone, type McxPartUiState,
@@ -36,6 +38,24 @@ let scopeView: McxScopeCanvas | null = null;
 let navbar: McxNavbar | null = null;
 let settingsModal: McxSettingsModal | null = null;
 let probeModal: ReturnType<typeof createDiagnosticProbeModal> | null = null;
+let bankDrawer: McxBankDrawer | null = null;
+
+function openSaveModal(type: 'part' | 'multi'): void {
+  new McxSavePresetModal({
+    type,
+    partIndex: focusedPart,
+    initialName: partsState[focusedPart].name,
+    initialCategory: partsState[focusedPart].categoryId,
+    onSave: (payload) => {
+      if (payload.type === 'part') {
+        partsState[focusedPart].name = payload.name;
+        partsState[focusedPart].categoryId = payload.categoryId;
+        refreshPartList();
+      }
+      setLcdLine2(`SAVED ${payload.name} [${payload.sublibrary}]`);
+    },
+  }).open();
+}
 
 const getActiveDrumPart = () => partsState[focusedPart].kind === 'drum_map'
   ? focusedPart : Math.max(0, partsState.findIndex((p) => p.kind === 'drum_map'));
@@ -78,6 +98,7 @@ const panelCbs = {
   },
   onToggleMute: (idx: number) => { partsState[idx].mute = !partsState[idx].mute; bridge.setParam(idx, 'partMute', partsState[idx].mute ? 1 : 0); refreshPartList(); },
   onToggleSolo: (idx: number) => { partsState[idx].solo = !partsState[idx].solo; bridge.setParam(idx, 'partSolo', partsState[idx].solo ? 1 : 0); refreshPartList(); },
+  onOpenBankForPart: (idx: number) => bankDrawer?.open(idx),
   setLcdLine2,
 };
 
@@ -115,6 +136,37 @@ window.addEventListener('DOMContentLoaded', () => {
   initProbeModal();
   settingsModal = new McxSettingsModal({ bridge, onSettingsApplied: (s) => { globalSettings = s; updateLcdLine1(0); } });
 
+  bankDrawer = new McxBankDrawer(bridge, {
+    getTargetPart: () => focusedPart,
+    setTargetPart: (idx) => { focusedPart = idx; updateLcdLine1(0); refreshPartList(); },
+    onSelectModel: (pIdx, item) => {
+      partsState[pIdx].name = item.name;
+      partsState[pIdx].categoryId = item.categoryId;
+      refreshPartList();
+      setLcdLine2(`P${String(pIdx + 1).padStart(2, '0')} LOADED MODEL: ${item.name}`);
+    },
+    onSelectPartPreset: (pIdx, item) => {
+      partsState[pIdx].name = item.name;
+      partsState[pIdx].categoryId = item.categoryId;
+      if (item.engineKind?.includes('drum') && partsState[pIdx].kind !== 'drum_map') {
+        partsState[pIdx].kind = 'drum_map';
+        bridge.setParam(pIdx, 'partKind', 1);
+      }
+      refreshPartList();
+      setLcdLine2(`P${String(pIdx + 1).padStart(2, '0')} PRESET: ${item.name}`);
+    },
+    onSelectMultiPreset: (item) => {
+      setLcdLine2(`LOADED MULTI: ${item.name}`);
+    },
+    onAudition: (pIdx, item) => {
+      void bridge.enableAudio();
+      const note = item.engineKind?.includes('drum') ? 36 : 60;
+      bridge.noteOn(pIdx, note, 0.85);
+      setTimeout(() => bridge.noteOff(pIdx, note), 350);
+    },
+    onOpenSaveModal: (type) => openSaveModal(type),
+  });
+
   const fileInput = document.getElementById('bank-file-input') as HTMLInputElement | null;
   const navHost = document.getElementById('mcx-navbar-host');
   if (navHost) {
@@ -122,6 +174,9 @@ window.addEventListener('DOMContentLoaded', () => {
       themeMgr,
       onConfigureFolder: () => (bridge.isNative ? bridge.chooseWorkingDir() : settingsModal?.open()),
       onOpenSettings: () => settingsModal?.toggle(),
+      onOpenBankManager: () => bankDrawer?.toggle(focusedPart),
+      onSavePartPreset: () => openSaveModal('part'),
+      onSaveMultiPreset: () => openSaveModal('multi'),
       onLoadBank: () => fileInput?.click(),
       onFactoryReset: () => { bridge.resetToFactory(); setLcdLine2(t('mcx.factoryReset')); },
       onPanic: () => { bridge.allNotesOff(); setLcdLine2(t('mcx.allNotesOff')); },
@@ -133,6 +188,16 @@ window.addEventListener('DOMContentLoaded', () => {
       onSelectTab: (tab) => selectCenterTab(tab),
     });
   }
+
+  window.addEventListener('keydown', (ev) => {
+    if (ev.key === 'b' || ev.key === 'B') {
+      const tag = (ev.target as HTMLElement)?.tagName;
+      if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+        ev.preventDefault();
+        bankDrawer?.toggle(focusedPart);
+      }
+    }
+  });
 
   themeMgr.onChange((_f, _sc, themeId) => { probeModal?.setTheme(themeId); settingsModal?.syncTheme(); scopeView?.draw(); navbar?.sync(); });
   bridge.onSystemSettings((s) => {

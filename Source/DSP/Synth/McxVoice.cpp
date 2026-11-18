@@ -286,10 +286,8 @@ void McxVoice::processBlock(float* dryL, float* dryR, float* revL, float* revR,
 
         dryL[s] += voiceL;
         dryR[s] += voiceR;
-        revL[s] += voiceL * voiceReverbSend_;
-        revR[s] += voiceR * voiceReverbSend_;
-        choL[s] += voiceL * voiceChorusSend_;
-        choR[s] += voiceR * voiceChorusSend_;
+        if (revL && revR) { revL[s] += voiceL * voiceReverbSend_; revR[s] += voiceR * voiceReverbSend_; }
+        if (choL && choR) { choL[s] += voiceL * voiceChorusSend_; choR[s] += voiceR * voiceChorusSend_; }
         peakTrack = std::max(peakTrack, std::max(std::abs(voiceL), std::abs(voiceR)));
     }
     lastLevelEstimate_ = peakTrack;

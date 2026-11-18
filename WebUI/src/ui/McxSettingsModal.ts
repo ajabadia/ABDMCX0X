@@ -96,6 +96,37 @@ export class McxSettingsModal {
             <input type="range" id="set-bpm" min="40" max="240" step="1" value="${this.state.standaloneBpm}" />
           </label>
 
+          <label class="mcx-settings-field">
+            <span class="abd-probe-section-label">GLOBAL TRANSPOSE (<strong id="val-trans">0 st</strong>)</span>
+            <input type="range" id="set-trans" min="-24" max="24" step="1" value="0" />
+          </label>
+
+          <div class="mcx-settings-field">
+            <span class="abd-probe-section-label">MUSICAL SCALE QUANTIZE</span>
+            <div class="mcx-settings-row">
+              <select class="mcx-select" id="set-scale-root" style="width: 70px;">
+                ${['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'].map((n, idx) => `<option value="${idx}">${n}</option>`).join('')}
+              </select>
+              <select class="mcx-select" id="set-scale-type" style="flex: 1;">
+                <option value="0">Off (Chromatic)</option>
+                <option value="1">Major</option>
+                <option value="2">Minor Natural</option>
+                <option value="3">Minor Harmonic</option>
+                <option value="4">Minor Melodic</option>
+                <option value="5">Dorian</option>
+                <option value="6">Phrygian</option>
+                <option value="7">Lydian</option>
+                <option value="8">Mixolydian</option>
+                <option value="9">Locrian</option>
+                <option value="10">Pentatonic Major</option>
+                <option value="11">Pentatonic Minor</option>
+                <option value="12">Blues</option>
+                <option value="13">Whole Tone</option>
+                <option value="14">Diminished</option>
+              </select>
+            </div>
+          </div>
+
           <div class="mcx-settings-field">
             <span class="abd-probe-section-label">${t('mcx.settingsSampleRate')}</span>
             <div class="mcx-readonly-pill">${sr} Hz (${this.cb.bridge.isNative ? 'JUCE Native' : 'WASM AudioWorklet'})</div>
@@ -141,6 +172,26 @@ export class McxSettingsModal {
       const lbl = this.dialog.querySelector('#val-bpm');
       if (lbl) lbl.textContent = String(Math.round(this.state.standaloneBpm));
       commit();
+    });
+
+    const transIn = this.dialog.querySelector('#set-trans') as HTMLInputElement | null;
+    transIn?.addEventListener('input', () => {
+      const val = parseInt(transIn.value, 10);
+      const lbl = this.dialog.querySelector('#val-trans');
+      if (lbl) lbl.textContent = `${val > 0 ? '+' : ''}${val} st`;
+      this.cb.bridge.setParam(0, 'globalTranspose', val);
+    });
+
+    const scaleRoot = this.dialog.querySelector('#set-scale-root') as HTMLSelectElement | null;
+    scaleRoot?.addEventListener('change', () => {
+      this.cb.bridge.setParam(0, 'globalScaleRoot', parseInt(scaleRoot.value, 10));
+    });
+
+    const scaleType = this.dialog.querySelector('#set-scale-type') as HTMLSelectElement | null;
+    scaleType?.addEventListener('change', () => {
+      const scaleVal = parseInt(scaleType.value, 10);
+      this.cb.bridge.setParam(0, 'globalScale', scaleVal);
+      this.cb.bridge.setParam(0, 'globalScaleQuantize', scaleVal > 0 ? 1 : 0);
     });
   }
 }

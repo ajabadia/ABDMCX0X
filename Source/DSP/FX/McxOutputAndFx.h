@@ -5,6 +5,7 @@
 #include "DspEffects/DspStereoChorus.h"
 #include "DspEffects/DspStereoDelay.h"
 #include "DspEffects/DspZitaReverb.h"
+#include "DspEffects/MasterSafetyLimiter.h"
 #include "DspEffects/profiles/RolandGsMc303FxProfile.h"
 
 #include <array>
@@ -46,6 +47,24 @@ public:
     void setOutputCharacter(McxOutputCharacter character) noexcept { character_ = character; }
     [[nodiscard]] McxOutputCharacter getOutputCharacter() const noexcept { return character_; }
 
+    void setLimiterEnabled(bool enabled) noexcept { limiter_.setEnabled(enabled); }
+    void setLimiterCeilingDb(float db) noexcept { limiter_.setCeilingDb(db); }
+    [[nodiscard]] const abd::dsp::MasterSafetyLimiter& getLimiter() const noexcept { return limiter_; }
+    [[nodiscard]] abd::dsp::MasterSafetyLimiter& getLimiter() noexcept { return limiter_; }
+
+    void processChunk(float* dryL,
+                      float* dryR,
+                      const float* sendAL,
+                      const float* sendAR,
+                      const float* sendBL,
+                      const float* sendBR,
+                      const float* sendCL,
+                      const float* sendCR,
+                      const float* sendDL,
+                      const float* sendDR,
+                      int numSamples,
+                      float masterGain) noexcept;
+
     void processChunk(float* dryL,
                       float* dryR,
                       const float* choSendL,
@@ -53,7 +72,10 @@ public:
                       const float* revSendL,
                       const float* revSendR,
                       int numSamples,
-                      float masterGain) noexcept;
+                      float masterGain) noexcept
+    {
+        processChunk(dryL, dryR, revSendL, revSendR, choSendL, choSendR, nullptr, nullptr, nullptr, nullptr, numSamples, masterGain);
+    }
 
     [[nodiscard]] static float quantizeSample(float x, McxOutputCharacter character) noexcept;
 
@@ -84,6 +106,7 @@ private:
     float holdR_ { 0.0f };
     int holdCounter_ { 0 };
 
+    abd::dsp::MasterSafetyLimiter limiter_ {};
     std::unique_ptr<FxBuffers> fx_;
 };
 

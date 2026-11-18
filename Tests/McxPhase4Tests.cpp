@@ -221,6 +221,48 @@ int main()
     std::cout << "  [PASS] Voices properly released and zero-CPU idle state reached" << std::endl;
     ++passed;
 
+    // Slice 4: Channel Strip & Master Safety Limiter verification
+    {
+        abdmcx::McxChannelStrip strip;
+        strip.prepare(44100.0);
+        abdmcx::McxChannelStripParams p {};
+        p.eqEnabled = true;
+        p.eqLowGainDb = 6.0f;
+        p.driveEnabled = true;
+        p.driveAmount = 0.5f;
+        p.sendA = 0.75f;
+
+        std::vector<float> inL(64, 0.5f);
+        std::vector<float> inR(64, 0.5f);
+        std::vector<float> sendAL(64, 0.0f);
+        std::vector<float> sendAR(64, 0.0f);
+
+        strip.process(inL.data(), inR.data(), sendAL.data(), sendAR.data(),
+                      nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+                      64, p, true);
+
+        assert(inL[10] > 0.0f && std::isfinite(inL[10]));
+        assert(sendAL[10] > 0.0f && std::isfinite(sendAL[10]));
+        std::cout << "  [PASS] McxChannelStrip processes EQ, Drive, and Sends safely" << std::endl;
+        ++passed;
+
+        abd::dsp::MasterSafetyLimiter limiter;
+        limiter.prepare(44100.0);
+        limiter.setCeilingDb(-0.2f);
+        std::vector<float> hotL(128, 2.5f); // +8 dBFS burst
+        std::vector<float> hotR(128, 2.5f);
+        limiter.process(hotL.data(), hotR.data(), 128);
+
+        float maxHot = 0.0f;
+        for (int i = 0; i < 128; ++i)
+        {
+            maxHot = std::max(maxHot, std::max(std::abs(hotL[static_cast<std::size_t>(i)]), std::abs(hotR[static_cast<std::size_t>(i)])));
+        }
+        assert(maxHot <= 1.0f);
+        std::cout << "  [PASS] MasterSafetyLimiter strictly bounds +8 dBFS burst to <= 1.0 (peak: " << maxHot << ")" << std::endl;
+        ++passed;
+    }
+
     std::cout << "\nTest Summary: " << passed << " passed, 0 failed." << std::endl;
     return 0;
 }

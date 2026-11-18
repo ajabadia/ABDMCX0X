@@ -14,6 +14,10 @@ export const WASM_PARAM_ID = {
   diagProbePoint: 21, diagProbeFreq: 22, diagProbeLevel: 23, diagProbeWave: 24,
   partKind: 25, partMidiChannel: 26, partMute: 27, partSolo: 28, partFollowTranspose: 29,
   globalMaxPolyphony: 30, globalMasterTuneHz: 31, globalStandaloneBpm: 32,
+  globalTranspose: 33, globalScale: 34, globalScaleRoot: 35, globalScaleQuantize: 36,
+  eqEnabled: 37, eqLowGain: 38, eqLowFreq: 39, eqMidGain: 40, eqMidFreq: 41, eqMidQ: 42,
+  eqHighGain: 43, eqHighFreq: 44, driveEnabled: 45, driveAmount: 46,
+  delaySend: 47, auxSend: 48, sendAPre: 49, sendBPre: 50, sendCPre: 51, sendDPre: 52,
 } as const;
 
 export type McxParamKey = keyof typeof WASM_PARAM_ID;

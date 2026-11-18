@@ -21,6 +21,7 @@ void McxOutputAndFx::prepare(double sampleRate) noexcept
     fx_->delay.prepare(sampleRate_);
     fx_->reverb.prepare(sampleRate_);
     fx_->reverb.setMixNorm(1.0f);
+    limiter_.prepare(sampleRate_);
 
     setReverbMacro(reverbMacro_);
     setChorusMacro(chorusMacro_);
@@ -34,6 +35,7 @@ void McxOutputAndFx::reset() noexcept
     fx_->flanger.reset();
     fx_->delay.reset();
     fx_->reverb.reset();
+    limiter_.reset();
     holdL_ = 0.0f;
     holdR_ = 0.0f;
     holdCounter_ = 0;
@@ -148,10 +150,14 @@ float McxOutputAndFx::quantizeSample(float x, McxOutputCharacter character) noex
 
 void McxOutputAndFx::processChunk(float* dryL,
                                   float* dryR,
-                                  const float* choSendL,
-                                  const float* choSendR,
-                                  const float* revSendL,
-                                  const float* revSendR,
+                                  const float* sendAL,
+                                  const float* sendAR,
+                                  const float* sendBL,
+                                  const float* sendBR,
+                                  const float* sendCL,
+                                  const float* sendCR,
+                                  const float* sendDL,
+                                  const float* sendDR,
                                   int numSamples,
                                   float masterGain) noexcept
 {
@@ -163,52 +169,99 @@ void McxOutputAndFx::processChunk(float* dryL,
     const auto* choVar = Profile::findChorus(chorusMacro_);
     const auto* revVar = Profile::findReverb(reverbMacro_);
 
-    if (choVar && choVar->engine == Profile::ChorusEngineKind::Flanger)
-        fx_->flanger.process(choSendL, choSendR, fx_->wetChoL.data(), fx_->wetChoR.data(), n);
-    else if (choVar && choVar->engine == Profile::ChorusEngineKind::ShortDelay)
-        fx_->delay.process(choSendL, choSendR, fx_->wetChoL.data(), fx_->wetChoR.data(), n);
-    else
-        fx_->chorus.process(choSendL, choSendR, fx_->wetChoL.data(), fx_->wetChoR.data(), n);
-
-    const bool revIsDelay = (revVar && revVar->engine != Profile::ReverbEngineKind::ZitaReverb);
-    if (revIsDelay)
+    // Chorus / Flanger / ShortDelay Engine (fed by Send B)
+    if (sendBL && sendBR)
     {
-        fx_->delay.process(revSendL, revSendR, fx_->wetRevL.data(), fx_->wetRevR.data(), n);
-        fx_->wetDelL.fill(0.0f);
-        fx_->wetDelR.fill(0.0f);
+        if (choVar && choVar->engine == Profile::ChorusEngineKind::Flanger)
+            fx_->flanger.process(sendBL, sendBR, fx_->wetChoL.data(), fx_->wetChoR.data(), n);
+        else if (choVar && choVar->engine == Profile::ChorusEngineKind::ShortDelay)
+            fx_->delay.process(sendBL, sendBR, fx_->wetChoL.data(), fx_->wetChoR.data(), n);
+        else
+            fx_->chorus.process(sendBL, sendBR, fx_->wetChoL.data(), fx_->wetChoR.data(), n);
     }
     else
     {
-        fx_->delay.process(choSendL, choSendR, fx_->wetDelL.data(), fx_->wetDelR.data(), n);
-        fx_->reverb.process(revSendL, revSendR, fx_->wetRevL.data(), fx_->wetRevR.data(), n);
+        fx_->wetChoL.fill(0.0f);
+        fx_->wetChoR.fill(0.0f);
+    }
+
+    // Reverb Engine (fed by Send A)
+    const bool revIsDelay = (revVar && revVar->engine != Profile::ReverbEngineKind::ZitaReverb);
+    if (sendAL && sendAR)
+    {
+        if (revIsDelay)
+        {
+            fx_->delay.process(sendAL, sendAR, fx_->wetRevL.data(), fx_->wetRevR.data(), n);
+            fx_->wetDelL.fill(0.0f);
+            fx_->wetDelR.fill(0.0f);
+        }
+        else
+        {
+            fx_->reverb.process(sendAL, sendAR, fx_->wetRevL.data(), fx_->wetRevR.data(), n);
+        }
+    }
+    else
+    {
+        fx_->wetRevL.fill(0.0f);
+        fx_->wetRevR.fill(0.0f);
+    }
+
+    // Dedicated Delay Engine (fed by Send C)
+    if (sendCL && sendCR && !revIsDelay)
+    {
+        fx_->delay.process(sendCL, sendCR, fx_->wetDelL.data(), fx_->wetDelR.data(), n);
+    }
+    else if (!revIsDelay && sendBL && sendBR && (!choVar || choVar->engine != Profile::ChorusEngineKind::ShortDelay))
+    {
+        // Legacy tap: delay also processes chorus send if Send C is null
+        fx_->delay.process(sendBL, sendBR, fx_->wetDelL.data(), fx_->wetDelR.data(), n);
+    }
+    else if (!revIsDelay && (!sendCL || !sendCR))
+    {
+        fx_->wetDelL.fill(0.0f);
+        fx_->wetDelR.fill(0.0f);
     }
 
     for (int i = 0; i < n; ++i)
     {
-        float l = (dryL[i] + fx_->wetChoL[i] * chorusMix_ + fx_->wetDelL[i] * delayMix_ + fx_->wetRevL[i] * reverbMix_) * masterGain;
-        float r = (dryR[i] + fx_->wetChoR[i] * chorusMix_ + fx_->wetDelR[i] * delayMix_ + fx_->wetRevR[i] * reverbMix_) * masterGain;
+        const float auxL = (sendDL ? sendDL[i] : 0.0f);
+        const float auxR = (sendDR ? sendDR[i] : 0.0f);
 
-        l = std::tanh(l * 0.92f);
-        r = std::tanh(r * 0.92f);
-
-        if (character_ == McxOutputCharacter::Sampler12Bit)
-        {
-            if ((holdCounter_++ & 1) == 0)
-            {
-                holdL_ = quantizeSample(l, character_);
-                holdR_ = quantizeSample(r, character_);
-            }
-            l = holdL_;
-            r = holdR_;
-        }
-        else if (character_ == McxOutputCharacter::Rompler16Bit)
-        {
-            l = quantizeSample(l, character_);
-            r = quantizeSample(r, character_);
-        }
+        float l = (dryL[i] + fx_->wetChoL[i] * chorusMix_ + fx_->wetDelL[i] * delayMix_ + fx_->wetRevL[i] * reverbMix_ + auxL) * masterGain;
+        float r = (dryR[i] + fx_->wetChoR[i] * chorusMix_ + fx_->wetDelR[i] * delayMix_ + fx_->wetRevR[i] * reverbMix_ + auxR) * masterGain;
 
         dryL[i] = l;
         dryR[i] = r;
+    }
+
+    // Master Safety Limiter: brickwall peak limiting with smooth release & soft knee
+    limiter_.process(dryL, dryR, n);
+
+    // Optional vintage DAC quantization (16-bit / 12-bit)
+    if (character_ != McxOutputCharacter::HdStudio)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            float l = dryL[i];
+            float r = dryR[i];
+            if (character_ == McxOutputCharacter::Sampler12Bit)
+            {
+                if ((holdCounter_++ & 1) == 0)
+                {
+                    holdL_ = quantizeSample(l, character_);
+                    holdR_ = quantizeSample(r, character_);
+                }
+                l = holdL_;
+                r = holdR_;
+            }
+            else if (character_ == McxOutputCharacter::Rompler16Bit)
+            {
+                l = quantizeSample(l, character_);
+                r = quantizeSample(r, character_);
+            }
+            dryL[i] = l;
+            dryR[i] = r;
+        }
     }
 }
 

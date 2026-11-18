@@ -4,6 +4,7 @@
 set(MCX_CORE_DSP_SOURCES
     Source/DSP/Core/McxEngine.cpp
     Source/DSP/Core/McxEngineAllocation.cpp
+    Source/DSP/Core/McxEngineControl.cpp
     Source/DSP/Synth/McxEnvelope5Stage.cpp
     Source/DSP/Synth/McxFilterBank.cpp
     Source/DSP/Synth/McxPartialExciter.cpp
@@ -16,4 +17,5 @@ set(MCX_CORE_DSP_SOURCES
     Source/Core/McxBankManagerBridge.cpp
     Source/Core/McxBankLoader.cpp
     Source/Core/McxFactoryBank.cpp
+    Source/Core/McxLibraryService.cpp
 )

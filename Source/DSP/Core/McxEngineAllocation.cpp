@@ -155,7 +155,12 @@ void McxEngine::routeMidiChannelNoteOn(int midiChannel1to16, int midiNote, float
     {
         const auto& p = parts_[static_cast<std::size_t>(i)];
         if (p.enabled && static_cast<int>(p.midiChannel) == ch && note >= p.keyLow && note <= p.keyHigh)
-            triggerNote(i, note, velocity, sampleOffset);
+        {
+            const int effNote = (p.followGlobalTranspose && !p.isDrumKit)
+                                    ? transposer_.processNote(note)
+                                    : note;
+            triggerNote(i, effNote, velocity, sampleOffset);
+        }
     }
 }
 
@@ -167,7 +172,12 @@ void McxEngine::routeMidiChannelNoteOff(int midiChannel1to16, int midiNote, std:
     {
         const auto& p = parts_[static_cast<std::size_t>(i)];
         if (p.enabled && static_cast<int>(p.midiChannel) == ch && note >= p.keyLow && note <= p.keyHigh)
-            releaseNote(i, note, sampleOffset);
+        {
+            const int effNote = (p.followGlobalTranspose && !p.isDrumKit)
+                                    ? transposer_.processNote(note)
+                                    : note;
+            releaseNote(i, effNote, sampleOffset);
+        }
     }
 }
 

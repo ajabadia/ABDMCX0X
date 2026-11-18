@@ -14,6 +14,9 @@ export interface McxNavbarCallbacks {
   themeMgr: ThemeManager;
   onConfigureFolder: () => void;
   onOpenSettings: () => void;
+  onOpenBankManager: () => void;
+  onSavePartPreset: () => void;
+  onSaveMultiPreset: () => void;
   onLoadBank: () => void;
   onFactoryReset: () => void;
   onPanic: () => void;
@@ -27,6 +30,11 @@ function buildMenus() {
     {
       name: 'File', nameEs: 'Archivo',
       items: [
+        { id: 98, label: 'Bank Manager...', labelEs: 'Navegador de Bancos...', action: 'openBankManager', shortcut: 'B' },
+        { separator: true },
+        { id: 99, label: 'Save Part Preset (.abdpart)...', labelEs: 'Guardar Preset de Parte (.abdpart)...', action: 'savePartPreset', shortcut: 'Ctrl+S' },
+        { id: 105, label: 'Save Multi Preset (.abdmulti)...', labelEs: 'Guardar Multi Preset (.abdmulti)...', action: 'saveMultiPreset' },
+        { separator: true },
         { id: 100, label: 'Configure Working Folder...', labelEs: 'Configurar Directorio de Trabajo...', action: 'configureFolder' },
         { separator: true },
         { id: 101, label: 'Load Soundbank (.abdbank)...', labelEs: 'Cargar Banco (.abdbank)...', action: 'loadBank', shortcut: 'Ctrl+O' },
@@ -122,7 +130,10 @@ export class McxNavbar {
   }
 
   private dispatch(action: string, value?: unknown): void {
-    if (action === 'configureFolder') this.cb.onConfigureFolder();
+    if (action === 'openBankManager') this.cb.onOpenBankManager();
+    else if (action === 'savePartPreset') this.cb.onSavePartPreset();
+    else if (action === 'saveMultiPreset') this.cb.onSaveMultiPreset();
+    else if (action === 'configureFolder') this.cb.onConfigureFolder();
     else if (action === 'openSettings') this.cb.onOpenSettings();
     else if (action === 'loadBank') this.cb.onLoadBank();
     else if (action === 'factoryReset') this.cb.onFactoryReset();

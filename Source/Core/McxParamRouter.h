@@ -144,6 +144,66 @@ inline void applyWebPartParam(McxEngine& engine, int partIdx, int paramId, float
     case 32: // Global Standalone BPM (40..240)
         engine.setMasterTempoBpm(std::clamp(value, 40.0f, 240.0f));
         break;
+    case 33: // Global Transpose Semitones (-24..+24)
+        engine.setGlobalTranspose(static_cast<int>(std::clamp(value, -24.0f, 24.0f)));
+        break;
+    case 34: // Global Musical Scale (0..14)
+        engine.getTransposer().setScale(static_cast<abd::synth::MusicalScale>(std::clamp(static_cast<int>(value), 0, static_cast<int>(abd::synth::MusicalScale::Count) - 1)));
+        break;
+    case 35: // Global Scale Root Note (0..11)
+        engine.getTransposer().setRootNote(std::clamp(static_cast<int>(value), 0, 11));
+        break;
+    case 36: // Global Scale Quantize Enable (0/1)
+        engine.getTransposer().setQuantizeEnabled(value >= 0.5f);
+        break;
+    case 37: // Channel Strip EQ Enabled (0/1)
+        p.eqEnabled = (value >= 0.5f);
+        break;
+    case 38: // Channel Strip EQ Low Gain dB (-15..+15)
+        p.eqLowGainDb = std::clamp(value, -15.0f, 15.0f);
+        break;
+    case 39: // Channel Strip EQ Low Freq Hz (30..500)
+        p.eqLowFreqHz = std::clamp(value, 30.0f, 500.0f);
+        break;
+    case 40: // Channel Strip EQ Mid Gain dB (-15..+15)
+        p.eqMidGainDb = std::clamp(value, -15.0f, 15.0f);
+        break;
+    case 41: // Channel Strip EQ Mid Freq Hz (100..8000)
+        p.eqMidFreqHz = std::clamp(value, 100.0f, 8000.0f);
+        break;
+    case 42: // Channel Strip EQ Mid Q (0.3..5.0)
+        p.eqMidQ = std::clamp(value, 0.3f, 5.0f);
+        break;
+    case 43: // Channel Strip EQ High Gain dB (-15..+15)
+        p.eqHighGainDb = std::clamp(value, -15.0f, 15.0f);
+        break;
+    case 44: // Channel Strip EQ High Freq Hz (1000..18000)
+        p.eqHighFreqHz = std::clamp(value, 1000.0f, 18000.0f);
+        break;
+    case 45: // Channel Strip Drive Enabled (0/1)
+        p.driveEnabled = (value >= 0.5f);
+        break;
+    case 46: // Channel Strip Drive Amount (0..1)
+        p.driveAmount = std::clamp(value, 0.0f, 1.0f);
+        break;
+    case 47: // Channel Strip Send C (Delay Send 0..1)
+        p.delaySend = std::clamp(value, 0.0f, 1.0f);
+        break;
+    case 48: // Channel Strip Send D (Aux Send 0..1)
+        p.auxSend = std::clamp(value, 0.0f, 1.0f);
+        break;
+    case 49: // Channel Strip Send A Pre/Post (0=Post, 1=Pre)
+        p.reverbSendPre = (value >= 0.5f);
+        break;
+    case 50: // Channel Strip Send B Pre/Post (0=Post, 1=Pre)
+        p.chorusSendPre = (value >= 0.5f);
+        break;
+    case 51: // Channel Strip Send C Pre/Post (0=Post, 1=Pre)
+        p.delaySendPre = (value >= 0.5f);
+        break;
+    case 52: // Channel Strip Send D Pre/Post (0=Post, 1=Pre)
+        p.auxSendPre = (value >= 0.5f);
+        break;
     default:
         break;
     }

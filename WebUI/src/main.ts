@@ -8,8 +8,8 @@ import '@abdsynths/shared/styles/components/wheels.css';
 import '@abdsynths/shared/styles/components/kbd-buttons.css';
 import '@abdsynths/shared/diagnostic-probe/styles';
 import '@abdsynths/midi-keyb/keyboard.css';
-import '@abdsynths/shared/assets/styles/components/step-button-strip.css';
-import '@abdsynths/shared/assets/styles/components/mpc-pad-matrix.css';
+import '@abdsynths/shared/styles/components/step-button-strip.css';
+import '@abdsynths/shared/styles/components/mpc-pad-matrix.css';
 import './styles/mcx0x.css';
 
 import { createKeyboard } from '@abdsynths/midi-keyb';

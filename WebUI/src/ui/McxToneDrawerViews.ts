@@ -8,6 +8,7 @@ import { t } from '../i18n/mcxI18n';
 import type { McxPartUiState } from './McxMixerConsole';
 
 export const FILTER_MODELS = ['SVF Clean', 'Roland TVF ZDF', 'MS-20 Acid', 'Ladder Drive', 'Z-Plane Morph', 'TC6116AF TVF'];
+export const FILTER_MODES = ['LPF', 'HPF', 'BPF', 'Bypass (0% CPU)'];
 export const STRUCTURE_MODES = ['Parallel', 'RingMod 1-2', 'Booster 1-2', 'Vector 2D'];
 export const ROUTE_MODES = ['Internal (DSP)', 'External (MIDI)', 'Both (INT+EXT)'];
 export const GLIDE_MODES = ['Always', 'Legato Only'];
@@ -77,15 +78,16 @@ export function buildToneDrawerBodyHtml(): string {
       <!-- Section 2: Dual Filters & Drive -->
       <section class="mcx-tone-section">
         <div class="mcx-section-head">
-          <span class="mcx-section-title" data-i18n="mcx.filterSection">${t('mcx.filterSection')}</span>
+          <span class="mcx-section-title" data-i18n="mcx.filterSection">${t('mcx.filterSection')} (DUAL FILTER 1 → 2 SERIE)</span>
         </div>
         <div class="mcx-tone-cards-row">
-          ${selectCard('filterModel', `FILTRO 1: ${t('mcx.filterModel')}`, FILTER_MODELS)}
+          ${selectCard('filterModel', `F1 ${t('mcx.filterModel')}`, FILTER_MODELS)}
           ${sliderCard('filterCutoff', `F1 ${t('mcx.cutoff')}`, 0, 1, 0.01, 0.72, '3200 Hz')}
           ${sliderCard('filterResonance', `F1 ${t('mcx.resonance')}`, 0, 0.96, 0.01, 0.18, '18%')}
-          ${selectCard('filterModel2', `* FILTRO 2 (PROYECTADO)`, FILTER_MODELS)}
-          ${sliderCard('filterCutoff2', `* F2 CORTE (REV)`, 0, 1, 0.01, 0.85, '8000 Hz')}
-          ${sliderCard('filterResonance2', `* F2 RESO (REV)`, 0, 0.96, 0.01, 0.10, '10%')}
+          ${selectCard('filter2Model', `F2 ${t('mcx.filterModel')}`, FILTER_MODELS)}
+          ${selectCard('filter2Mode', `F2 TIPO / BYPASS`, FILTER_MODES)}
+          ${sliderCard('filter2Cutoff', `F2 ${t('mcx.cutoff')}`, 0, 1, 0.01, 0.85, '8000 Hz')}
+          ${sliderCard('filter2Resonance', `F2 ${t('mcx.resonance')}`, 0, 0.96, 0.01, 0.10, '10%')}
           ${sliderCard('driveAmount', t('mcx.drive'), 0, 1, 0.01, 0, 'OFF')}
         </div>
       </section>

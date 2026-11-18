@@ -24,6 +24,7 @@ export interface McxPartUiState {
   reverbSend?: number; chorusSend?: number; delaySend?: number; auxSend?: number;
   sendAPre?: boolean; sendBPre?: boolean; sendCPre?: boolean; sendDPre?: boolean;
   filterCutoff?: number; filterResonance?: number; filterModel?: number;
+  filter2Enabled?: boolean; filter2Model?: number; filter2Mode?: number; filter2Cutoff?: number; filter2Resonance?: number;
   pitchCoarse?: number; pitchFine?: number; structureMode?: number; dacCharacter?: number;
   ampAttack?: number; ampDecay?: number; ampSustain?: number; ampRelease?: number;
   driveAmount?: number; eqLowGain?: number; eqMidGain?: number; eqHighGain?: number;
@@ -38,7 +39,9 @@ export function createDefaultPartState(i: number): McxPartUiState {
     partLevel: 0.85, partPan: 0,
     reverbSend: 0.28, chorusSend: 0.20, delaySend: 0.0, auxSend: 0.0,
     sendAPre: false, sendBPre: false, sendCPre: false, sendDPre: false,
-    filterCutoff: 0.72, filterResonance: 0.18, filterModel: 0, pitchCoarse: 0, pitchFine: 0,
+    filterCutoff: 0.72, filterResonance: 0.18, filterModel: 0,
+    filter2Enabled: false, filter2Model: 0, filter2Mode: 1, filter2Cutoff: 0.85, filter2Resonance: 0.10,
+    pitchCoarse: 0, pitchFine: 0,
     structureMode: 0, dacCharacter: 0, ampAttack: 0.04, ampDecay: 0.25, ampSustain: 0.75, ampRelease: 0.18,
     driveAmount: 0.0, eqLowGain: 0.0, eqMidGain: 0.0, eqHighGain: 0.0,
   };

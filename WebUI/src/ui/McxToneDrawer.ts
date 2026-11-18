@@ -10,7 +10,7 @@ import type { McxPartUiState } from './McxMixerConsole';
 import {
   buildToneDrawerHeaderHtml,
   buildToneDrawerBodyHtml,
-  FILTER_MODELS, STRUCTURE_MODES, ROUTE_MODES, GLIDE_MODES,
+  FILTER_MODELS, FILTER_MODES, STRUCTURE_MODES, ROUTE_MODES, GLIDE_MODES,
 } from './McxToneDrawerViews';
 
 export interface McxToneDrawerOptions {
@@ -37,6 +37,10 @@ const PARAM_DEFS: ParamDef[] = [
   { param: 'filterModel', def: 0, fmt: (v) => FILTER_MODELS[v] || 'SVF', isSelect: true },
   { param: 'filterCutoff', def: 0.72, fmt: (v) => `${Math.round(20 * Math.pow(1000, v))} Hz` },
   { param: 'filterResonance', def: 0.18, fmt: (v) => `${Math.round(v * 100)}%` },
+  { param: 'filter2Model', def: 0, fmt: (v) => FILTER_MODELS[v] || 'SVF', isSelect: true },
+  { param: 'filter2Mode', def: 1, fmt: (v) => FILTER_MODES[v] || 'HPF', isSelect: true },
+  { param: 'filter2Cutoff', def: 0.85, fmt: (v) => `${Math.round(20 * Math.pow(1000, v))} Hz` },
+  { param: 'filter2Resonance', def: 0.10, fmt: (v) => `${Math.round(v * 100)}%` },
   { param: 'driveAmount', def: 0, fmt: (v) => (v < 0.005 ? 'OFF' : `${Math.round(v * 100)}%`) },
   { param: 'ampAttack', def: 0.04, fmt: (v) => `${Math.round(0.5 + v * v * 2500)} ms` },
   { param: 'ampDecay', def: 0.25, fmt: (v) => `${Math.round(10 + v * 4000)} ms` },
@@ -80,8 +84,7 @@ export class McxToneDrawer {
   }
 
   public open(partIdx: number): void {
-    this.currentPart = partIdx;
-    this.opened = true;
+    this.currentPart = partIdx; this.opened = true;
     this.el.classList.add('is-open');
     this.syncPart(partIdx, this.getPartState(partIdx));
     this.setLcdLine2(`TONE & FX DRAWER [P${String(partIdx + 1).padStart(2, '0')}]`);
@@ -89,14 +92,12 @@ export class McxToneDrawer {
 
   public close(): void {
     if (!this.opened) return;
-    this.opened = false;
-    this.el.classList.remove('is-open');
+    this.opened = false; this.el.classList.remove('is-open');
     this.onClose?.();
   }
 
   public toggle(partIdx: number): void {
-    if (this.opened && this.currentPart === partIdx) this.close();
-    else this.open(partIdx);
+    if (this.opened && this.currentPart === partIdx) this.close(); else this.open(partIdx);
   }
 
   public isOpen(): boolean { return this.opened; }
@@ -159,6 +160,7 @@ export class McxToneDrawer {
         sel?.addEventListener('change', () => {
           const idx = parseInt(sel.value, 10);
           (this.getPartState(this.currentPart) as unknown as Record<string, number | boolean>)[d.param] = idx;
+          if (d.param === 'filter2Mode') this.bridge.setParam(this.currentPart, 'filter2Enabled', idx < 3 ? 1 : 0);
           this.bridge.setParam(this.currentPart, d.param, idx);
           this.setLcdLine2(`P${String(this.currentPart + 1).padStart(2, '0')} ${d.param}: ${d.fmt(idx)}`);
         });
@@ -171,6 +173,7 @@ export class McxToneDrawer {
           (this.getPartState(this.currentPart) as unknown as Record<string, number>)[d.param] = v;
           if (d.param === 'driveAmount') this.bridge.setParam(this.currentPart, 'driveEnabled', v > 0.005 ? 1 : 0);
           if (d.param.startsWith('eq')) this.bridge.setParam(this.currentPart, 'eqEnabled', 1);
+          if (d.param.startsWith('filter2')) this.bridge.setParam(this.currentPart, 'filter2Enabled', 1);
           this.bridge.setParam(this.currentPart, d.param, v);
           this.setLcdLine2(`P${String(this.currentPart + 1).padStart(2, '0')} ${d.param}: ${d.fmt(v)}`);
         });

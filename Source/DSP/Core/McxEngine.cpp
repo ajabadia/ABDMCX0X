@@ -133,6 +133,11 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
             if (!partHasVoices) continue;
 
             McxChannelStripParams csp {};
+            csp.filter2Enabled = p.filter2Enabled;
+            csp.filter2Model = p.filter2Model;
+            csp.filter2Mode = p.filter2Mode;
+            csp.filter2CutoffHz = p.filter2CutoffHz;
+            csp.filter2Resonance = p.filter2Resonance;
             csp.eqEnabled = p.eqEnabled;
             csp.eqLowFreqHz = p.eqLowFreqHz;
             csp.eqLowGainDb = p.eqLowGainDb;

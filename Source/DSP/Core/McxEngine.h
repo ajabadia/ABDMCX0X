@@ -32,6 +32,13 @@ struct McxPartState
     McxStructureMode structureMode { McxStructureMode::Parallel };
     McxFilterModel filterModel { McxFilterModel::RolandTc6116Tvf };
     McxDrumMapMode drumMapMode { McxDrumMapMode::RolandGsMc };
+
+    // Filter 2 (Dual Filter stage in series)
+    bool filter2Enabled { false };
+    McxFilterModel filter2Model { McxFilterModel::SvfClean };
+    std::uint8_t filter2Mode { 1 }; // 0=LPF, 1=HPF, 2=BPF, 3=Bypass
+    float filter2CutoffHz { 8000.0f };
+    float filter2Resonance { 0.10f };
     float level { 0.85f };
     float pan { 0.0f };
     float vectorX { 0.0f };

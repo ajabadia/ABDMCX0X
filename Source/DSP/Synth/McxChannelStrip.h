@@ -17,6 +17,7 @@
 #pragma once
 
 #include "DspEffects/DspSaturation.h"
+#include "McxFilterBank.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -39,6 +40,13 @@ struct McxChannelStripParams
     // Drive
     bool driveEnabled { false };
     float driveAmount { 0.0f }; // [0.0 .. 1.0]
+
+    // Filter 2 (Dual Filter stage in series)
+    bool filter2Enabled { false };
+    McxFilterModel filter2Model { McxFilterModel::SvfClean };
+    std::uint8_t filter2Mode { 1 }; // 0=LPF, 1=HPF, 2=BPF, 3=Bypass
+    float filter2CutoffHz { 8000.0f };
+    float filter2Resonance { 0.10f };
 
     // Fader & Pan
     float level { 0.85f };
@@ -133,11 +141,15 @@ public:
     {
         sampleRate_ = (sampleRate > 1000.0) ? sampleRate : 44100.0;
         dirtyCoeffs_ = true;
+        filter2L_.prepare(sampleRate_);
+        filter2R_.prepare(sampleRate_);
         reset();
     }
 
     void reset() noexcept
     {
+        filter2L_.reset();
+        filter2R_.reset();
         eqLowL_.reset();  eqLowR_.reset();
         eqMidL_.reset();  eqMidR_.reset();
         eqHighL_.reset(); eqHighR_.reset();
@@ -163,6 +175,12 @@ public:
             updateEqCoeffs(p);
         }
 
+        if (p.filter2Enabled && p.filter2Mode < 3)
+        {
+            filter2L_.setParameters(p.filter2Model, p.filter2Mode, p.filter2CutoffHz, p.filter2Resonance, 0.0f, 0.0f);
+            filter2R_.setParameters(p.filter2Model, p.filter2Mode, p.filter2CutoffHz, p.filter2Resonance, 0.0f, 0.0f);
+        }
+
         const float driveGain = 1.0f + p.driveAmount * 4.0f;
         const float driveComp = 1.0f / std::sqrt(1.0f + p.driveAmount * 3.0f);
         const bool applyDrive = p.driveEnabled && p.driveAmount > 0.005f;
@@ -180,6 +198,13 @@ public:
         {
             float l = inOutL[i];
             float r = inOutR[i];
+
+            // 0. Filter 2 (Dual Filter stage in series with voice Filter 1)
+            if (p.filter2Enabled && p.filter2Mode < 3)
+            {
+                l = filter2L_.processSample(l);
+                r = filter2R_.processSample(r);
+            }
 
             // 1. EQ
             if (p.eqEnabled)
@@ -255,6 +280,9 @@ private:
     Biquad eqLowL_ {},  eqLowR_ {};
     Biquad eqMidL_ {},  eqMidR_ {};
     Biquad eqHighL_ {}, eqHighR_ {};
+
+    McxFilterBank filter2L_ {};
+    McxFilterBank filter2R_ {};
 };
 
 } // namespace abdmcx

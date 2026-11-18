@@ -255,6 +255,21 @@ inline void applyWebPartParam(McxEngine& engine, int partIdx, int paramId, float
         p.arp.setStep(sIdx, step);
         break;
     }
+    case 62: // Filter 2 Enabled (0/1)
+        p.filter2Enabled = (value >= 0.5f);
+        break;
+    case 63: // Filter 2 Model (0..5: SvfClean, RolandTvfZdf, Ms20Acid, LadderDrive, ZPlaneMorph, RolandTc6116Tvf)
+        p.filter2Model = static_cast<McxFilterModel>(std::clamp(static_cast<int>(value), 0, 5));
+        break;
+    case 64: // Filter 2 Mode (0=LPF, 1=HPF, 2=BPF, 3=Bypass)
+        p.filter2Mode = static_cast<std::uint8_t>(std::clamp(static_cast<int>(value), 0, 3));
+        break;
+    case 65: // Filter 2 Cutoff (0..1 -> 20Hz..20kHz)
+        p.filter2CutoffHz = 20.0f * std::pow(1000.0f, std::clamp(value, 0.0f, 1.0f));
+        break;
+    case 66: // Filter 2 Resonance (0..1)
+        p.filter2Resonance = std::clamp(value, 0.0f, 0.98f);
+        break;
     default:
         break;
     }

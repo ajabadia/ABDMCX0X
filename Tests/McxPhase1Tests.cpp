@@ -250,6 +250,44 @@ int main()
         check(fxRms > 0.005f, "DAC 12-bit + Chorus/Delay/Reverb send mix produces valid wet drum output");
     }
 
+    // 7. Dual Filter in Series (Filter 1 -> Filter 2) + Bypass behavior
+    {
+        McxEngine engBypass, engActive;
+        engBypass.prepare(44100.0);
+        engActive.prepare(44100.0);
+
+        auto configurePart = [](McxEngine& e, bool f2Active) {
+            auto& p = e.part(0);
+            p.reverbSend = 0.0f;
+            p.chorusSend = 0.0f;
+            p.partials[0].enabled = true;
+            p.partials[0].level = 0.9f;
+            p.partials[0].sourceKind = McxOscSourceKind::VaOsc;
+            p.partials[0].vaWaveform = 0; // Saw
+            p.partials[0].cutoffHz = 14000.0f; // F1 wide open
+            p.partials[0].filterModel = McxFilterModel::RolandTc6116Tvf;
+
+            p.filter2Enabled = f2Active;
+            p.filter2Model = McxFilterModel::SvfClean;
+            p.filter2Mode = f2Active ? 1 : 3; // 1 = HPF, 3 = Bypass
+            p.filter2CutoffHz = 2500.0f; // Cut off below 2.5kHz
+            p.filter2Resonance = 0.35f;
+        };
+
+        configurePart(engBypass, false);
+        configurePart(engActive, true);
+
+        engBypass.triggerNote(0, 36, 1.0f);
+        engActive.triggerNote(0, 36, 1.0f);
+
+        float d0 = 0.0f, d1 = 0.0f;
+        const float rmsFull = renderAndMeasureRms(engBypass, 1024, d0);
+        const float rmsFiltered = renderAndMeasureRms(engActive, 1024, d1);
+
+        check(rmsFull > 0.05f && rmsFiltered > 0.005f, "Dual filter signals are both finite and audible");
+        check(rmsFiltered < rmsFull * 0.85f, "Series Filter 2 HPF successfully attenuates low frequencies below cutoff");
+    }
+
     std::printf("\n=== Results: %d passed, %d failed ===\n", gPassed, gFailed);
     return (gFailed == 0) ? 0 : 1;
 }

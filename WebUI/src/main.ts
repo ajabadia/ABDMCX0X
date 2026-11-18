@@ -22,7 +22,6 @@ import { McxSettingsModal } from './ui/McxSettingsModal';
 import { McxBankDrawer, type McxCatalogItem } from './ui/McxBankDrawer';
 import { McxSavePresetModal } from './ui/McxSavePresetModal';
 import {
-  bindVectorPad,
   renderVoiceLedStrip, wireBankDropZone,
 } from './ui/McxPanels';
 import { renderMixerConsole, createDefaultPartState, type McxPartUiState } from './ui/McxMixerConsole';
@@ -287,7 +286,8 @@ window.addEventListener('DOMContentLoaded', () => {
     globalDrawer?.toggle();
     byId('mcx-global-btn')?.classList.toggle('is-active', globalDrawer?.isOpen());
   });
-  if (byId('bank-drop-zone') && fileInput) wireBankDropZone(byId('bank-drop-zone')!, fileInput, bridge, setLcdLine2);
+  const dropZone = byId('mcx-workspace') || document.body;
+  if (fileInput) wireBankDropZone(dropZone, fileInput, bridge, setLcdLine2);
   if (byId('mcx-scope-canvas')) scopeView = new McxScopeCanvas(byId('mcx-scope-canvas') as HTMLCanvasElement);
 
   const mainCol = document.querySelector<HTMLElement>('.mcx-main-col');

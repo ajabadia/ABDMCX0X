@@ -7,6 +7,7 @@
 import { findAlgorithmById } from '@abdsynths/shared/components';
 import type { McxHostBridge } from '../bridge/McxHostBridge';
 import { t } from '../i18n/mcxI18n';
+import { ICON_CLOSE, ICON_DOWN, ICON_EXPAND, ICON_POWER_OFF, ICON_POWER_ON, ICON_UP } from './mcxIcons';
 
 const RACK_PICKER_ENGINES = [
   { id: 'zita', eng: 1, name: 'Zita Reverb' }, { id: 'space_echo', eng: 2, name: 'Space Echo RE-201' }, { id: 'bbd_chorus', eng: 3, name: 'Roland BBD Chorus' },
@@ -109,7 +110,7 @@ export class McxRackColumn {
   }
 
   render(): void {
-    this.el.innerHTML = `<div class="mcx-rack-head"><span class="mcx-rack-title">ARMARIO RACK 19''</span><button type="button" class="mcx-rack-topo-btn" id="mcx-rack-open-topo" title="Abrir matriz de topología">⤢ TOPOLOGÍA</button></div><div class="mcx-rack-patchbay-strip" id="mcx-rack-patchbay-strip" title="Abrir Matriz de Topología y Envíos"><span>PATCHBAY: 4 ENVÍOS (A..D)</span><span style="color:var(--color-accent);font-weight:700;">ACTIVO</span></div><div class="mcx-rack-slots-container" id="mcx-rack-slots-mount"></div>`;
+    this.el.innerHTML = `<div class="mcx-rack-head"><span class="mcx-rack-title">ARMARIO RACK 19''</span><button type="button" class="mcx-rack-topo-btn" id="mcx-rack-open-topo" title="Abrir matriz de topología">${ICON_EXPAND} TOPOLOGÍA</button></div><div class="mcx-rack-patchbay-strip" id="mcx-rack-patchbay-strip" title="Abrir Matriz de Topología y Envíos"><span>PATCHBAY: 4 ENVÍOS (A..D)</span><span style="color:var(--color-accent);font-weight:700;">ACTIVO</span></div><div class="mcx-rack-slots-container" id="mcx-rack-slots-mount"></div>`;
     const openPatch = () => this.opts.onOpenTopology?.();
     this.el.querySelector('#mcx-rack-open-topo')?.addEventListener('click', openPatch);
     this.el.querySelector('#mcx-rack-patchbay-strip')?.addEventListener('click', openPatch);
@@ -137,7 +138,7 @@ export class McxRackColumn {
 
   private buildOccupiedSlotHtml(s: UiRackSlot, def: ReturnType<typeof findAlgorithmById>): string {
     const iconHtml = def.image ? `<img src="${def.image}" class="mcx-rack-slot-thumb" alt="${def.badge || 'FX'}" />` : `<span class="mcx-rack-slot-badge">${def.badge || 'FX'}</span>`;
-    return `<div class="mcx-rack-slot-row-head"><button type="button" class="mcx-rack-btn-mini btn-bypass" title="Bypass">${s.bypass ? '◯' : '●'}</button>${iconHtml}<span class="mcx-rack-slot-name" title="Clic para editar y renombrar">${s.name || def.name}</span><div class="mcx-rack-slot-actions"><button type="button" class="mcx-rack-btn-mini btn-up" title="Mover arriba">▲</button><button type="button" class="mcx-rack-btn-mini btn-dn" title="Mover abajo">▼</button><button type="button" class="mcx-rack-btn-mini btn-del" title="Desmontar">✕</button></div></div><div class="mcx-rack-vu-row"><span class="mcx-rack-vu-label">IN</span><div class="mcx-rack-vu-bar-wrap"><span class="mcx-rack-vu-fill in-fill"></span></div><span class="mcx-rack-vu-clip in-clip"></span></div><div class="mcx-rack-vu-row"><span class="mcx-rack-vu-label">OUT</span><div class="mcx-rack-vu-bar-wrap"><span class="mcx-rack-vu-fill out-fill"></span></div><span class="mcx-rack-vu-clip out-clip"></span></div>`;
+    return `<div class="mcx-rack-slot-row-head"><button type="button" class="mcx-rack-btn-mini btn-bypass" title="Bypass">${s.bypass ? ICON_POWER_OFF : ICON_POWER_ON}</button>${iconHtml}<span class="mcx-rack-slot-name" title="Clic para editar y renombrar">${s.name || def.name}</span><div class="mcx-rack-slot-actions"><button type="button" class="mcx-rack-btn-mini btn-up" title="Mover arriba">${ICON_UP}</button><button type="button" class="mcx-rack-btn-mini btn-dn" title="Mover abajo">${ICON_DOWN}</button><button type="button" class="mcx-rack-btn-mini btn-del" title="Desmontar">${ICON_CLOSE}</button></div></div><div class="mcx-rack-vu-row"><span class="mcx-rack-vu-label">IN</span><div class="mcx-rack-vu-bar-wrap"><span class="mcx-rack-vu-fill in-fill"></span></div><span class="mcx-rack-vu-clip in-clip"></span></div><div class="mcx-rack-vu-row"><span class="mcx-rack-vu-label">OUT</span><div class="mcx-rack-vu-bar-wrap"><span class="mcx-rack-vu-fill out-fill"></span></div><span class="mcx-rack-vu-clip out-clip"></span></div>`;
   }
 
   private bindSlotEvents(card: HTMLElement, s: UiRackSlot, idx: number): void {

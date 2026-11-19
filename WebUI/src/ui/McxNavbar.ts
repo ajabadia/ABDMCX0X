@@ -93,7 +93,7 @@ function buildMenus() {
 export class McxNavbar {
   private container: HTMLElement;
   private cb: McxNavbarCallbacks;
-  private navBar: ReturnType<typeof createSynthNavBar> = null;
+  private navBar: ReturnType<typeof createSynthNavBar> | null = null;
   private audioStatus: { state: 'idle' | 'loading' | 'ready' | 'error'; detail?: string } = { state: 'idle' };
 
   constructor(container: HTMLElement, cb: McxNavbarCallbacks) {

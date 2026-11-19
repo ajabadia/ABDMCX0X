@@ -85,7 +85,7 @@ export class McxSongDrawer {
 
     const pill = this.el.querySelector('#mcx-song-live-status');
     if (pill) {
-      const qTxt = st.queuedScene >= 0 ? ` → S${st.queuedScene + 1} (${t('mcx.queuedLabel')})` : '';
+      const qTxt = st.queuedScene >= 0 ? ` -> S${st.queuedScene + 1} (${t('mcx.queuedLabel')})` : '';
       pill.textContent = st.songMode && st.blocks.length > 0
         ? `BLK ${st.songBlockIdx + 1}/${st.blocks.length} · ${t('mcx.barWord')} ${st.songBarInBlock + 1} · S${st.activeScene + 1}`
         : `S${st.activeScene + 1} · ${st.scenes[st.activeScene]?.name ?? ''}${qTxt}`;

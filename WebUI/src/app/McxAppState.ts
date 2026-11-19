@@ -9,7 +9,6 @@ import { t } from '../i18n/mcxI18n';
 import { renderMixerConsole, createDefaultPartState, type McxMixerCallbacks, type McxPartUiState } from '../ui/McxMixerConsole';
 import type { McxStepStrip } from '../ui/McxStepStrip';
 import type { McxToneDrawer } from '../ui/McxToneDrawer';
-import type { McxPadsDrawer } from '../ui/McxPadsDrawer';
 import type { McxSongDrawer } from '../ui/McxSongDrawer';
 import type { McxSceneBar } from '../ui/McxSceneBar';
 import type { McxBankDrawer } from '../ui/McxBankDrawer';
@@ -22,7 +21,7 @@ import type { McxSettingsModal } from '../ui/McxSettingsModal';
 import { syncPianoRollPart } from './McxPianoRollSync';
 
 export interface McxUiRefs {
-  stepStrip?: McxStepStrip | null; toneDrawer?: McxToneDrawer | null; padsDrawer?: McxPadsDrawer | null;
+  stepStrip?: McxStepStrip | null; toneDrawer?: McxToneDrawer | null;
   songDrawer?: McxSongDrawer | null; sceneBar?: McxSceneBar | null; bankDrawer?: McxBankDrawer | null;
   masterPanel?: McxMasterPanel | null; routeModal?: McxInstrumentRouteModal | null;
   synthModal?: McxSynthModal | null; rackColumn?: McxRackColumn | null;
@@ -34,6 +33,7 @@ export interface McxUiRefs {
   triggerLiveScene?: (idx: number, immediate?: boolean) => void;
   toggleSongDrawer?: () => void; refreshSongLocale?: () => void;
   onSavePreset?: (isMulti: boolean) => void; onOpenBankFile?: () => void; onPanic?: () => void;
+  onToggleProbe?: () => void;
 }
 
 export class McxAppState {
@@ -120,7 +120,6 @@ export class McxAppState {
     document.getElementById('part-list')?.querySelectorAll('.mcx-strip').forEach((el, k) => el.classList.toggle('is-active', k === idx));
     this.refs.stepStrip?.syncFromSequence(idx, this.partsState[idx].sequence);
     if (this.refs.toneDrawer?.isOpen()) this.refs.toneDrawer.syncPart(idx, this.partsState[idx]);
-    if (this.refs.padsDrawer?.isOpen()) this.refs.padsDrawer.syncPart(idx, this.partsState[idx]);
     if (this.refs.padModal?.isOpen()) this.refs.padModal.syncPart(idx, this.partsState[idx]);
     if (this.refs.arpModal?.isOpen()) this.syncArpModalForPart(idx);
     if (this.refs.pianoRollModal?.isOpen()) this.syncPianoRollForPart(idx);
@@ -132,7 +131,6 @@ export class McxAppState {
     this.refs.stepStrip?.syncFromSequence(idx, this.partsState[idx].sequence);
     this.bridge.requestPartEngineState(idx);
     if (this.refs.toneDrawer?.isOpen() && this.refs.toneDrawer.getPart() === idx) this.refs.toneDrawer.syncPart(idx, this.partsState[idx]);
-    if (this.refs.padsDrawer?.isOpen() && this.refs.padsDrawer.getPart() === idx) this.refs.padsDrawer.syncPart(idx, this.partsState[idx]);
     if (this.refs.padModal?.isOpen() && this.refs.padModal.getPart() === idx) this.refs.padModal.syncPart(idx, this.partsState[idx]);
     if (this.refs.arpModal?.isOpen() && this.refs.arpModal.getPart() === idx) this.syncArpModalForPart(idx);
     if (this.refs.pianoRollModal?.isOpen() && this.focusedPart === idx) this.syncPianoRollForPart(idx);
@@ -179,7 +177,6 @@ export class McxAppState {
       onOpenPadsForPart: (idx) => {
         this.focusPart(idx);
         if (this.refs.padModal) { this.refs.padModal.syncPart(idx, this.partsState[idx]); this.refs.padModal.toggle(idx); }
-        else this.refs.padsDrawer?.toggle(idx);
       },
       onOpenArpForPart: (idx) => { this.focusPart(idx); if (this.refs.arpModal) { this.syncArpModalForPart(idx); this.refs.arpModal.toggle(idx); } },
       onOpenPianoRollForPart: (idx) => { this.focusPart(idx); if (this.refs.pianoRollModal) { this.syncPianoRollForPart(idx); this.refs.pianoRollModal.open(); } },

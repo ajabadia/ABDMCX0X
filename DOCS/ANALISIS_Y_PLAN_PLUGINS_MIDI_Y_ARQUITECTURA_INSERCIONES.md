@@ -3,7 +3,7 @@
 > **Documento de Análisis Arquitectónico y Plan Director**  
 > **Fecha:** 2026-11-19  
 > **Ámbito:** `ABDShared` (MidiFaceplates canónicas & Modales Modeless) ↔ `ABDMCX0X` (Workstation / Groovebox)  
-> **Estado:** ✅ **IMPLEMENTADO Y VERIFICADO** (Pestaña MIDI FX en 4 etapas, Input Quantize en Pads MPC, Arpegiador Groove flotante, y Sincronía con Pianola).  
+> **Estado:** **Arquitectura funcional implementada (vía modales modeless)** — Pestaña `MIDI FX` en 4 etapas, `MpcPadModal` (con Input Quantize), `GrooveArpeggiatorModal`, `PianoRollModal` y `GrooveShuffleModal`. *(La unificación futura con carátulas modulares `MidiFaceplates/` y contrato `midiFaceplateBridge.ts` permanece en backlog post-Fase 13.)*  
 
 ---
 

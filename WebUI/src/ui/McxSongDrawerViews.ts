@@ -6,6 +6,7 @@
 
 import type { McxSceneSlotDto, McxSongBlockDto, McxSongScenesStateDto } from '../bridge/McxSongBridge';
 import { t } from '../i18n/mcxI18n';
+import { ICON_CLOSE, ICON_DOWN, ICON_PLAY, ICON_UP } from './mcxIcons';
 
 export function escHtml(raw: string): string {
   return String(raw)
@@ -39,7 +40,7 @@ export function buildSongDrawerShellHtml(): string {
           <button type="button" class="mcx-seg-btn" id="mcx-song-mode-song">${t('mcx.songModeLabel')}</button>
         </div>
         <button type="button" class="mcx-song-pill-btn is-active" id="mcx-song-loop-btn" aria-pressed="true">${t('mcx.songLoopLabel')}</button>
-        <button type="button" class="mcx-drawer-close-btn" id="mcx-song-close-btn" title="${t('mcx.closeDrawer')}">✕</button>
+        <button type="button" class="mcx-drawer-close-btn" id="mcx-song-close-btn" title="${t('mcx.closeDrawer')}">${ICON_CLOSE}</button>
       </div>
     </div>
     <div class="mcx-drawer-body mcx-song-body">
@@ -76,7 +77,7 @@ export function buildSceneCardsHtml(state: McxSongScenesStateDto, selectedScene:
         <div class="mcx-sc-card-top">
           <span class="mcx-sc-idx">S${i + 1}</span>
           <span class="mcx-sc-tr">${fmtSigned(sc.transpose)} st</span>
-          <button type="button" class="mcx-sc-play-mini" data-scene-launch="${i}" title="${t('mcx.queueAtBar')}">▶</button>
+          <button type="button" class="mcx-sc-play-mini" data-scene-launch="${i}" title="${t('mcx.queueAtBar')}">${ICON_PLAY}</button>
         </div>
         <div class="mcx-sc-name">${escHtml(sc.name)}</div>
         <div class="mcx-sc-meta">${muted === 0 ? '16/16 ON' : `${16 - muted}/16 · ${muted} ${t('mcx.mutedCountUnit')}`}</div>
@@ -122,7 +123,7 @@ export function buildSongBlocksHtml(blocks: McxSongBlockDto[], scenes: McxSceneS
     }).join('');
     return `
       <div class="${cls}" data-blk-row="${i}">
-        <button type="button" class="mcx-blk-jump" data-blk-jump="${i}" title="${t('mcx.queueAtBar')}">${String(i + 1).padStart(2, '0')} ${isPlayingBlk ? '▶' : ''}</button>
+        <button type="button" class="mcx-blk-jump" data-blk-jump="${i}" title="${t('mcx.queueAtBar')}">${String(i + 1).padStart(2, '0')} ${isPlayingBlk ? ICON_PLAY : ''}</button>
         <select class="mcx-blk-scene-sel" data-blk-scene="${i}" aria-label="Scene">${opts}</select>
         <div class="mcx-blk-step" title="Bars">
           <button type="button" class="mcx-sc-step-btn" data-blk-bars-dec="${i}">-</button>
@@ -136,9 +137,9 @@ export function buildSongBlocksHtml(blocks: McxSongBlockDto[], scenes: McxSceneS
         </div>
         <span class="mcx-blk-progress" data-blk-prog="${i}">${isPlayingBlk ? `${barInBlock + 1}/${blk.bars}` : ''}</span>
         <div class="mcx-blk-ops">
-          <button type="button" class="mcx-sc-step-btn" data-blk-up="${i}" title="Up">↑</button>
-          <button type="button" class="mcx-sc-step-btn" data-blk-dn="${i}" title="Down">↓</button>
-          <button type="button" class="mcx-sc-step-btn is-danger" data-blk-del="${i}" title="Delete">✕</button>
+          <button type="button" class="mcx-sc-step-btn" data-blk-up="${i}" title="Up">${ICON_UP}</button>
+          <button type="button" class="mcx-sc-step-btn" data-blk-dn="${i}" title="Down">${ICON_DOWN}</button>
+          <button type="button" class="mcx-sc-step-btn is-danger" data-blk-del="${i}" title="Delete">${ICON_CLOSE}</button>
         </div>
       </div>
     `;

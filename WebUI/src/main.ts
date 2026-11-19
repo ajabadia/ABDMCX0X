@@ -4,7 +4,6 @@
  */
 
 import '@abdsynths/shared/styles';
-import '@abdsynths/shared/components/SynthNavBar/SynthNavBar.css';
 import '@abdsynths/shared/styles/components/wheels.css';
 import '@abdsynths/shared/styles/components/kbd-buttons.css';
 import '@abdsynths/shared/diagnostic-probe/styles';
@@ -50,7 +49,8 @@ function initApp(): void {
   });
   const fileInput = byId('bank-file-input') as HTMLInputElement | null, navHost = byId('mcx-navbar-host');
   const onPanic = () => { bridge.allNotesOff(); state.setLcdLine2(t('mcx.allNotesOff')); };
-  state.refs = { ...state.refs, bankDrawer, settingsModal, globalDrawer, ...modals, ...midiModals, onPanic, onSavePreset: (multi) => openSavePresetModal(bridge, state, multi ? 'multi' : 'part'), onOpenBankFile: () => fileInput?.click() };
+  const onToggleProbe = () => probeModal?.toggle({ theme: document.documentElement.getAttribute('data-theme'), locale: getLocale(), sampleRate: bridge.getSampleRate(), frequencyHz: state.globalSettings.masterTuneHz || 440 });
+  state.refs = { ...state.refs, bankDrawer, settingsModal, globalDrawer, ...modals, ...midiModals, onPanic, onToggleProbe, onSavePreset: (multi) => openSavePresetModal(bridge, state, multi ? 'multi' : 'part'), onOpenBankFile: () => fileInput?.click() };
   byId('mcx-solo-clear-btn')?.addEventListener('click', () => state.clearAllSolos());
   const navbar = navHost ? new McxNavbar(navHost, {
     themeMgr,
@@ -63,7 +63,7 @@ function initApp(): void {
     onFactoryReset: () => { bridge.resetToFactory(); bridge.requestPartEngineState(state.focusedPart); bridge.requestPartPresets(state.focusedPart); state.setLcdLine2(t('mcx.factoryReset')); },
     onPanic,
     onEnableAudio: () => { void bridge.enableAudio(); },
-    onToggleProbe: () => probeModal?.toggle({ theme: document.documentElement.getAttribute('data-theme'), locale: getLocale(), sampleRate: bridge.getSampleRate(), frequencyHz: state.globalSettings.masterTuneHz || 440 }),
+    onToggleProbe,
     onOpenFxRack: () => modals.fxRackModal.toggle(), onOpenGlobalLfo: () => modals.globalLfoModal.toggle(),
     onOpenPianoRoll: () => { state.syncPianoRollForPart(state.focusedPart); modals.pianoRollModal.toggle(); },
     onOpenGroove: () => modals.grooveModal.open(-1), onOpenSong: () => state.refs.toggleSongDrawer?.(),

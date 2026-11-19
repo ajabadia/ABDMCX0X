@@ -40,7 +40,6 @@ export function mountSongAndScenesUi(bridge: McxHostBridge, state: McxAppState):
     if (!d) return;
     if (forceToggle && d.isOpen()) { d.close(); return; }
     if (state.refs.toneDrawer?.isOpen()) state.refs.toneDrawer.close();
-    if (state.refs.padsDrawer?.isOpen()) state.refs.padsDrawer.close();
     d.open(focusScene);
     state.refs.sceneBar?.setDrawerOpen(true);
     state.refreshPartList();

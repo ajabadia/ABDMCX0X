@@ -6,6 +6,7 @@
 
 import type { McxSceneSlotDto } from '../bridge/McxSongBridge';
 import { t } from '../i18n/mcxI18n';
+import { ICON_CLOCK, ICON_MENU } from './mcxIcons';
 
 export interface McxSceneBarOptions {
   hostEl: HTMLElement;
@@ -48,7 +49,7 @@ export class McxSceneBar {
       <div class="mcx-sbar-top">
         <button type="button" class="mcx-sbar-mode-btn" id="mcx-sbar-mode" aria-pressed="false" title="${t('mcx.songOpenBtnHint')}">${t('mcx.liveModeShort')}</button>
         <span class="mcx-sbar-status" id="mcx-sbar-status">S1 · Full</span>
-        <button type="button" class="mcx-sbar-drawer-btn" id="mcx-sbar-drawer" aria-expanded="false" title="${t('mcx.songOpenBtnHint')}">SONG ☰</button>
+        <button type="button" class="mcx-sbar-drawer-btn" id="mcx-sbar-drawer" aria-expanded="false" title="${t('mcx.songOpenBtnHint')}">SONG ${ICON_MENU}</button>
       </div>
       <div class="mcx-sbar-pads" role="group" aria-label="Scenes 1 to 8">${pads}</div>
     `;
@@ -119,7 +120,7 @@ export class McxSceneBar {
       const sc = this.scenes[this.activeScene];
       const scName = sc?.name ?? `S${this.activeScene + 1}`;
       if (this.queuedScene >= 0) {
-        status.textContent = `S${this.activeScene + 1} → S${this.queuedScene + 1}⏳`;
+        status.innerHTML = `S${this.activeScene + 1} -> S${this.queuedScene + 1} ${ICON_CLOCK}`;
       } else if (this.songMode && this.blockCount > 0) {
         status.textContent = `BLK ${this.blockIdx + 1}/${this.blockCount} · ${t('mcx.barWord')}${this.barInBlock + 1}`;
       } else {

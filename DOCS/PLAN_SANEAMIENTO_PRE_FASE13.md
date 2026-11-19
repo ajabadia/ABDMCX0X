@@ -24,8 +24,9 @@
 | :--- | :--- | :--- | :--- |
 | **P0** | Integridad DSP, tiempo real audio, contratos puente y errores bloqueantes | `[CR-01]` .. `[CR-11]` | Audio, rack FX, MIDI, pianola y paneles de sinte sin cuelgues, sin fugas ni pérdida silenciosa de parámetros (**VERIFICADO — `11/11` CTest, JUCE 9 VST3/Standalone, Vite, WASM**) |
 | **P1** | Sincronía total de los 3 mundos (C++ / WASM / WebUI), persistencia DAW y telemetría real | `[ME-06]`, `[ME-07]`, `[ME-08]`, `[DT-01]`, `[DT-02]`, `[DT-03]`, `[DT-06]` | Cero controles placebo en Rack/Master/Mix; estado y bancos persistidos en DAW y WebUI al recargar (**VERIFICADO — CTest `11/11`, JUCE 9 VST3/Standalone, Vite, WASM `11/11`, `ABDShared` Vitest `62/62` (`738` passed)**) |
-| **P2** | Ergonomía `1280x720`, ventanas flotantes modeless y claridad conceptual UX | Ergonomía `1280x720`, `[ME-09]`, `[DT-04]`, `[DT-05]`, claridad pista/sinte/secuenciador | 16 tiras + Rack + Master visibles sin recorte horizontal a `1280x720`; modales modeless movibles con z-order estable (**IMPLEMENTADO — Pendiente compilación/test de usuario**) |
-| **P3** | Saneamiento DRY, tokens CSS, iconografía SVG, límites de líneas y coherencia documental | `[ME-01]` .. `[ME-05]`, `[ME-10]`, `[DT-07]` | 0 tokens CSS indefinidos, 0 colores fijos y 0 emojis en `ABDShared`/`ABDMCX0X`; todos los archivos bajo `< 300` / `< 200` líneas; `tsc` limpio |
+| **P2** | Ergonomía `1280x720`, ventanas flotantes modeless y claridad conceptual UX | Ergonomía `1280x720`, `[ME-09]`, `[DT-04]`, `[DT-05]`, claridad pista/sinte/secuenciador | 16 tiras + Rack + Master visibles sin recorte horizontal a `1280x720`; modales modeless movibles con z-order estable (**VERIFICADO — `11/11` CTest, JUCE 9 VST3/Standalone, Vite, WASM y `ABDShared` Vitest**) |
+| **P3-A** | Tokens CSS, 0 colores fijos, iconografía SVG, shims/código muerto, docs y `tsc` | `[ME-01]`, `[ME-02]`, `[ME-03]`, `[ME-05]`, `[ME-10]`, `[DT-07]` | 0 tokens CSS indefinidos, 0 colores fijos, 0 emojis/glifos UI y 0 código muerto en `ABDShared`/`ABDMCX0X`; `tsconfig.json` + `.d.ts` completos (**VERIFICADO — `tsc` 0 errores, `11/11` CTest, Vite `208` módulos, JUCE 9 VST3/Standalone, WASM y `ABDShared` Vitest `61/62` (`737 passed`; único fallo externo en `ABDEep`)**) |
+| **P3-B** | Modularización `< 300` / `< 200` líneas en `ABDShared` | `[ME-04]` | Todos los archivos C++/JS/CSS compartidos consumidos por debajo de `< 300` / `< 200` líneas (**Pendiente**) |
 | **P4** | Cobertura automática de integración y holgura estructural para Fase 13 (`kNumParts = 64`) | Tests Rack/Secuenciador + partición preventiva de archivos al límite | Suite CTest, Vitest y verificación de tipos en verde ejecutados por el usuario; archivos puente con holgura `< 260` / `< 180` líneas |
 
 ---
@@ -97,18 +98,18 @@ Objetivo: garantizar que ningún control visible sea placebo, que el estado sobr
 
 Objetivo: que la workstation completa quepa de una pieza a `1280x720`, con modales flotantes coherentes y separación visual clara entre configurar pista, editar sonido y secuenciar.
 
-- [x] **Ajuste de rejilla horizontal a `1280x720` (cero desborde en mezclador y Master):** *(Pendiente compilación/test de usuario)*
+- [x] **Ajuste de rejilla horizontal a `1280x720` (cero desborde en mezclador y Master):** *(Verificado por usuario)*
   - Revisar anchos en [mcx-rack-column.css](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/styles/mcx-rack-column.css#L4) (`240px`), [mcx-master-panel.css](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/styles/mcx-master-panel.css#L4) (`108px`) y paddings de [mcx-workspace.css](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/styles/mcx-workspace.css) para que las 16 tiras (`P01..P16`, actualmente recortadas en ~86 px en `P15-P16`) quepan íntegras junto al Rack y Master sin scroll horizontal forzado.
   - Alojar `.mcx-master-quick-row` (`LIM`, `SHUFFLE`, `SONG`) y `CompactTransportBar` aprovechando `.mcx-transport-dock` ya declarado en [mcx-workspace.css](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/styles/mcx-workspace.css#L85-L104) o redistribuyendo el ancho del Master para evitar compresión en `108px`.
-- [x] **`[ME-09]` Estandarizar comportamiento modeless, dragging, z-order y limpieza de eventos en ventanas flotantes:** *(Pendiente compilación/test de usuario)*
+- [x] **`[ME-09]` Estandarizar comportamiento modeless, dragging, z-order y limpieza de eventos en ventanas flotantes:** *(Verificado por usuario)*
   - Unificar `McxSynthModal`, `MpcPadModal`, `GrooveArpeggiatorModal`, `PianoRollModal`, `FxFaceplateModal` y `McxInstrumentRouteModal` con apertura no bloqueante (`show()`), arrastre mediante `attachDialogDrag`, gestor compartido `bringToFront(dialog)` y cierre con `Escape` sin fugas.
   - Añadir `position: fixed` y `z-index` en [groove-arpeggiator-modal.css](file:///d:/desarrollos/ABDSynths/ABDShared/Assets/styles/components/groove-arpeggiator-modal.css#L4-L13).
   - Limpiar listeners globales `window.keydown` al cerrar en [MpcPadModal.js](file:///d:/desarrollos/ABDSynths/ABDShared/Components/Pads/MpcPadModal.js#L100) y [GrooveArpeggiatorModal.js](file:///d:/desarrollos/ABDSynths/ABDShared/Components/Arpeggiator/GrooveArpeggiatorModal.js#L99).
   - Reemplazar telemetría estática en [FxFaceplateModal.js](file:///d:/desarrollos/ABDSynths/ABDShared/Components/FxFaceplates/FxFaceplateModal.js#L58-L70) (`SC DUCK [ON]`, `mix=1.0`, `44.1 kHz`) por valores reales de la bahía y frecuencia de muestreo activa.
   - Añadir `role="button"` y `tabindex` accesible en [MpcPadMatrix.js](file:///d:/desarrollos/ABDSynths/ABDShared/Components/Controls/MpcPadMatrix.js).
-- [x] **`[DT-05]` Sustituir `window.prompt()` en `McxRackColumn`:** *(Pendiente compilación/test de usuario)*
+- [x] **`[DT-05]` Sustituir `window.prompt()` en `McxRackColumn`:** *(Verificado por usuario)*
   - En [McxRackColumn.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxRackColumn.ts#L161), reemplazar `window.prompt()` por un selector/menú popover no bloqueante estilizado con tokens CSS del tema.
-- [x] **Claridad conceptual (Pista vs Motor vs Secuenciador), `SOLO ACTIVE — CLEAR`, i18n y atajos:** *(Pendiente compilación/test de usuario)*
+- [x] **Claridad conceptual (Pista vs Motor vs Secuenciador), `SOLO ACTIVE — CLEAR`, i18n y atajos:** *(Verificado por usuario)*
   - Eliminar o implementar realmente el botón muerto `NUKE` en [McxMixerConsole.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxMixerConsole.ts#L132) y revisar los macros heredados de Reverb/Chorus en [McxGlobalDrawer.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxGlobalDrawer.ts#L87-L108) frente al nuevo Rack FX.
   - Añadir botón e indicador maestro `SOLO ACTIVE — CLEAR` para limpiar todos los Solos activos de un clic.
   - Diferenciar claramente la acción de ruta de pista vs editor de síntesis en [McxToneDrawerSync.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxToneDrawerSync.ts#L34), completar o retirar la tarjeta vacía `Macros` (`0` knobs) en [McxToneTabMidiFx.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxToneTabMidiFx.ts#L60-L71) y aclarar etiquetas de puertos Layer A+B en [McxInstrumentRouteModalView.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxInstrumentRouteModalView.ts#L86).
@@ -118,25 +119,25 @@ Objetivo: que la workstation completa quepa de una pieza a `1280x720`, con modal
 
 ## Oleada P3 — Saneamiento DRY, Tokens CSS, SVG, Límites `< 300` / `< 200` y Coherencia Documental
 
-Objetivo: dejar `ABDMCX0X` y los componentes compartidos consumidos en `ABDShared` al 100 % conformes con las Reglas de Oro y sin código muerto ni duplicidades.
+Objetivo: dejar `ABDMCX0X` y los componentes compartidos consumidos en `ABDShared` al 100 % conformes con las Reglas de Oro y sin código muerto ni duplicidades (dividida en **P3-A** de tokens/colores/SVG/limpieza/docs/`tsc` y **P3-B** de modularización `< 300` / `< 200` en `ABDShared`).
 
-- [ ] **`[ME-01]` Definir y corregir los 11 tokens CSS faltantes en el sistema de temas:**
+- [x] **`[ME-01]` Definir y corregir los 11 tokens CSS faltantes en el sistema de temas *(P3-A — Verificado por usuario)*:**
   - Resolver en `tokens.css` o mapear en las hojas consumidoras los tokens actualmente indefinidos: `--radius-xs`, `--tracking-wide`, `--radius-full`, `--color-bg-primary`, `--color-bg-secondary`, `--color-border-strong`, `--color-control-bg`, `--color-shadow`, `--color-text-primary`, `--color-text-secondary` (afectan a `fx-faceplates.css`, `mpc-pad-modal.css`, `groove-arpeggiator-modal.css`, [McxToneTabMix.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxToneTabMix.ts#L86-L88), [multiBusFxViews.js](file:///d:/desarrollos/ABDSynths/ABDShared/Components/MultiBusFxRack/multiBusFxViews.js#L57) y 12 CSS de `ABDMCX0X`).
   - Revisar el alcance de `--fx-base-color` / `--fx-accent-color` fuera del backdrop de `FxFaceplateModal`.
-- [ ] **`[ME-02]` Erradicar el 100 % de colores fijos (`hex`, `rgb`, `rgba`) en `ABDShared` consumido por `ABDMCX0X`:**
+- [x] **`[ME-02]` Erradicar el 100 % de colores fijos (`hex`, `rgb`, `rgba`) en `ABDShared` consumido por `ABDMCX0X` *(P3-A — Verificado por usuario)*:**
   - Migrar a variables CSS / tokens de tema los colores fijos detectados en: [multiBusFxRegistry.js](file:///d:/desarrollos/ABDSynths/ABDShared/Components/MultiBusFxRack/multiBusFxRegistry.js), [fxFaceplateRegistry.js](file:///d:/desarrollos/ABDSynths/ABDShared/Components/FxFaceplates/fxFaceplateRegistry.js) (unificando además los metadatos duplicados entre ambos registros), `pianoRollContract.js`, `TapeEchoVisual.js`, `PeakLED.js`, `performanceDeck.css`, `widgets.css`, `step-button-strip.css`, `mpc-pad-matrix.css`, `piano-roll.css`, `compact-transport-bar.css`, `compact-stereo-vu.css`, `AboutDialog.css`, `SynthNavBar.css`, `navbar.css`, `modals.css` y `pills.css`.
-- [ ] **`[ME-03]` Reemplazar todos los emojis y glifos Unicode textuales por iconos SVG `currentColor`:**
-  - Eliminar emojis residuales (`U+23F3` en [McxSceneBar.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxSceneBar.ts#L122), `U+26A0` en `pianoRollContract.js#L166,175` y `bankShell.js#L354`) y glifos Unicode textuales (`U+2715`, `U+2630`, `U+2794`, `U+25B2`, `U+25BC`, `U+25CF`, `U+25EF`, `U+2713`) en `ABDMCX0X` (`McxRackColumn.ts`, `McxToneDrawerSync.ts`, `McxGlobalDrawer.ts`, `McxSongDrawerViews.ts`, `McxSavePresetModal.ts`) y en `ABDShared` (`Drawer.js`, `drawer.js`, `trajectoryStick2D.js`, `hardwareRoutingDiagram.js`, `FxFaceplateModal.js`, `AboutDialog.js`, `globalLfoViews.js`, `grooveShuffleViews.js`, `compactStereoVu.js`).
-- [ ] **`[ME-04]` Modularizar todos los archivos que exceden los límites `< 300` (C++) y `< 200` (Web/CSS):**
+- [x] **`[ME-03]` Reemplazar todos los emojis y glifos Unicode textuales por iconos SVG `currentColor` *(P3-A — Verificado por usuario)*:**
+  - Eliminar emojis residuales (`U+23F3` en [McxSceneBar.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxSceneBar.ts#L122), `U+26A0` en `pianoRollContract.js#L166,175` y `bankShell.js#L354`) y glifos Unicode textuales (`U+2715`, `U+2630`, `U+2794`, `U+25B2`, `U+25BC`, `U+25CF`, `U+25EF`, `U+2713`, `U+2191`, `U+2193`, `U+25B6`, `U+25B8`, `U+2922`) en `ABDMCX0X` ([mcxIcons.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/mcxIcons.ts), `McxRackColumn.ts`, `McxSavePresetModal.ts`, `McxBankDrawer.ts`, `McxSceneBar.ts`, `McxSongDrawer.ts`, `McxSongDrawerViews.ts`) y en `ABDShared` (`Drawer.js`, `bankShell.js`, `trajectoryStick2D.js`, `hardwareRoutingDiagram.js`, `AboutDialog.js`, `globalLfoViews.js`, `grooveShuffleViews.js`, `compactStereoVu.js`, `SynthNavBar.js`).
+- [ ] **`[ME-04]` Modularizar todos los archivos que exceden los límites `< 300` (C++) y `< 200` (Web/CSS) *(P3-B — Pendiente)*:**
   - En `ABDShared` C++: dividir `GrooveArpeggiator.h` (actualmente `301` líneas) por debajo de `270` líneas.
   - En `ABDShared` JS/CSS consumidos o compartidos: fragmentar `SynthNavBar.js` (`617`), `AboutDialog.js` (`409`), `bankShell.js` (`384`), `XYPad.js` (`310`), `Segmented.js` (`300`), `Wheel.js` (`295`), `Select.js` (`240`), `Slider.js` (`237`), `Knob.js` (`233`), `widgets.css` (`1708`), `bank-manager.css` (`1298`), `step-button-strip.css` (`541`), `kbd-buttons.css` (`483`), `tokens.css` (`418`), `global-lfo-modal.css` (`402`), `SynthNavBar.css` (`389`), `AboutDialog.css` (`384`), `multi-bus-fx-rack.css` (`329`) y `compact-stereo-vu.css` (`215`).
   - Mantener `0` archivos por encima del límite en `ABDMCX0X` creando margen preventivo (siguiente punto en P4).
-- [ ] **`[ME-05]` Consolidar archivos duplicados en `ABDShared` y retirar código muerto en `ABDMCX0X`:**
-  - Unificar en `ABDShared` las copias divergentes entre `Components/{Pads,Arpeggiator,FxFaceplates}/styles/*.css` y `Assets/styles/components/*.css`, así como `SynthNavBar.css` vs `navbar.css` (ambos importados en [main.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/main.ts)), `drag-core.js` vs `DragCore.js`, `SynthNavBar.js` vs `synthNavBar.js` y `Drawer.js` vs `drawer.js`.
-  - Retirar tras confirmar que no tienen referencias activas: `McxPadsDrawer.ts`, `McxPadsDrawerViews.ts`, `McxDrumPads.ts`, `mcx-pads-drawer.css`, `mcx-lfo-panel.css`, `mcx-lfo-targets.css`, `mcx-strip-controls.css`, `mcx-vu-modal.css` y los 22 knobs sin montar de [McxToneDrawerKnobs.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxToneDrawerKnobs.ts).
-- [ ] **`[ME-10]` y `[DT-07]` Alinear documentación con realidad, reparar `tsc` y limpiar `HANDOFF.md`:**
-  - Decidir y documentar correctamente en [ANALISIS_Y_PLAN_PLUGINS_MIDI_Y_ARQUITECTURA_INSERCIONES.md](file:///d:/desarrollos/ABDSynths/ABDMCX0X/DOCS/ANALISIS_Y_PLAN_PLUGINS_MIDI_Y_ARQUITECTURA_INSERCIONES.md) el estado real de `MidiFaceplates/` y `midiFaceplateBridge.ts` (o implementarlos si forman parte obligatoria del contrato antes de 64 pistas).
-  - Corregir los 11 errores preexistentes de TypeScript (`tsc`) y eliminar el párrafo duplicado en [HANDOFF.md](file:///d:/desarrollos/ABDSynths/ABDMCX0X/HANDOFF.md#L53-L54).
+- [x] **`[ME-05]` Consolidar archivos duplicados en `ABDShared` y retirar código muerto en `ABDMCX0X` *(P3-A — Verificado por usuario)*:**
+  - Unificar en `ABDShared` las copias divergentes entre `Components/{Pads,Arpeggiator,FxFaceplates}/styles/*.css` y `Assets/styles/components/*.css`, así como `SynthNavBar.css` vs `navbar.css` (ambos importados en [main.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/main.ts)), `drag-core.js` vs `DragCore.js`, `SynthNavBar.js` vs `synthNavBar.js`, `Drawer.js` vs `drawer.js`, `PeakLED.js` vs `peakLED.js` y `TapeEchoVisual.js` vs `tapeEchoVisual.js`.
+  - Retirar tras confirmar que no tienen referencias activas: `McxPadsDrawer.ts`, `McxPadsDrawerViews.ts`, `McxDrumPads.ts`, `mcx-pads-drawer.css`, `mcx-lfo-panel.css`, `mcx-lfo-targets.css`, `mcx-strip-controls.css`, `mcx-vu-modal.css` y los 19 knobs sin montar de [McxToneDrawerKnobs.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxToneDrawerKnobs.ts) (reducción de 36 a 17 knobs activos).
+- [x] **`[ME-10]` y `[DT-07]` Alinear documentación con realidad, reparar `tsc`, alinear `Ctrl+4` y limpiar `HANDOFF.md` *(P3-A — Verificado por usuario)*:**
+  - Documentar en [ANALISIS_Y_PLAN_PLUGINS_MIDI_Y_ARQUITECTURA_INSERCIONES.md](file:///d:/desarrollos/ABDSynths/ABDMCX0X/DOCS/ANALISIS_Y_PLAN_PLUGINS_MIDI_Y_ARQUITECTURA_INSERCIONES.md) el estado real actual (modales modeless + pestaña `MIDI FX` implementados; carátulas `MidiFaceplates/` en backlog post-Fase 13).
+  - Crear [tsconfig.json](file:///d:/desarrollos/ABDSynths/ABDMCX0X/tsconfig.json), completar declaraciones `.d.ts` / `exports` en `ABDShared`, alinear `Ctrl+4` con `onToggleProbe` en [McxInputAndTelemetry.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/app/McxInputAndTelemetry.ts) y eliminar el párrafo duplicado en [HANDOFF.md](file:///d:/desarrollos/ABDSynths/ABDMCX0X/HANDOFF.md).
 
 ---
 
@@ -162,10 +163,12 @@ Objetivo: dejar el código preparado estructuralmente para pasar `kNumParts = 16
 # 2. Suite de pruebas nativas CTest (DSP, Rack Chassis, Multi-Engine, Secuenciador)
 ctest --test-dir build --output-on-failure
 
-# 3. Verificación estática de tipos TypeScript y pruebas unitarias WebUI
-cd WebUI
+# 3. Verificación estática de tipos TypeScript (desde la raíz ABDMCX0X) y pruebas unitarias WebUI
 npx tsc --noEmit
 pnpm test
+
+# 4. Suite Vitest de componentes compartidos (en D:\desarrollos\ABDSynths\ABDShared)
+# pnpm test
 ```
 
 ### Checklist Final de Apertura de Puerta para Fase 13

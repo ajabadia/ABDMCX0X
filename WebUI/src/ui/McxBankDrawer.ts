@@ -39,7 +39,7 @@ export class McxBankDrawer {
   private chipsUnbind: (() => void) | null = null;
   private isOpen = false;
 
-  constructor(private bridge: McxHostBridge, private cb: McxBankDrawerCallbacks) {
+  constructor(_bridge: McxHostBridge, private cb: McxBankDrawerCallbacks) {
     this.initShell(); this.factoryItems = getDefaultFactoryItems(); this.syncMergedItems();
   }
 
@@ -57,7 +57,7 @@ export class McxBankDrawer {
       headerActions: [
         { id: 'save-part', label: t('mcx.savePartPreset'), iconHtml: BANK_ICONS.save },
         { id: 'save-multi', label: t('mcx.saveMultiPreset'), iconHtml: BANK_ICONS.save },
-        { id: 'close', label: '✕', iconHtml: BANK_ICONS.close },
+        { id: 'close', label: t('mcx.close'), iconHtml: BANK_ICONS.close },
       ],
       onTabChange: (tab) => {
         this.state.activeTab = tab;

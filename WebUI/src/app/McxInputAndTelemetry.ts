@@ -35,7 +35,7 @@ export function bindGlobalShortcuts(state: McxAppState): void {
       p: () => { state.syncPianoRollForPart(state.focusedPart); state.refs.pianoRollModal?.toggle(); },
       g: () => state.refs.grooveModal?.open(-1), m: () => state.refs.toggleSongDrawer?.(),
       s: () => state.refs.onSavePreset?.(ev.shiftKey), o: () => state.refs.onOpenBankFile?.(),
-      ',': () => state.refs.settingsModal?.toggle(), '4': () => state.refs.bankDrawer?.toggle(state.focusedPart),
+      ',': () => state.refs.settingsModal?.toggle(), '4': () => state.refs.onToggleProbe?.(),
     };
     const fn = actions[key];
     if (fn) { ev.preventDefault(); fn(); }

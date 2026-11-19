@@ -63,3 +63,42 @@
   width: 100%;
   box-sizing: border-box;
 }
+
+/* Right Column: FX Rack & Master Panel (top) + Transport Dock (bottom) */
+.mcx-right-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: 100%;
+  min-height: 0;
+  flex-shrink: 0;
+}
+
+.mcx-right-top-row {
+  display: flex;
+  flex-direction: row;
+  gap: var(--space-2);
+  flex: 1;
+  min-height: 0;
+}
+
+.mcx-transport-dock {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px var(--space-2);
+  min-height: 52px;
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--color-panel-bg) 40%, transparent);
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card, var(--shadow-elevation-1));
+}
+
+.mcx-transport-dock .abd-transport {
+  border: none;
+  background: transparent;
+  padding: 0;
+  width: 100%;
+}

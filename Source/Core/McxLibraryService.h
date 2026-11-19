@@ -8,6 +8,9 @@
 namespace abdmcx
 {
 
+class McxEngine;
+class McxMultiBankManager;
+
 enum class McxCatalogItemType
 {
     Model,
@@ -30,12 +33,15 @@ struct McxCatalogItem
     McxCatalogItemType itemType { McxCatalogItemType::PartPreset };
     bool isFavorite { false };
     bool isSelfContained { false };
+    std::string bankId {};
+    std::string bankSlotKind {}; // "", "tone", "drum_kit"
+    int bankItemIndex { -1 };
 };
 
 /**
  * @brief Thread-safe file library scanner and catalog manager for ABDMCX0X.
- * Indexes models, banks (.abdbank), part presets (.abdpart) and multi presets (.abdmulti).
- * Handles sublibraries (subfolders) and favorites persistence (favorites.json).
+ * Indexes models, lazy .abdbank archives via RomplerBankIndex (0 PCM bytes decoded),
+ * part presets (.abdpart), and multi presets (.abdmulti).
  */
 class McxLibraryService
 {
@@ -45,9 +51,15 @@ public:
     bool scanWorkingDir(const std::string& workingDir);
     [[nodiscard]] const std::vector<McxCatalogItem>& getItems() const noexcept { return items_; }
     [[nodiscard]] const std::vector<std::string>& getSublibraries() const noexcept { return sublibraries_; }
+    [[nodiscard]] const McxCatalogItem* findItemById(const std::string& id) const noexcept;
 
     bool toggleFavorite(const std::string& id);
     [[nodiscard]] bool isFavorite(const std::string& id) const noexcept;
+
+    bool loadCatalogItemOnDemand(const std::string& itemId,
+                                 McxMultiBankManager& banks,
+                                 McxEngine& engine,
+                                 int partIdx) const;
 
     bool savePartPresetJson(const std::string& workingDir,
                             const std::string& sublibrary,
@@ -64,6 +76,9 @@ public:
     [[nodiscard]] std::string serializeCatalogJson() const;
 
 private:
+    static std::string sanitizeId(const std::string& str);
+    static std::string escapeJson(const std::string& str);
+
     void loadFavorites(const std::filesystem::path& favPath);
     void saveFavorites(const std::filesystem::path& favPath);
     void scanPresetsFolder(const std::filesystem::path& root, McxCatalogItemType type);

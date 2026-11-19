@@ -6,37 +6,18 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 #include "../DSP/Core/McxEngine.h"
 #include "../Hardware/McxHardwareBridge.h"
 #include "../Core/McxBankManagerBridge.h"
 #include "../Core/McxCommandQueue.h"
+#include "../Core/McxMultiBankManager.h"
 #include "../Core/McxSystemSettings.h"
 #include "../State/ParameterRegistry.gen.h"
 #include "../State/ParameterLayout.h"
+#include "McxTelemetryReader.h"
 
 namespace abdmcx {
-
-struct McxTelemetrySnapshot {
-    float peakL{0.0f};
-    float peakR{0.0f};
-    float peakSendA{0.0f};
-    float peakSendB{0.0f};
-    float peakSendC{0.0f};
-    float peakSendD{0.0f};
-    float limiterGrDb{0.0f};
-    std::array<bool, 4> sendBusMutes{false, false, false, false};
-    std::string sendNameA;
-    std::string sendNameB;
-    std::string sendNameC;
-    std::string sendNameD;
-    int activeVoices{0};
-    int focusedPart{0};
-    double sampleRate{48000.0};
-    float lfoPhase{0.0f};
-    std::array<float, 128> samplesL{};
-    std::array<float, 16> partPeaks{};
-    std::array<float, 16> partMidiPeaks{};
-};
 
 class McxAudioProcessor : public juce::AudioProcessor,
                           public juce::AudioProcessorValueTreeState::Listener {
@@ -80,7 +61,25 @@ public:
     void setTempoBpm(double bpm);
     void setSendBusMute(int busIdx, bool muted);
     void setLiveZeroLatency(bool enabled);
+    void enqueueTransportPlay(bool playing, bool resetToZero);
+    void enqueueSequencerBars(int bars);
+    void enqueueSequencerGroove(int partIdx, int mode, int algorithm, int resolution, float swing50to75);
+    void uploadPartPattern(int partIdx, const juce::DynamicObject& obj);
+    void enqueuePartEngineType(int partIdx, int typeIndex);
+    void enqueueLoadFactoryPreset(int partIdx, int presetIndex);
+    void enqueuePartEngineParam(int partIdx, std::string_view key, float value);
+    void enqueueUiCommand(const McxUiCommand& cmd) { uiCommandQueue_.push(cmd); }
+    void markSongStateDirty() noexcept { pendingSongStateDirty_.store(true, std::memory_order_release); }
+    [[nodiscard]] bool consumeSongStateDirty() noexcept { return pendingSongStateDirty_.exchange(false, std::memory_order_acq_rel); }
+    void markEngineStateDirty(int partIdx) noexcept;
+    [[nodiscard]] std::uint16_t consumePendingEngineStateMask() noexcept { return pendingEngineStateMask_.exchange(0, std::memory_order_acq_rel); }
+    std::size_t collectUnusedWaves() noexcept;
+    int mountBankFromMemory(const std::uint8_t* data, std::size_t sizeBytes, const std::string& bankId = {});
+    int mountBankFromFile(const std::string& filePath);
+    bool loadIndexedBankTone(int bankSlot, int toneIdx, int partIdx);
+    bool loadIndexedBankKit(int bankSlot, int kitIdx, int partIdx);
     void resetToFactory();
+    void enqueueResetToFactory(int partIdx = 0);
     bool loadBankFromMemory(const std::uint8_t* data, std::size_t sizeBytes);
     McxTelemetrySnapshot readTelemetrySnapshot() const noexcept;
     const McxSystemSettings& systemSettings() const noexcept { return settings_; }
@@ -89,14 +88,19 @@ public:
     [[nodiscard]] McxEngine& engine() noexcept { return engine_; }
     [[nodiscard]] const McxEngine& engine() const noexcept { return engine_; }
     [[nodiscard]] McxHardwareBridge& hardwareBridge() noexcept { return hardwareBridge_; }
+    [[nodiscard]] McxMultiBankManager& bankManager() noexcept { return multiBankManager_; }
     [[nodiscard]] juce::AudioProcessorValueTreeState& apvts() noexcept { return apvts_; }
 
 private:
     juce::AudioProcessorValueTreeState apvts_;
     McxEngine engine_;
     McxHardwareBridge hardwareBridge_;
+    McxMultiBankManager multiBankManager_;
     McxSystemSettings settings_{};
     McxCommandQueue<1024> uiCommandQueue_;
+    std::atomic<std::uint16_t> pendingEngineStateMask_{0};
+    std::atomic<bool> pendingSongStateDirty_{false};
+    mutable juce::CriticalSection engineMutex_{};
 
     std::atomic<uint32_t> focusedPartIndex_{0};
     std::atomic<double> currentSampleRate_{48000.0};

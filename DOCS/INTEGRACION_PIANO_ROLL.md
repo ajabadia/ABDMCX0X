@@ -1,8 +1,9 @@
 # INTEGRACION_PIANO_ROLL — Guía de Integración en ABDMCX0X
 
 > **Módulo UI:** `ABDShared/Components/PianoRoll/pianoRollModal.js`  
-> **Integración WebUI:** `ABDMCX0X/WebUI/src/main.ts` & `McxMixerConsole.ts`  
-> **Motor DSP C++20:** `ABDShared/Code/SynthCore/PatternSequencerEngine.h`  
+> **Integración WebUI:** `WebUI/src/app/McxModalsFactory.ts`, `McxPianoRollSync.ts`, `McxAppState.ts`, `McxInputAndTelemetry.ts`, `McxMixerConsole.ts`  
+> **Motor DSP C++20:** `Source/Sequencer/McxPatternSequencer.h/.cpp/Playback.cpp` + `McxEngineSequencer.cpp` (sobre `ABDShared::SynthCore::PatternSequencerEngine` y `GrooveShuffleEngine`)  
+> **Puentes:** `Source/Plugin/McxPatternJsonAdapter.h` (JUCE/WebView2) & `Source/Wasm/WasmBridge.cpp` (WASM)  
 > **Contrato Semántico:** `abd_pattern.schema.json` & `abdPattern.ts`
 
 ---
@@ -27,28 +28,24 @@ El rollo de pianola proporciona la vista de micro-secuenciación y edición prof
 - Divisiones tradicionales: `1/4`, `1/8`, `1/16`, `1/32` y `1/16 T` (tresillos).
 - Botón `QUANTIZE`: Ajusta todas las notas del patrón a la rejilla de semicorcheas más próxima.
 
-### B. Shuffle / Swing Musical
-- Selector de Swing desde `50%` (straight) hasta `75%` (hard shuffle).
-- Se comunica directamente al parámetro `patternSwing` del motor para modular la posición de los ticks pares.
+### B. Shuffle / Swing Musical y Doble Buffer Lock-Free
+- Selector de Swing desde `50%` (straight) hasta `75%` (hard shuffle), mapeado linealmente en C++ al rango `0.0..1.0` de `GrooveShuffleEngine` (`paramId 90` = `patternSwing`), además de soporte completo por pista desde `GrooveShuffleModal`.
+- Al editar notas o alternar pasos desde `McxStepStrip` (`setStep`), los patrones se cargan sin bloqueos ni asignaciones en audio mediante el doble buffer de `McxPatternSequencer` (`applyPatternDtoToEngine` en JUCE o `_clearPartPattern`..`_commitPartPattern` en WASM), liberando notas sonando si se sustituye el patrón en caliente.
 
 ### C. Carril de Velocidad y Acento Roland
 - Línea horizontal discontinua roja en **100** (`ACCENT THRESHOLD (VEL > 100)`).
 - Notas con velocidad > 100 reciben la insignia `[ACC]` y disparan la pegada extra de VCA y apertura de filtro de la voz.
 
-### D. Automatización y Animación Visual de Mandos
-- Selección de carril: *Velocity*, *Cutoff*, *Resonance*, *Pan*, *Send A*, *Send B*.
-- Al grabar o reproducir movimiento, el callback `onMotionPlayback` actualiza en tiempo real los controles físicos correspondientes en el panel de Tono (`McxToneDrawer`), proporcionando retroalimentación visual idéntica a la del joystick vectorial.
+### D. Automatización, Audición (`onNotePreview`) y Animación Visual de Mandos
+- Selección de carril en UI: *Velocity*, *Cutoff*, *Resonance*, *Pan*, *Send A*, *Send B* (soporte en motor C++ de hasta **4 carriles simultáneos** de *Motion Recording* por patrón mapeando `cutoff`, `resonance`, `pan` y `sendA..D`).
+- Al dibujar o grabar curvas, `recordMotion` actualiza el mando en vivo (`McxToneDrawer::updateParamLive`) y sube el patrón actualizado al doble buffer C++ para reproducción autónoma desde el DSP; `onNotePreview` audiciona directamente sobre `focusedPart`.
 
-
-### E. Soporte para Bancos Sliced Loop / REX2
-- Cuando una parte carga un `.abdbank` de bucle troceado, la pianola se configura automáticamente en modo Drum/Slice:
-  - Mapeo de cada slice con su número de orden (`Slice 01`, `Slice 02`...).
-  - Carga inmediata de la secuencia original del slice con sus posiciones de disparo temporales (`startTick`, `durationTicks`, `velocity`).
-  - Pre-escucha individual de cada trozo pulsando sobre su etiqueta en el teclado izquierdo.
+### E. Soporte para Bancos Sliced Loop / REX2 *(En Roadmap — pendiente de implementar)*
+- Diseño previsto cuando una parte cargue un `.abdbank` de bucle troceado: modo Drum/Slice con mapeo `Slice 01..`, carga de secuencia de disparo original y pre-escucha por slice.
 
 ### F. Importación y Exportación de Secuencias (.abdseq / JSON)
 - **Exportar:** Botón `💾 EXPORTAR` descarga o almacena en `<WorkingDir>/Sequences/` un archivo `.abdseq` en formato JSON estructurado con notas, compases, PPQ y automatización de parámetros.
 - **Importar:** Botón `📂 IMPORTAR` o arrastrar directamente un archivo `.abdseq` sobre la pianola para cargar el patrón en la parte enfocada.
 
-### G. Sincronización Bidireccional de Transporte
-- El transporte de la modal (`▶`, `■`, `● REC`) y la barra de transporte principal (`CompactTransportBar`) operan de manera 100% coordinada con feedback luminoso (`.is-playing` y `.is-stopped`).
+### G. Sincronización Pasiva con Reloj Nativo C++20 y Transporte
+- El cabezal (`seqTick`) y estado Play/Stop (`seqPlaying`) de la modal y del chaser de `McxStepStrip` actúan como **espejo pasivo** de la telemetría del motor C++20 (`McxPatternSequencer`), manteniendo coordinación total con `CompactTransportBar` (`McxMasterPanel`) y el host DAW.

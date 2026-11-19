@@ -45,6 +45,11 @@ bool McxHardwareBridge::processInboundCc(std::uint8_t ch1to16, std::uint8_t cc, 
     }
 
     bool handled = false;
+    if (cc == 64)
+    {
+        engine_.routeMidiChannelCc(ch1to16, cc, val);
+        handled = true;
+    }
     for (std::uint8_t i = 0; i < McxEngine::kNumParts; ++i)
     {
         if (engine_.part(i).midiChannel != ch1to16)

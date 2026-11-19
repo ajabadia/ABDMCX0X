@@ -11,107 +11,19 @@ void McxEngine::setFocusedPart(int partIndex) noexcept
     focusedPartIndex_ = std::clamp(partIndex, 0, kNumParts - 1);
 }
 
-McxPartState& McxEngine::part(int partIndex) noexcept
-{
-    return parts_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))];
-}
-
-const McxPartState& McxEngine::part(int partIndex) const noexcept
-{
-    return parts_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))];
-}
-
-IMcxSoundEngine* McxEngine::getPartSoundEngine(int partIndex) noexcept
-{
-    return engineSlots_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))];
-}
-
-void McxEngine::setPartSoundEngine(int partIndex, IMcxSoundEngine* customEngine) noexcept
-{
-    const int idx = std::clamp(partIndex, 0, kNumParts - 1);
-    const auto uIdx = static_cast<std::size_t>(idx);
-    if (engineSlots_[uIdx] != nullptr)
-        engineSlots_[uIdx]->allNotesOff();
-
-    engineSlots_[uIdx] = (customEngine != nullptr) ? customEngine : &romplerEngines_[uIdx];
-    engineSlots_[uIdx]->prepare(sampleRate_, McxOutputAndFx::kMaxChunk);
-    cacheSemanticDestIds(idx);
-    lastSemanticOffsets_[uIdx] = McxTrackSemanticOffsets {};
-}
-
-McxTrackModRouter& McxEngine::modRouter(int partIndex) noexcept
-{
-    return modRouters_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))];
-}
-
-const McxTrackModRouter& McxEngine::modRouter(int partIndex) const noexcept
-{
-    return modRouters_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))];
-}
-
-void McxEngine::cacheSemanticDestIds(int partIdx) noexcept
-{
-    const auto uIdx = static_cast<std::size_t>(partIdx);
-    const IMcxSoundEngine* eng = engineSlots_[uIdx];
-    auto& ids = semanticDestIds_[uIdx];
-    if (eng == nullptr)
-    {
-        ids = CachedSemanticIds {};
-        return;
-    }
-    ids.cutoff  = eng->findInputByRole(abd::synth::role::kFilterCutoff);
-    ids.reso    = eng->findInputByRole(abd::synth::role::kFilterResonance);
-    ids.attack  = eng->findInputByRole(abd::synth::role::kAmpEnvAttack);
-    ids.decay   = eng->findInputByRole(abd::synth::role::kAmpEnvDecay);
-    ids.sustain = eng->findInputByRole(abd::synth::role::kAmpEnvSustain);
-    ids.release = eng->findInputByRole(abd::synth::role::kAmpEnvRelease);
-    ids.vibrato = eng->findInputByRole(abd::synth::role::kLfo1Depth);
-}
-
-void McxEngine::syncPartEngineControl(int partIdx) noexcept
-{
-    const auto uIdx = static_cast<std::size_t>(partIdx);
-    auto& p = parts_[uIdx];
-    IMcxSoundEngine* eng = engineSlots_[uIdx];
-    if (eng == nullptr)
-        return;
-
-    auto& rompler = romplerEngines_[uIdx];
-    rompler.setDrumMode(p.isDrumKit);
-    rompler.patch().level = 1.0f;
-    rompler.patch().pan = 0.0f;
-
-    eng->setTransportContext({ static_cast<double>(masterTempoBpm_), masterTuneSemitones_, p.pitchBendSemitones });
-
-    const auto& o = p.semanticOffsets;
-    auto& prev = lastSemanticOffsets_[uIdx];
-    auto& mr = modRouters_[uIdx];
-    const auto& ids = semanticDestIds_[uIdx];
-
-    if (o.cutoffOctaves != prev.cutoffOctaves) mr.setDirectOffset(ids.cutoff, o.cutoffOctaves);
-    if (o.resonance != prev.resonance)         mr.setDirectOffset(ids.reso, o.resonance);
-    if (o.envAttack != prev.envAttack)         mr.setDirectOffset(ids.attack, o.envAttack);
-    if (o.envDecay != prev.envDecay)           mr.setDirectOffset(ids.decay, o.envDecay);
-    if (o.envSustain != prev.envSustain)       mr.setDirectOffset(ids.sustain, o.envSustain);
-    if (o.envRelease != prev.envRelease)       mr.setDirectOffset(ids.release, o.envRelease);
-    if (o.vibratoDepth != prev.vibratoDepth)   mr.setDirectOffset(ids.vibrato, o.vibratoDepth);
-    prev = o;
-
-    mr.applyTo(*eng);
-}
-
 void McxEngine::setMachinePersona(McxMachinePersona persona) noexcept
 {
     persona_ = persona;
     personaSpec_ = getMachinePersonaSpec(persona);
     maxPolyphony_ = std::clamp<int>(personaSpec_.defaultVoiceLimit, 1, kMaxVoices);
     partialBudget_ = std::clamp<int>(personaSpec_.defaultPartialBudget, 1, kMaxVoices * 4);
-    romplerPool_.setMaxPolyphony(maxPolyphony_);
-    romplerPool_.setPartialBudget(partialBudget_);
+    engineRegistry_.romplerPool().setMaxPolyphony(maxPolyphony_);
+    engineRegistry_.romplerPool().setPartialBudget(partialBudget_);
     setOutputCharacter(personaSpec_.defaultDac);
 
-    for (auto& rompler : romplerEngines_)
+    for (int i = 0; i < kNumParts; ++i)
     {
+        auto& rompler = engineRegistry_.rompler(i);
         rompler.patch().forcePartFilterModel = personaSpec_.locksLimits;
         rompler.patch().maxPartialsAllowed = personaSpec_.locksLimits ? static_cast<int>(personaSpec_.maxPartialsPerTone) : 4;
         if (personaSpec_.locksLimits)
@@ -125,13 +37,13 @@ void McxEngine::setMachinePersona(McxMachinePersona persona) noexcept
 void McxEngine::setMaxPolyphony(int maxVoices) noexcept
 {
     maxPolyphony_ = std::clamp(maxVoices, 1, kMaxVoices);
-    romplerPool_.setMaxPolyphony(maxPolyphony_);
+    engineRegistry_.romplerPool().setMaxPolyphony(maxPolyphony_);
 }
 
 void McxEngine::setPartialBudget(int maxPartials) noexcept
 {
     partialBudget_ = std::clamp(maxPartials, 1, kMaxVoices * 4);
-    romplerPool_.setPartialBudget(partialBudget_);
+    engineRegistry_.romplerPool().setPartialBudget(partialBudget_);
 }
 
 void McxEngine::setAccentAmount(float accent01) noexcept { accentAmount_ = std::clamp(accent01, 0.0f, 1.0f); }
@@ -212,6 +124,7 @@ void McxEngine::triggerPartNoteOn(int partIndex, int inputNote, float velocity, 
         else dispatchNoteOffToOutputs(idx, prevLatched, sampleOffset);
     }
     p.latchedNoteMap[static_cast<std::size_t>(rawIn)] = static_cast<std::int8_t>(effNote);
+    if (midiDuckEnabled_ && (p.isDrumKit || idx == 9) && (rawIn == 35 || rawIn == 36)) triggerSidechainDuck(std::clamp(velocity, 0.4f, 1.0f));
     if (p.arp.isEnabled()) p.arp.noteOn(effNote, velocity);
     else dispatchNoteOnToOutputs(idx, effNote, velocity, accentAmount_, sampleOffset);
 }
@@ -293,6 +206,39 @@ void McxEngine::releaseNote(int partIndex, int midiNote, std::int32_t sampleOffs
 float McxEngine::quantizeOutputSample(float x, McxOutputCharacter character) noexcept
 {
     return McxOutputAndFx::quantizeSample(x, character);
+}
+
+void McxEngine::setPartInsertSlot(int partIndex, int slotIndex) noexcept
+{
+    const int idx = std::clamp(partIndex, 0, kNumParts - 1);
+    parts_[static_cast<std::size_t>(idx)].insertSlot = std::clamp(slotIndex, -1, McxRackChassis::kMaxSlots - 1);
+}
+
+int McxEngine::getPartInsertSlot(int partIndex) const noexcept
+{
+    const int idx = std::clamp(partIndex, 0, kNumParts - 1);
+    return parts_[static_cast<std::size_t>(idx)].insertSlot;
+}
+
+void McxEngine::moveRackSlot(int fromIdx, int toIdx) noexcept
+{
+    if (fromIdx < 0 || fromIdx >= McxRackChassis::kMaxSlots || toIdx < 0 || toIdx >= McxRackChassis::kMaxSlots || fromIdx == toIdx)
+        return;
+    outputAndFx_.moveRackSlot(fromIdx, toIdx);
+    for (auto& p : parts_)
+    {
+        if (p.insertSlot == fromIdx) p.insertSlot = toIdx;
+        else if (p.insertSlot == toIdx) p.insertSlot = fromIdx;
+    }
+}
+
+void McxEngine::removeRackSlot(int slotIdx) noexcept
+{
+    if (slotIdx < 0 || slotIdx >= McxRackChassis::kMaxSlots)
+        return;
+    outputAndFx_.removeRackSlot(slotIdx);
+    for (auto& p : parts_)
+        if (p.insertSlot == slotIdx) p.insertSlot = -1;
 }
 
 } // namespace abdmcx

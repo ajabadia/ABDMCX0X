@@ -19,6 +19,11 @@ export function bindGlobalShortcuts(state: McxAppState): void {
     if (isEditableTarget(ev.target)) return;
     const key = ev.key.toLowerCase();
     const mod = ev.ctrlKey || ev.metaKey;
+    if (ev.altKey && !mod) {
+      const scNum = Number(ev.key);
+      if (scNum >= 1 && scNum <= 8) { ev.preventDefault(); state.refs.triggerLiveScene?.(scNum - 1, false); }
+      return;
+    }
     if (!mod && key === 'b') {
       ev.preventDefault();
       state.refs.bankDrawer?.toggle(state.focusedPart);
@@ -30,6 +35,7 @@ export function bindGlobalShortcuts(state: McxAppState): void {
       l: () => state.refs.globalLfoModal?.toggle(),
       p: () => { state.syncPianoRollForPart(state.focusedPart); state.refs.pianoRollModal?.toggle(); },
       g: () => state.refs.grooveModal?.open(-1),
+      m: () => state.refs.toggleSongDrawer?.(),
     };
     const fn = actions[key];
     if (fn) { ev.preventDefault(); fn(); }
@@ -47,12 +53,14 @@ export function mountKeyboardDock(bridge: McxHostBridge, state: McxAppState): vo
     ledDownId: 'led-down',
     onNoteOn: (note: number, vel: number) => {
       bridge.noteOn(state.focusedPart, note, Math.max(0.05, Math.min(1, vel > 1 ? vel / 127 : vel)));
+      if (state.refs.padModal?.isOpen()) state.refs.padModal.highlightNote(note, true);
       if (state.refs.pianoRollModal?.isOpen() && state.refs.pianoRollModal.isRecording()) {
         state.refs.pianoRollModal.recordNoteOn(note, Math.round(vel > 1 ? vel : vel * 127));
       }
     },
     onNoteOff: (note: number) => {
       bridge.noteOff(state.focusedPart, note);
+      if (state.refs.padModal?.isOpen()) state.refs.padModal.highlightNote(note, false);
       if (state.refs.pianoRollModal?.isOpen() && state.refs.pianoRollModal.isRecording()) {
         state.refs.pianoRollModal.recordNoteOff(note);
       }
@@ -71,10 +79,36 @@ export function mountKeyboardDock(bridge: McxHostBridge, state: McxAppState): vo
 }
 
 export function bindTelemetry(bridge: McxHostBridge, state: McxAppState, scopeView: McxScopeCanvas | null): void {
+  let lastSeqPlaying: boolean | null = null;
+  let lastBpm = 0;
+
   bridge.onTelemetry((tel) => {
     state.updateLcdLine1(tel.activeVoices);
     scopeView?.pushTelemetry(tel);
+    state.refs.onSongTelemetry?.(tel);
     state.refs.masterPanel?.updateMeter(tel.peakL, tel.peakR);
+
+    if (tel.seqPlaying !== undefined) {
+      const playing = Boolean(tel.seqPlaying);
+      state.refs.stepStrip?.setChaserStep(playing ? ((tel.seqStep ?? 0) % 16) : -1);
+      if (state.refs.pianoRollModal?.isOpen()) {
+        if (tel.seqTick !== undefined) state.refs.pianoRollModal.setPlayhead(tel.seqTick);
+        state.refs.pianoRollModal.setPlaying(playing);
+      }
+      if (lastSeqPlaying !== playing) {
+        lastSeqPlaying = playing;
+        if (state.refs.masterPanel?.getTransportState()?.playing !== playing) {
+          state.refs.masterPanel?.setPlaying(playing);
+        }
+      }
+    }
+    if (tel.bpm && tel.bpm >= 20 && Math.abs(tel.bpm - lastBpm) > 0.05) {
+      lastBpm = tel.bpm;
+      if (Math.abs(state.globalSettings.standaloneBpm - tel.bpm) > 0.05) {
+        state.globalSettings.standaloneBpm = tel.bpm;
+        state.refs.masterPanel?.setBpm(tel.bpm);
+      }
+    }
 
     const strips = document.getElementById('part-list');
     if (strips && (tel.partPeaks || tel.partMidiPeaks)) {
@@ -98,6 +132,18 @@ export function bindTelemetry(bridge: McxHostBridge, state: McxAppState, scopeVi
       const sendPeaks = [tel.peakSendA ?? 0, tel.peakSendB ?? 0, tel.peakSendC ?? 0, tel.peakSendD ?? 0];
       state.refs.toneDrawer.updateSendTelemetry(sendPeaks, tel.sendBusMutes);
       state.refs.toneDrawer.updateLfoPhase(tel.lfoPhase ?? (Date.now() % 500 < 250 ? 1 : 0));
+    }
+
+    if (tel.rackPeakIn && tel.rackPeakOut) {
+      for (let i = 0; i < 8; ++i) {
+        state.refs.rackColumn?.updateMeter(
+          i,
+          tel.rackPeakIn[i] ?? 0,
+          tel.rackPeakOut[i] ?? 0,
+          tel.rackClipIn?.[i] ?? false,
+          tel.rackClipOut?.[i] ?? false
+        );
+      }
     }
   });
 }

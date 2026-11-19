@@ -1,5 +1,7 @@
 #include "McxEngine.h"
 #include "../../Core/McxFactoryBank.h"
+#include "../../Sequencer/McxPatternSequencer.h"
+#include "../../Sequencer/McxSongAndScenes.h"
 
 #include <algorithm>
 #include <cmath>
@@ -16,16 +18,14 @@ void McxEngine::onRomplerVoiceStolen(void* userData, int ownerSlot, int drumSlot
 }
 
 McxEngine::McxEngine() noexcept
-    : romplerEngines_(static_cast<std::size_t>(kNumParts))
 {
-    romplerPool_.setVoiceStolenCallback(&McxEngine::onRomplerVoiceStolen, this);
+    engineRegistry_.romplerPool().setVoiceStolenCallback(&McxEngine::onRomplerVoiceStolen, this);
+    partEngineTypeIdx_.fill(McxEngineRegistry::kRomplerTypeIndex);
+    initSequencer();
 
     for (int i = 0; i < kNumParts; ++i)
     {
-        auto& rompler = romplerEngines_[static_cast<std::size_t>(i)];
-        rompler.attachVoicePool(&romplerPool_, i);
-        rompler.patch().level = 1.0f;
-        rompler.patch().pan = 0.0f;
+        auto& rompler = engineRegistry_.rompler(i);
         engineSlots_[static_cast<std::size_t>(i)] = &rompler;
         cacheSemanticDestIds(i);
 
@@ -49,18 +49,20 @@ McxEngine::McxEngine() noexcept
 void McxEngine::prepare(double sampleRate) noexcept
 {
     sampleRate_ = (sampleRate > 1000.0) ? sampleRate : 44100.0;
-    romplerPool_.prepare(sampleRate_);
+    prepared_ = true;
+    engineRegistry_.prepare(sampleRate_, McxOutputAndFx::kMaxChunk);
     for (int i = 0; i < kNumParts; ++i)
     {
         const auto idx = static_cast<std::size_t>(i);
         parts_[idx].arp.prepare(sampleRate_);
-        if (engineSlots_[idx] != nullptr)
+        if (engineSlots_[idx] != nullptr && engineRegistry_.findTypeIndexForInstance(engineSlots_[idx]) < 0)
             engineSlots_[idx]->prepare(sampleRate_, McxOutputAndFx::kMaxChunk);
         channelStrips_[idx].prepare(sampleRate_);
     }
     outputAndFx_.prepare(sampleRate_);
     diagProbe_.prepare(sampleRate_);
     diagFilter_.prepare(sampleRate_);
+    prepareSequencer(sampleRate_);
     reset();
 }
 
@@ -72,11 +74,12 @@ void McxEngine::reset() noexcept
     outputAndFx_.reset();
     diagProbe_.reset();
     diagFilter_.reset();
-    romplerPool_.reset();
+    engineRegistry_.reset();
+    resetSequencer();
     for (int i = 0; i < kNumParts; ++i)
     {
         const auto idx = static_cast<std::size_t>(i);
-        if (engineSlots_[idx] != nullptr)
+        if (engineSlots_[idx] != nullptr && engineRegistry_.findTypeIndexForInstance(engineSlots_[idx]) < 0)
             engineSlots_[idx]->reset();
         modRouters_[idx].clearDirectOffsets();
         lastSemanticOffsets_[idx] = McxTrackSemanticOffsets {};
@@ -87,6 +90,7 @@ void McxEngine::reset() noexcept
         for (auto& slot : p.drumSlots)
             slot.activeSounding = false;
     }
+    (void)engineRegistry_.collectUnusedWaves();
 }
 
 void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
@@ -98,29 +102,23 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
     std::fill_n(right, numSamples, 0.0f);
     std::fill(partPeaks_.begin(), partPeaks_.end(), 0.0f);
 
-    for (int partIdx = 0; partIdx < kNumParts; ++partIdx)
-    {
-        auto& p = parts_[static_cast<std::size_t>(partIdx)];
-        if (!p.enabled || !p.arp.isEnabled())
-            continue;
-
-        p.arp.generate(numSamples, [this, partIdx](const abd::synth::GrooveArpeggiator::NoteEvent& ev) {
-            if (ev.isNoteOn)
-            {
-                const float evAccent = std::max(accentAmount_, std::clamp((ev.velocity - 0.85f) * 3.0f, 0.0f, 1.0f));
-                dispatchNoteOnToOutputs(partIdx, ev.note, ev.velocity, evAccent, ev.sampleOffset);
-            }
-            else
-            {
-                dispatchNoteOffToOutputs(partIdx, ev.note, ev.sampleOffset);
-            }
-        });
-    }
-
     int offset = 0;
     while (offset < numSamples)
     {
         const int chunk = std::min(McxOutputAndFx::kMaxChunk, numSamples - offset);
+        processSequencerAndClock(chunk, offset);
+        for (int partIdx = 0; partIdx < kNumParts; ++partIdx)
+        {
+            auto& p = parts_[static_cast<std::size_t>(partIdx)];
+            if (!p.enabled || !p.arp.isEnabled())
+                continue;
+            p.arp.generate(chunk, [this, partIdx, offset](const abd::synth::GrooveArpeggiator::NoteEvent& ev) {
+                if (ev.isNoteOn)
+                    dispatchNoteOnToOutputs(partIdx, ev.note, ev.velocity, std::max(accentAmount_, std::clamp((ev.velocity - 0.85f) * 3.0f, 0.0f, 1.0f)), offset + ev.sampleOffset);
+                else
+                    dispatchNoteOffToOutputs(partIdx, ev.note, offset + ev.sampleOffset);
+            });
+        }
         std::fill_n(dryL_.data(), chunk, 0.0f);
         std::fill_n(dryR_.data(), chunk, 0.0f);
         std::fill_n(choL_.data(), chunk, 0.0f);
@@ -133,6 +131,7 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
         std::fill_n(auxR_.data(), chunk, 0.0f);
 
         bool anyVoiceActive = false;
+        std::uint8_t insertUsedMask = 0;
         for (int pIdx = 0; pIdx < kNumParts; ++pIdx)
         {
             const auto idx = static_cast<std::size_t>(pIdx);
@@ -142,40 +141,48 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
                 continue;
 
             syncPartEngineControl(pIdx);
-            if (!eng->renderBlock(partL_.data(), partR_.data(), chunk))
+            const bool voiceActive = eng->renderBlock(partL_.data(), partR_.data(), chunk);
+            const bool hasInsert = (p.routeMode != McxPartRouteMode::ExternalMidi)
+                && (p.insertSlot >= 0 && p.insertSlot < McxRackChassis::kMaxSlots);
+            const bool insertClaimed = hasInsert && ((insertUsedMask & static_cast<std::uint8_t>(1u << p.insertSlot)) == 0);
+            const bool insertTail = insertClaimed && outputAndFx_.getChassis().hasSlotActivity(p.insertSlot);
+            if (!voiceActive && !insertTail)
                 continue;
 
-            anyVoiceActive = true;
+            if (voiceActive)
+                anyVoiceActive = true;
+            else
+            {
+                std::fill_n(partL_.data(), chunk, 0.0f);
+                std::fill_n(partR_.data(), chunk, 0.0f);
+            }
+
+            if (insertClaimed)
+            {
+                insertUsedMask |= static_cast<std::uint8_t>(1u << p.insertSlot);
+                outputAndFx_.getChassis().processSlot(
+                    p.insertSlot,
+                    partL_.data(), partR_.data(),
+                    partL_.data(), partR_.data(),
+                    chunk,
+                    false);
+            }
+
             McxChannelStripParams csp {};
-            csp.eqEnabled = p.eqEnabled;
-            csp.eqLowFreqHz = p.eqLowFreqHz;
-            csp.eqLowGainDb = p.eqLowGainDb;
-            csp.eqMidFreqHz = p.eqMidFreqHz;
-            csp.eqMidGainDb = p.eqMidGainDb;
-            csp.eqMidQ = p.eqMidQ;
-            csp.eqHighFreqHz = p.eqHighFreqHz;
-            csp.eqHighGainDb = p.eqHighGainDb;
-            csp.driveEnabled = p.driveEnabled;
-            csp.driveAmount = p.driveAmount;
-            csp.level = p.level;
-            csp.pan = p.pan;
-            csp.mute = p.mute;
-            csp.solo = p.solo;
-            csp.sendA = p.reverbSend;
-            csp.sendAPre = p.reverbSendPre;
-            csp.sendB = p.chorusSend;
-            csp.sendBPre = p.chorusSendPre;
-            csp.sendC = p.delaySend;
-            csp.sendCPre = p.delaySendPre;
-            csp.sendD = p.auxSend;
-            csp.sendDPre = p.auxSendPre;
+            csp.eqEnabled = p.eqEnabled; csp.eqLowFreqHz = p.eqLowFreqHz; csp.eqLowGainDb = p.eqLowGainDb;
+            csp.eqMidFreqHz = p.eqMidFreqHz; csp.eqMidGainDb = p.eqMidGainDb; csp.eqMidQ = p.eqMidQ;
+            csp.eqHighFreqHz = p.eqHighFreqHz; csp.eqHighGainDb = p.eqHighGainDb;
+            csp.driveEnabled = p.driveEnabled; csp.driveType = p.driveType; csp.driveAmount = p.driveAmount;
+            csp.level = p.level; csp.pan = p.pan; csp.mute = p.mute; csp.solo = p.solo;
+            csp.sendA = p.reverbSend; csp.sendAPre = p.reverbSendPre;
+            csp.sendB = p.chorusSend; csp.sendBPre = p.chorusSendPre;
+            csp.sendC = p.delaySend; csp.sendCPre = p.delaySendPre;
+            csp.sendD = p.auxSend; csp.sendDPre = p.auxSendPre;
 
             channelStrips_[idx].process(
                 partL_.data(), partR_.data(),
-                revL_.data(), revR_.data(),
-                choL_.data(), choR_.data(),
-                delL_.data(), delR_.data(),
-                auxL_.data(), auxR_.data(),
+                revL_.data(), revR_.data(), choL_.data(), choR_.data(),
+                delL_.data(), delR_.data(), auxL_.data(), auxR_.data(),
                 chunk, csp, isPartAudible(pIdx));
 
             float pMax = 0.0f;
@@ -188,6 +195,8 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
                 pMax = std::max(pMax, std::max(std::abs(sL), std::abs(sR)));
             }
             partPeaks_[idx] = std::max(partPeaks_[idx], pMax);
+            if (audioDuckEnabled_ && (pIdx == 9 || parts_[idx].isDrumKit))
+                audioDuckEnvelope_ = std::max(audioDuckEnvelope_, pMax);
         }
 
         const bool injFilter = diagProbe_.isInjectingAt(4) || diagProbe_.isInjectingAt(5);
@@ -227,25 +236,27 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
             }
         }
 
-        const bool runOutput = anyVoiceActive || injFilter || injPreFx || injPreMaster || fxTailSamplesLeft_ > 0;
+        const bool runOutput = anyVoiceActive || injFilter || injPreFx || injPreMaster
+            || fxTailSamplesLeft_ > 0 || outputAndFx_.getChassis().hasAnySlotActivity();
         if (runOutput)
         {
             if (anyVoiceActive || injFilter || injPreFx)
-                fxTailSamplesLeft_ = static_cast<int>(sampleRate_ * 2.5);
+                fxTailSamplesLeft_ = static_cast<int>(sampleRate_ * 5.0);
             else if (fxTailSamplesLeft_ > 0)
                 fxTailSamplesLeft_ = std::max(0, fxTailSamplesLeft_ - chunk);
 
             McxOutputAndFx::ControlFrame fxCtrl;
             fxCtrl.bpm = static_cast<double>(masterTempoBpm_);
             fxCtrl.tempoSync = true;
-            outputAndFx_.processChunk(
-                dryL_.data(), dryR_.data(),
-                revL_.data(), revR_.data(),
-                choL_.data(), choR_.data(),
-                delL_.data(), delR_.data(),
-                auxL_.data(), auxR_.data(),
-                chunk, (injPreMaster && !anyVoiceActive && !injFilter && !injPreFx) ? 1.0f : masterGain_,
-                fxCtrl);
+            const bool duckTriggered = manualDuckGate_ || (midiDuckEnabled_ && kickDuckEnvelope_ > 0.05f) || (audioDuckEnabled_ && audioDuckEnvelope_ > 0.08f);
+            fxCtrl.gates[0] = duckTriggered ? 1.0f : 0.0f;
+            if (kickDuckEnvelope_ > 0.01f) kickDuckEnvelope_ *= std::exp(-static_cast<float>(chunk) / static_cast<float>(sampleRate_ * 0.18));
+            else kickDuckEnvelope_ = 0.0f;
+            if (audioDuckEnvelope_ > 0.01f) audioDuckEnvelope_ *= std::exp(-static_cast<float>(chunk) / static_cast<float>(sampleRate_ * 0.18));
+            else audioDuckEnvelope_ = 0.0f;
+            const float outGain = (injPreMaster && !anyVoiceActive && !injFilter && !injPreFx) ? 1.0f : masterGain_;
+            outputAndFx_.processChunk(dryL_.data(), dryR_.data(), revL_.data(), revR_.data(), choL_.data(), choR_.data(),
+                                      delL_.data(), delR_.data(), auxL_.data(), auxR_.data(), chunk, outGain, fxCtrl, insertUsedMask);
             for (int i = 0; i < chunk; ++i)
             {
                 left[offset + i] = dryL_[static_cast<std::size_t>(i)];

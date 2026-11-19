@@ -1,4 +1,8 @@
 #include "PluginEditor.h"
+#include "McxEditorBridgeHelpers.h"
+#include "McxEngineBridgeHelpers.h"
+#include "McxSongBridgeHelpers.h"
+#include "McxRackBridgeHelpers.h"
 #include <WebView2Bridge/WebView2ResourceProvider.h>
 
 #if JUCE_WINDOWS
@@ -130,49 +134,23 @@ void McxAudioProcessorEditor::resized() {
 
 void McxAudioProcessorEditor::timerCallback() {
     if (!isUiReady_ || webComponent_ == nullptr) return;
-
+    if (const auto dirtyMask = processor_.consumePendingEngineStateMask(); dirtyMask != 0) {
+        for (int p = 0; p < McxEngine::kNumParts; ++p) {
+            if ((dirtyMask & static_cast<std::uint16_t>(1u << p)) != 0) {
+                webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildPartPresetsPayload(processor_.engine(), p));
+                webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildPartEngineStatePayload(processor_.engine(), p));
+            }
+        }
+    }
+    if (processor_.consumeSongStateDirty()) {
+        webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildSongAndScenesStatePayload(processor_.engine()));
+    }
     const auto snap = processor_.readTelemetrySnapshot();
-    juce::DynamicObject::Ptr payload = new juce::DynamicObject();
-    payload->setProperty("type", "telemetry");
-    payload->setProperty("peakL", snap.peakL);
-    payload->setProperty("peakR", snap.peakR);
-    payload->setProperty("peakSendA", snap.peakSendA);
-    payload->setProperty("peakSendB", snap.peakSendB);
-    payload->setProperty("peakSendC", snap.peakSendC);
-    payload->setProperty("peakSendD", snap.peakSendD);
-    payload->setProperty("limiterGrDb", snap.limiterGrDb);
-    payload->setProperty("activeVoices", snap.activeVoices);
-    payload->setProperty("focusedPart", snap.focusedPart);
-    payload->setProperty("sampleRate", snap.sampleRate);
-    payload->setProperty("lfoPhase", snap.lfoPhase);
-
-    juce::Array<juce::var> mutes;
-    for (bool m : snap.sendBusMutes) mutes.add(m);
-    payload->setProperty("sendBusMutes", mutes);
-
-    juce::DynamicObject::Ptr labels = new juce::DynamicObject();
-    labels->setProperty("sendA", juce::String(snap.sendNameA));
-    labels->setProperty("sendB", juce::String(snap.sendNameB));
-    labels->setProperty("sendC", juce::String(snap.sendNameC));
-    labels->setProperty("sendD", juce::String(snap.sendNameD));
-    payload->setProperty("sendLabels", juce::var(labels.get()));
-
-    juce::Array<juce::var> samples;
-    samples.ensureStorageAllocated(128);
-    for (float s : snap.samplesL) samples.add(s);
-    payload->setProperty("samplesL", samples);
-
-    juce::Array<juce::var> pPeaks;
-    pPeaks.ensureStorageAllocated(16);
-    for (float p : snap.partPeaks) pPeaks.add(p);
-    payload->setProperty("partPeaks", pPeaks);
-
-    juce::Array<juce::var> pMidiPeaks;
-    pMidiPeaks.ensureStorageAllocated(16);
-    for (float mp : snap.partMidiPeaks) pMidiPeaks.add(mp);
-    payload->setProperty("partMidiPeaks", pMidiPeaks);
-
-    webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", juce::var(payload.get()));
+    if (snap.activeVoices == 0 && ++gcTickCounter_ >= 30) {
+        gcTickCounter_ = 0;
+        (void)processor_.collectUnusedWaves();
+    }
+    webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildTelemetryPayload(snap));
 }
 
 void McxAudioProcessorEditor::emitSystemSettings() {
@@ -200,6 +178,22 @@ void McxAudioProcessorEditor::handleJsEvent(const juce::var& msg) {
     if (type == "uiReady") {
         isUiReady_ = true;
         emitSystemSettings();
+        webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildEngineCatalogPayload(processor_.engine()));
+        webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildPartPresetsPayload(processor_.engine(), 0));
+        webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildPartEngineStatePayload(processor_.engine(), 0));
+        webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildSongAndScenesStatePayload(processor_.engine()));
+        return;
+    }
+    if (handleSequencerJsEvent(processor_, type, *obj)) {
+        return;
+    }
+    if (handleEngineAndBankJsEvent(processor_, webComponent_.get(), type, *obj)) {
+        return;
+    }
+    if (handleSongAndScenesJsEvent(processor_, webComponent_.get(), type, *obj)) {
+        return;
+    }
+    if (handleRackJsEvent(processor_, type, *obj)) {
         return;
     }
     if (type == "noteOn") {
@@ -245,7 +239,8 @@ void McxAudioProcessorEditor::handleJsEvent(const juce::var& msg) {
         return;
     }
     if (type == "resetToFactory") {
-        processor_.resetToFactory();
+        const int p = obj->hasProperty("part") ? static_cast<int>(obj->getProperty("part")) : 0;
+        processor_.enqueueResetToFactory(p);
         return;
     }
     if (type == "loadBankBase64") {

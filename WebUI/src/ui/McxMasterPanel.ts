@@ -14,6 +14,7 @@ export interface McxMasterPanelOptions {
   initialVolume?: number; initialBpm?: number;
   onOpenGlobal?: () => void; onOpenFxRack?: () => void; onOpenGlobalLfo?: () => void;
   onOpenGroove?: (partIndex: number) => void;
+  onOpenSong?: () => void;
   onBpmChange?: (bpm: number) => void;
   onTransportChange?: (state: CompactTransportBarState) => void;
 }
@@ -49,15 +50,13 @@ export class McxMasterPanel {
           <button type="button" class="mcx-master-fx-btn mcx-master-global-btn" id="mcx-global-btn" title="Ajustes Globales y Master Bus">
             <span class="mcx-master-fx-led"></span><span>GLOBAL</span><span class="mcx-master-topo-tag">BUS</span>
           </button>
-          <button type="button" class="mcx-master-fx-btn" id="mcx-btn-open-fx" title="Abrir Master FX Rack">
-            <span class="mcx-master-fx-led"></span><span>FX RACK</span><span class="mcx-master-topo-tag" id="mcx-master-topo-tag">CASC</span>
-          </button>
           <button type="button" class="mcx-master-fx-btn mcx-master-lfo-btn" id="mcx-btn-open-glfo" title="Abrir LFOs Globales">
             <span class="mcx-master-fx-led" id="mcx-glfo-led"></span><span>G-LFO</span><span class="mcx-master-topo-tag" id="mcx-master-glfo-tag">SYNC</span>
           </button>
           <div class="mcx-master-quick-row">
             <button type="button" class="mcx-master-lim-btn is-active" id="mcx-btn-toggle-lim" title="Master Safety Limiter"><span class="mcx-lim-dot"></span>LIM</button>
             <button type="button" class="mcx-master-lim-btn" id="mcx-btn-open-groove" title="Motor de Groove & Shuffle (Master)">SHUFFLE</button>
+            <button type="button" class="mcx-master-lim-btn" id="mcx-btn-open-song" title="Song Mode & Live Scenes (Ctrl+M)">SONG</button>
           </div>
         </div>
 
@@ -70,8 +69,6 @@ export class McxMasterPanel {
           <div class="mcx-master-db-divider"></div>
           <span class="mcx-master-db-pill" id="mcx-master-db-pill">0.0 dB</span>
         </div>
-
-        <div class="mcx-master-transport-mount" id="mcx-master-transport-mount"></div>
       </div>
     `;
 
@@ -99,28 +96,29 @@ export class McxMasterPanel {
       });
     }
 
-    const trMount = this.container.querySelector('#mcx-master-transport-mount') as HTMLElement | null;
+    const trMount = (document.getElementById('mcx-transport-mount') || this.container.querySelector('#mcx-master-transport-mount')) as HTMLElement | null;
     if (trMount) {
       this.transport = new CompactTransportBar(trMount, {
+        orientation: 'horizontal',
         initialBpm: this.opts.initialBpm ?? 120,
         labels: {
           play: t('mcx.transportPlay') || 'Play', stop: t('mcx.transportStop') || 'Stop',
           record: t('mcx.transportRecord') || 'Record', loop: t('mcx.transportLoop') || 'Loop', metro: t('mcx.transportMetro') || 'Metro',
         },
-        onPlay: () => { this.bridge.setTempo(this.transport?.getState().bpm ?? 120); this.opts.setLcdLine2?.('TRANSPORT: PLAY ▶'); },
-        onStop: () => { this.bridge.allNotesOff(); this.opts.setLcdLine2?.('TRANSPORT: STOP ■'); },
-        onRecord: (rec) => this.opts.setLcdLine2?.(rec ? 'TRANSPORT: REC ARMED ●' : 'TRANSPORT: REC OFF'),
-        onLoop: (loop) => this.opts.setLcdLine2?.(loop ? 'LOOP: ON 🔁' : 'LOOP: ONE-SHOT'),
-        onMetro: (metro) => this.opts.setLcdLine2?.(metro ? 'METRONOME: ON 🔔' : 'METRONOME: OFF'),
+        onPlay: () => { this.bridge.setTempo(this.transport?.getState().bpm ?? 120); this.bridge.setTransportPlaying(true, false); this.opts.setLcdLine2?.('TRANSPORT: PLAY'); },
+        onStop: () => { this.bridge.setTransportPlaying(false, true); this.opts.setLcdLine2?.('TRANSPORT: STOP'); },
+        onRecord: (rec) => this.opts.setLcdLine2?.(rec ? 'TRANSPORT: REC ARMED' : 'TRANSPORT: REC OFF'),
+        onLoop: (loop) => this.opts.setLcdLine2?.(loop ? 'LOOP: ON' : 'LOOP: ONE-SHOT'),
+        onMetro: (metro) => this.opts.setLcdLine2?.(metro ? 'METRONOME: ON' : 'METRONOME: OFF'),
         onTempoChange: (bpm) => { this.bridge.setTempo(bpm); this.opts.onBpmChange?.(bpm); this.opts.setLcdLine2?.(`TEMPO: ${bpm.toFixed(1)} BPM`); },
         onTransportChange: this.opts.onTransportChange,
       });
     }
 
     this.container.querySelector('#mcx-global-btn')?.addEventListener('click', () => this.opts.onOpenGlobal?.());
-    this.container.querySelector('#mcx-btn-open-fx')?.addEventListener('click', () => (this.opts.onOpenFxRack ? this.opts.onOpenFxRack() : this.opts.setLcdLine2?.('MASTER FX RACK ACTIVO')));
     this.container.querySelector('#mcx-btn-open-glfo')?.addEventListener('click', () => (this.opts.onOpenGlobalLfo ? this.opts.onOpenGlobalLfo() : this.opts.setLcdLine2?.('GLOBAL LFOS MODAL')));
     this.container.querySelector('#mcx-btn-open-groove')?.addEventListener('click', () => (this.opts.onOpenGroove ? this.opts.onOpenGroove(0) : this.opts.setLcdLine2?.('GROOVE & SHUFFLE MODAL')));
+    this.container.querySelector('#mcx-btn-open-song')?.addEventListener('click', () => this.opts.onOpenSong?.());
 
     this.container.querySelector('#mcx-btn-toggle-lim')?.addEventListener('click', (e) => {
       this.limiterEnabled = !this.limiterEnabled;
@@ -169,6 +167,9 @@ export class McxMasterPanel {
   public setTopologyTag(name: string): void {
     const tag = this.container.querySelector('#mcx-master-topo-tag');
     if (tag) tag.textContent = name.toUpperCase();
+  }
+  public setSongModeActive(active: boolean): void {
+    this.container.querySelector('#mcx-btn-open-song')?.classList.toggle('is-active', active);
   }
 
   public updateGlobalLfoPhase(ph: number): void {

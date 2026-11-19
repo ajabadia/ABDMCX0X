@@ -1,0 +1,118 @@
+/* ABDMCX0X -- 8-Slot Modular 19'' Studio Rack Chassis & Patchbay Column */
+
+.mcx-rack-column {
+  width: 240px; min-width: 220px; max-width: 260px; flex-shrink: 0; height: 100%; box-sizing: border-box;
+  padding: var(--space-2); display: flex; flex-direction: column; gap: var(--space-2);
+  background: color-mix(in srgb, var(--color-panel-bg) 40%, transparent);
+  border: 1px solid var(--color-panel-border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card, var(--shadow-elevation-1)); overflow: hidden;
+}
+
+.mcx-rack-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 4px; border-bottom: 1px solid var(--color-panel-border-dim);
+}
+
+.mcx-rack-title {
+  font-family: var(--font-sans); font-size: var(--text-xs); font-weight: 800;
+  letter-spacing: 0.10em; color: var(--color-text-muted);
+}
+
+.mcx-rack-topo-btn {
+  appearance: none; border: 1px solid var(--color-panel-border); border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-panel-surface) 80%, transparent);
+  color: var(--color-accent); font-family: var(--font-mono); font-size: 9px; font-weight: 700;
+  padding: 2px 6px; cursor: pointer; transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.mcx-rack-topo-btn:hover {
+  border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+}
+
+.mcx-rack-patchbay-strip {
+  display: flex; justify-content: space-between; align-items: center;
+  background: color-mix(in srgb, var(--color-bg-base) 60%, transparent);
+  border: 1px solid var(--color-panel-border-dim); border-radius: var(--radius-sm);
+  padding: 3px 6px; font-family: var(--font-mono); font-size: 8.5px; color: var(--color-text-dim);
+}
+
+.mcx-rack-slots-container {
+  flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px;
+  overflow-y: auto; scrollbar-width: thin;
+}
+
+.mcx-rack-slot-card {
+  position: relative; background: color-mix(in srgb, var(--color-panel-surface) 85%, transparent);
+  border: 1px solid var(--color-panel-border-dim); border-radius: var(--radius-sm);
+  padding: 4px 6px; display: flex; flex-direction: column; gap: 3px; box-sizing: border-box;
+  transition: border-color var(--transition-fast);
+}
+
+.mcx-rack-slot-card.is-empty {
+  border-style: dashed; background: transparent; align-items: center;
+  justify-content: center; min-height: 38px; cursor: pointer;
+}
+
+.mcx-rack-slot-card.is-empty:hover {
+  border-color: var(--color-accent);
+}
+
+.mcx-rack-add-btn {
+  font-family: var(--font-mono); font-size: 9px; font-weight: 700;
+  color: var(--color-text-dim); display: flex; align-items: center; gap: 4px;
+}
+
+.mcx-rack-slot-row-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 4px;
+}
+
+.mcx-rack-slot-badge {
+  font-family: var(--font-mono); font-size: 8.5px; font-weight: 800; padding: 1px 4px;
+  border-radius: 2px; background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+  color: var(--color-accent);
+}
+
+.mcx-rack-slot-thumb {
+  width: 16px; height: 16px; border-radius: 2px; object-fit: cover;
+}
+
+.mcx-rack-slot-name {
+  flex: 1; min-width: 0; font-family: var(--font-sans); font-size: 10px; font-weight: 700;
+  color: var(--color-text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+}
+
+.mcx-rack-slot-actions {
+  display: flex; align-items: center; gap: 2px;
+}
+
+.mcx-rack-btn-mini {
+  appearance: none; border: none; background: transparent; color: var(--color-text-dim);
+  font-size: 9px; cursor: pointer; padding: 1px 3px; border-radius: 2px;
+}
+
+.mcx-rack-btn-mini:hover {
+  color: var(--color-text-main); background: color-mix(in srgb, var(--color-text-dim) 20%, transparent);
+}
+
+.mcx-rack-vu-row {
+  display: flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: 7.5px; color: var(--color-text-dim);
+}
+
+.mcx-rack-vu-label { width: 18px; }
+
+.mcx-rack-vu-bar-wrap {
+  flex: 1; height: 4px; background: color-mix(in srgb, var(--color-bg-base) 80%, transparent);
+  border-radius: 2px; overflow: hidden; position: relative;
+}
+
+.mcx-rack-vu-fill {
+  display: block; height: 100%; width: 0%; background: var(--color-accent); transition: width 50ms linear;
+}
+
+.mcx-rack-vu-clip {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--color-panel-border-dim);
+}
+
+.mcx-rack-vu-clip.is-active {
+  background: var(--color-danger); box-shadow: 0 0 4px var(--color-danger);
+}

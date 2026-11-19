@@ -1,0 +1,58 @@
+/**
+ * ABDMCX0X -- songLocales.ts
+ * Localized ES / EN strings for Bar-Quantized Live Scenes (1..8) and Song Mode.
+ */
+
+export const songEs = {
+  songDrawerTitle: 'MODO CANCIÓN Y ESCENAS EN VIVO (1..8)',
+  songNavItem: 'Modo Canción y Escenas...',
+  liveScenes: 'ESCENAS EN VIVO (CUANTIZADAS AL COMPÁS)',
+  liveModeShort: 'VIVO',
+  songModeShort: 'SONG',
+  songModeLabel: 'MODO CANCIÓN',
+  liveModeLabel: 'MODO VIVO',
+  songLoopLabel: 'BUCLE',
+  songBlocksTitle: 'ARREGLO DE CANCIÓN (BLOQUES LINEALES)',
+  captureMixer: 'CAPTURAR MEZCLA',
+  launchNow: 'APLICAR YA',
+  queueAtBar: 'ENCOLAR AL COMPÁS',
+  addBlock: '+ BLOQUE',
+  duplicateBlock: 'DUPLICAR',
+  clearSong: 'VACIAR',
+  sceneName: 'NOMBRE ESCENA',
+  sceneTranspose: 'TRANSPOSICIÓN ESCENA',
+  sceneMutes: 'SILENCIOS POR PARTE (P01..P16)',
+  totalBars: 'TOTAL COMPASES',
+  queuedLabel: 'ENCOLADA',
+  barWord: 'COMP',
+  sceneBarHint: 'Clic: Encolar al compás (Alt+1..8) | Shift+Clic: Capturar mezcla | Doble clic: Editar',
+  songOpenBtnHint: 'Abrir Modo Canción y Escenas en Vivo (Ctrl+M)',
+  mutedCountUnit: 'mutes',
+};
+
+export const songEn = {
+  songDrawerTitle: 'SONG MODE & LIVE SCENES (1..8)',
+  songNavItem: 'Song Mode & Live Scenes...',
+  liveScenes: 'LIVE SCENES (BAR-QUANTIZED)',
+  liveModeShort: 'LIVE',
+  songModeShort: 'SONG',
+  songModeLabel: 'SONG MODE',
+  liveModeLabel: 'LIVE MODE',
+  songLoopLabel: 'LOOP',
+  songBlocksTitle: 'SONG ARRANGEMENT (LINEAR BLOCKS)',
+  captureMixer: 'CAPTURE MIXER',
+  launchNow: 'LAUNCH NOW',
+  queueAtBar: 'QUEUE @ BAR',
+  addBlock: '+ BLOCK',
+  duplicateBlock: 'DUPLICATE',
+  clearSong: 'CLEAR',
+  sceneName: 'SCENE NAME',
+  sceneTranspose: 'SCENE TRANSPOSE',
+  sceneMutes: 'PART MUTE MATRIX (P01..P16)',
+  totalBars: 'TOTAL BARS',
+  queuedLabel: 'QUEUED',
+  barWord: 'BAR',
+  sceneBarHint: 'Click: Queue at bar (Alt+1..8) | Shift+Click: Capture mixer | Double-click: Edit',
+  songOpenBtnHint: 'Open Song Mode & Live Scenes (Ctrl+M)',
+  mutedCountUnit: 'muted',
+};

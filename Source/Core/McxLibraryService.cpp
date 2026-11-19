@@ -2,14 +2,11 @@
 
 #include <algorithm>
 #include <fstream>
-#include <sstream>
 
 namespace abdmcx
 {
 
-namespace
-{
-std::string sanitizeId(const std::string& str)
+std::string McxLibraryService::sanitizeId(const std::string& str)
 {
     std::string out;
     for (char c : str)
@@ -22,7 +19,7 @@ std::string sanitizeId(const std::string& str)
     return out;
 }
 
-std::string escapeJson(const std::string& str)
+std::string McxLibraryService::escapeJson(const std::string& str)
 {
     std::string out;
     out.reserve(str.size() + 8);
@@ -36,7 +33,6 @@ std::string escapeJson(const std::string& str)
     }
     return out;
 }
-} // namespace
 
 bool McxLibraryService::scanWorkingDir(const std::string& workingDir)
 {
@@ -56,7 +52,6 @@ bool McxLibraryService::scanWorkingDir(const std::string& workingDir)
     scanBanksFolder(currentWorkingDir_ / "Banks");
     scanModelsFolder(currentWorkingDir_ / "Models");
 
-    // Add unique sublibraries sorted
     std::unordered_set<std::string> subs;
     for (const auto& item : items_)
     {
@@ -66,6 +61,16 @@ bool McxLibraryService::scanWorkingDir(const std::string& workingDir)
     std::sort(sublibraries_.begin(), sublibraries_.end());
 
     return true;
+}
+
+const McxCatalogItem* McxLibraryService::findItemById(const std::string& id) const noexcept
+{
+    for (const auto& item : items_)
+    {
+        if (item.id == id)
+            return &item;
+    }
+    return nullptr;
 }
 
 void McxLibraryService::scanPresetsFolder(const std::filesystem::path& root, McxCatalogItemType type)
@@ -85,35 +90,9 @@ void McxLibraryService::scanPresetsFolder(const std::filesystem::path& root, Mcx
             item.itemType = type;
 
             auto rel = std::filesystem::relative(entry.path(), root, ec);
-            if (rel.has_parent_path())
-                item.sublibrary = rel.parent_path().string();
-            else
-                item.sublibrary = "Default";
-
+            item.sublibrary = rel.has_parent_path() ? rel.parent_path().string() : "Default";
             item.relativePath = rel.generic_string();
             item.id = sanitizeId(item.sublibrary + "_" + item.name);
-            item.isFavorite = isFavorite(item.id);
-            items_.push_back(std::move(item));
-        }
-    }
-}
-
-void McxLibraryService::scanBanksFolder(const std::filesystem::path& root)
-{
-    std::error_code ec;
-    if (!std::filesystem::exists(root, ec)) return;
-
-    for (const auto& entry : std::filesystem::directory_iterator(root, ec))
-    {
-        if (entry.is_regular_file(ec) && entry.path().extension() == ".abdbank")
-        {
-            McxCatalogItem item{};
-            item.filePath = entry.path().generic_string();
-            item.name = entry.path().stem().string();
-            item.itemType = McxCatalogItemType::SoundBank;
-            item.sublibrary = "Banks";
-            item.engineKind = "rompler_bank";
-            item.id = sanitizeId("bank_" + item.name);
             item.isFavorite = isFavorite(item.id);
             items_.push_back(std::move(item));
         }
@@ -129,7 +108,6 @@ void McxLibraryService::scanModelsFolder(const std::filesystem::path& root)
     {
         if (entry.is_directory(ec))
         {
-            // If folder contains sound.script or model.mname, treat as model
             auto scriptPath = entry.path() / "sound.script";
             auto mnamePath = entry.path() / "model.mname";
             if (std::filesystem::exists(scriptPath, ec) || std::filesystem::exists(mnamePath, ec))
@@ -184,7 +162,6 @@ void McxLibraryService::loadFavorites(const std::filesystem::path& favPath)
     std::string line;
     while (std::getline(file, line))
     {
-        // Simple line-based or JSON string extraction
         auto p1 = line.find('"');
         if (p1 != std::string::npos)
         {
@@ -212,7 +189,7 @@ void McxLibraryService::saveFavorites(const std::filesystem::path& favPath)
 bool McxLibraryService::savePartPresetJson(const std::string& workingDir,
                                           const std::string& sublibrary,
                                           const std::string& presetName,
-                                          int categoryId,
+                                          int /*categoryId*/,
                                           const std::string& jsonContent)
 {
     if (workingDir.empty() || presetName.empty()) return false;
@@ -223,8 +200,7 @@ bool McxLibraryService::savePartPresetJson(const std::string& workingDir,
     std::filesystem::create_directories(targetDir, ec);
     if (ec) return false;
 
-    std::filesystem::path outFile = targetDir / (presetName + ".abdpart");
-    std::ofstream file(outFile, std::ios::trunc);
+    std::ofstream file(targetDir / (presetName + ".abdpart"), std::ios::trunc);
     if (!file.is_open()) return false;
 
     file << jsonContent;
@@ -237,7 +213,7 @@ bool McxLibraryService::savePartPresetJson(const std::string& workingDir,
 bool McxLibraryService::saveMultiPresetJson(const std::string& workingDir,
                                            const std::string& sublibrary,
                                            const std::string& presetName,
-                                           int categoryId,
+                                           int /*categoryId*/,
                                            const std::string& jsonContent)
 {
     if (workingDir.empty() || presetName.empty()) return false;
@@ -248,8 +224,7 @@ bool McxLibraryService::saveMultiPresetJson(const std::string& workingDir,
     std::filesystem::create_directories(targetDir, ec);
     if (ec) return false;
 
-    std::filesystem::path outFile = targetDir / (presetName + ".abdmulti");
-    std::ofstream file(outFile, std::ios::trunc);
+    std::ofstream file(targetDir / (presetName + ".abdmulti"), std::ios::trunc);
     if (!file.is_open()) return false;
 
     file << jsonContent;
@@ -257,39 +232,6 @@ bool McxLibraryService::saveMultiPresetJson(const std::string& workingDir,
 
     scanWorkingDir(workingDir);
     return true;
-}
-
-std::string McxLibraryService::serializeCatalogJson() const
-{
-    std::ostringstream ss;
-    ss << "{\n";
-    ss << "  \"type\": \"CATALOG_SNAPSHOT\",\n";
-    ss << "  \"workingDir\": \"" << escapeJson(currentWorkingDir_.generic_string()) << "\",\n";
-    ss << "  \"sublibraries\": [";
-    for (std::size_t i = 0; i < sublibraries_.size(); ++i)
-    {
-        ss << "\"" << escapeJson(sublibraries_[i]) << "\"" << (i + 1 < sublibraries_.size() ? ", " : "");
-    }
-    ss << "],\n";
-    ss << "  \"items\": [\n";
-    for (std::size_t i = 0; i < items_.size(); ++i)
-    {
-        const auto& it = items_[i];
-        ss << "    {\n";
-        ss << "      \"id\": \"" << escapeJson(it.id) << "\",\n";
-        ss << "      \"name\": \"" << escapeJson(it.name) << "\",\n";
-        ss << "      \"sublibrary\": \"" << escapeJson(it.sublibrary) << "\",\n";
-        ss << "      \"categoryName\": \"" << escapeJson(it.categoryName) << "\",\n";
-        ss << "      \"categoryId\": " << it.categoryId << ",\n";
-        ss << "      \"engineKind\": \"" << escapeJson(it.engineKind) << "\",\n";
-        ss << "      \"itemType\": " << static_cast<int>(it.itemType) << ",\n";
-        ss << "      \"filePath\": \"" << escapeJson(it.filePath) << "\",\n";
-        ss << "      \"isFavorite\": " << (it.isFavorite ? "true" : "false") << "\n";
-        ss << "    }" << (i + 1 < items_.size() ? ",\n" : "\n");
-    }
-    ss << "  ]\n";
-    ss << "}\n";
-    return ss.str();
 }
 
 } // namespace abdmcx

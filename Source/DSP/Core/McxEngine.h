@@ -1,116 +1,29 @@
 #pragma once
 
+#include "McxEngineRegistry.h"
+#include "McxPartState.h"
 #include "McxTypes.h"
 #include "../FX/McxOutputAndFx.h"
 #include "../Synth/McxChannelStrip.h"
 #include "../../MIDI/HardwareMirrorRouter.h"
+#include "../../MIDI/McxMidiClockEmitter.h"
 #include "../../MIDI/McxMidiOutQueue.h"
 #include "SynthCore/DiagnosticSignalProbe.h"
-#include "SynthCore/GrooveArpeggiator.h"
 #include "SynthCore/MusicalScaleTransposer.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <deque>
-#include <vector>
+#include <memory>
+#include <string>
+#include <string_view>
 
 namespace abdmcx
 {
 
-struct McxPartState
-{
-    explicit McxPartState(abd::rompler::StructuredRomplerEngine& rompler) noexcept
-        : rompler_(&rompler)
-    {
-    }
-
-    McxPartState(const McxPartState&) = delete;
-    McxPartState& operator=(const McxPartState&) = delete;
-    McxPartState(McxPartState&&) = delete;
-    McxPartState& operator=(McxPartState&&) = delete;
-
-    [[nodiscard]] abd::rompler::StructuredRomplerEngine& romplerEngine() noexcept { return *rompler_; }
-    [[nodiscard]] const abd::rompler::StructuredRomplerEngine& romplerEngine() const noexcept { return *rompler_; }
-
-    bool enabled { true };
-    bool isDrumKit { false };
-    McxPartKind kind { McxPartKind::Chromatic };
-    std::uint8_t midiChannel { 1 };
-    std::uint8_t keyLow { 0 };
-    std::uint8_t keyHigh { 127 };
-    bool mute { false };
-    bool solo { false };
-    bool followGlobalTranspose { true };
-    McxPartRouteMode routeMode { McxPartRouteMode::Internal };
-    std::uint8_t midiPortIndex { 0 };
-
-    // Mixing Console Strip State (engine-agnostic)
-    float level { 0.85f };
-    float pan { 0.0f };
-    float reverbSend { 0.25f }; // Send A
-    float chorusSend { 0.10f }; // Send B
-    float delaySend { 0.0f };   // Send C
-    float auxSend { 0.0f };     // Send D
-    bool reverbSendPre { false };
-    bool chorusSendPre { false };
-    bool delaySendPre { false };
-    bool auxSendPre { false };
-
-    bool eqEnabled { false };
-    float eqLowFreqHz { 100.0f };
-    float eqLowGainDb { 0.0f };
-    float eqMidFreqHz { 1000.0f };
-    float eqMidGainDb { 0.0f };
-    float eqMidQ { 1.0f };
-    float eqHighFreqHz { 8000.0f };
-    float eqHighGainDb { 0.0f };
-    bool driveEnabled { false };
-    float driveAmount { 0.0f };
-
-    float pitchBendSemitones { 0.0f };
-    McxTrackSemanticOffsets semanticOffsets {};
-    std::array<std::int8_t, 128> latchedNoteMap {};
-    abd::synth::GrooveArpeggiator arp {};
-
-private:
-    abd::rompler::StructuredRomplerEngine* rompler_;
-
-public:
-    // Direct reference views into the part's StructuredRomplerEngine patch & drum kit
-    McxStructureMode& structureMode { rompler_->patch().structureMode };
-    McxFilterModel& filterModel { rompler_->patch().filterModel };
-    McxDrumMapMode& drumMapMode { rompler_->drumKit().drumMapMode };
-    bool& filter2Enabled { rompler_->patch().filter2.enabled };
-    McxFilterModel& filter2Model { rompler_->patch().filter2.model };
-    std::uint8_t& filter2Mode { rompler_->patch().filter2.mode };
-    float& filter2CutoffHz { rompler_->patch().filter2.cutoffHz };
-    float& filter2Resonance { rompler_->patch().filter2.resonance };
-    float& vectorX { rompler_->patch().vectorX };
-    float& vectorY { rompler_->patch().vectorY };
-    bool& portamentoEnabled { rompler_->patch().portamentoEnabled };
-    float& portamentoTimeMs { rompler_->patch().portamentoTimeMs };
-    bool& portamentoLegatoOnly { rompler_->patch().portamentoLegatoOnly };
-
-    std::uint8_t& lfo1Shape { rompler_->patch().lfo1.shape };
-    bool& lfo1Sync { rompler_->patch().lfo1.sync };
-    std::uint8_t& lfo1Trigger { rompler_->patch().lfo1.trigger };
-    float& lfo1Rate { rompler_->patch().lfo1.rate };
-    float& lfo1DelayMs { rompler_->patch().lfo1.delayMs };
-    float& lfo1Depth { rompler_->patch().lfo1.depth };
-    std::uint8_t& lfo1Target { rompler_->patch().lfo1.target };
-
-    std::uint8_t& lfo2Shape { rompler_->patch().lfo2.shape };
-    bool& lfo2Sync { rompler_->patch().lfo2.sync };
-    std::uint8_t& lfo2Trigger { rompler_->patch().lfo2.trigger };
-    float& lfo2Rate { rompler_->patch().lfo2.rate };
-    float& lfo2DelayMs { rompler_->patch().lfo2.delayMs };
-    float& lfo2Depth { rompler_->patch().lfo2.depth };
-    std::uint8_t& lfo2Target { rompler_->patch().lfo2.target };
-
-    std::array<McxPartialConfig, 4>& partials { rompler_->patch().partials };
-    std::array<McxDrumSlotConfig, 128>& drumSlots { rompler_->drumKit().slots };
-    McxDrumNoteRemapper& drumRemapper { rompler_->drumKit().remapper };
-};
+class McxPatternSequencer;
+class McxSongAndScenes;
 
 /**
  * @brief 16-part JUCE-free C++20 Multi-Engine Groovebox Workstation core for ABDMCX0X.
@@ -124,6 +37,7 @@ public:
     static constexpr int kMaxVoices = 64;
 
     McxEngine() noexcept;
+    ~McxEngine() noexcept;
     McxEngine(const McxEngine&) = delete;
     McxEngine& operator=(const McxEngine&) = delete;
     McxEngine(McxEngine&&) = delete;
@@ -139,7 +53,36 @@ public:
     [[nodiscard]] const McxPartState& part(int partIndex) const noexcept;
 
     [[nodiscard]] IMcxSoundEngine* getPartSoundEngine(int partIndex) noexcept;
+    [[nodiscard]] const IMcxSoundEngine* getPartSoundEngine(int partIndex) const noexcept;
     void setPartSoundEngine(int partIndex, IMcxSoundEngine* customEngine) noexcept;
+
+    [[nodiscard]] McxEngineRegistry& engineRegistry() noexcept { return engineRegistry_; }
+    [[nodiscard]] const McxEngineRegistry& engineRegistry() const noexcept { return engineRegistry_; }
+    [[nodiscard]] abd::rompler::RomplerWavePool& wavePool() noexcept { return engineRegistry_.wavePool(); }
+    [[nodiscard]] const abd::rompler::RomplerWavePool& wavePool() const noexcept { return engineRegistry_.wavePool(); }
+    std::size_t collectUnusedWaves() noexcept;
+
+    [[nodiscard]] int getRegisteredEngineTypeCount() const noexcept;
+    [[nodiscard]] abd::engines::EngineDescriptor getRegisteredEngineDescriptor(int typeIndex) const noexcept;
+    int registerCustomEngineType(const abd::engines::EngineDescriptor& desc,
+                                 IMcxSoundEngine* const* partInstances,
+                                 int instanceCount) noexcept;
+    bool selectPartEngineType(int partIndex, int engineTypeIndex) noexcept;
+    bool selectPartEngineById(int partIndex, const char* engineTypeId) noexcept;
+    [[nodiscard]] int getPartEngineTypeIndex(int partIndex) const noexcept;
+    [[nodiscard]] const char* getPartEngineTypeId(int partIndex) const noexcept;
+    [[nodiscard]] abd::engines::EngineDescriptor getPartEngineDescriptor(int partIndex) const noexcept;
+
+    [[nodiscard]] int getPartFactoryPresetCount(int partIndex) const noexcept;
+    [[nodiscard]] const char* getPartFactoryPresetName(int partIndex, int presetIndex) const noexcept;
+    bool loadPartFactoryPreset(int partIndex, int presetIndex) noexcept;
+    [[nodiscard]] const char* getPartCurrentPresetName(int partIndex) const noexcept;
+
+    bool setPartEngineParamByKey(int partIndex, std::string_view key, float value) noexcept;
+    [[nodiscard]] bool getPartEngineParamByKey(int partIndex, std::string_view key, float& outValue) const noexcept;
+    [[nodiscard]] std::string serializePartEngineStateJson(int partIndex) const;
+    bool deserializePartEngineStateJson(int partIndex, std::string_view jsonText);
+
     [[nodiscard]] McxTrackModRouter& modRouter(int partIndex) noexcept;
     [[nodiscard]] const McxTrackModRouter& modRouter(int partIndex) const noexcept;
 
@@ -184,11 +127,23 @@ public:
     }
 
     void setPartKind(int partIndex, McxPartKind kind) noexcept;
+    void setPartInsertSlot(int partIndex, int slotIndex) noexcept;
+    [[nodiscard]] int getPartInsertSlot(int partIndex) const noexcept;
+    void moveRackSlot(int fromIdx, int toIdx) noexcept;
+    void removeRackSlot(int slotIdx) noexcept;
+    void triggerSidechainDuck(float amount = 1.0f) noexcept { kickDuckEnvelope_ = std::max(kickDuckEnvelope_, amount); }
+    void setManualDuckGate(bool active) noexcept { manualDuckGate_ = active; }
+    void setAudioDuckEnabled(bool enabled) noexcept { audioDuckEnabled_ = enabled; }
+    [[nodiscard]] bool isAudioDuckEnabled() const noexcept { return audioDuckEnabled_; }
+    void setMidiDuckEnabled(bool enabled) noexcept { midiDuckEnabled_ = enabled; }
+    [[nodiscard]] bool isMidiDuckEnabled() const noexcept { return midiDuckEnabled_; }
     [[nodiscard]] bool isAnyPartSoloed() const noexcept;
     [[nodiscard]] bool isPartAudible(int partIndex) const noexcept;
 
     void routeMidiChannelNoteOn(int midiChannel1to16, int midiNote, float velocity, std::int32_t sampleOffset = 0) noexcept;
     void routeMidiChannelNoteOff(int midiChannel1to16, int midiNote, std::int32_t sampleOffset = 0) noexcept;
+    void routeMidiChannelCc(int midiChannel1to16, int ccNumber, int ccValue) noexcept;
+    void setPartSustainPedal(int partIdx, bool down) noexcept;
     void allNotesOff() noexcept;
 
     void setOutboundMidiQueue(McxMidiOutQueue<1024>* queue) noexcept { outboundQueue_ = queue; }
@@ -206,33 +161,43 @@ public:
 
     [[nodiscard]] int getActiveVoiceCount() const noexcept;
     [[nodiscard]] int getActivePartialCount() const noexcept;
-
-    [[nodiscard]] McxChannelStrip& channelStrip(int partIndex) noexcept
-    {
-        return channelStrips_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))];
-    }
-    [[nodiscard]] const McxChannelStrip& channelStrip(int partIndex) const noexcept
-    {
-        return channelStrips_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))];
-    }
-
+    [[nodiscard]] McxChannelStrip& channelStrip(int partIndex) noexcept { return channelStrips_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))]; }
+    [[nodiscard]] const McxChannelStrip& channelStrip(int partIndex) const noexcept { return channelStrips_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))]; }
     [[nodiscard]] HardwareMirrorRouter& getMirrorRouter() noexcept { return mirrorRouter_; }
     [[nodiscard]] const HardwareMirrorRouter& getMirrorRouter() const noexcept { return mirrorRouter_; }
     [[nodiscard]] McxOutputAndFx& getOutputAndFx() noexcept { return outputAndFx_; }
     [[nodiscard]] const McxOutputAndFx& getOutputAndFx() const noexcept { return outputAndFx_; }
-
+    [[nodiscard]] McxPatternSequencer& sequencer() noexcept;
+    [[nodiscard]] const McxPatternSequencer& sequencer() const noexcept;
+    [[nodiscard]] McxSongAndScenes& songAndScenes() noexcept;
+    [[nodiscard]] const McxSongAndScenes& songAndScenes() const noexcept;
+    void applySceneStateNow(std::uint16_t muteMask, int transposeSemitones) noexcept;
+    [[nodiscard]] std::uint16_t captureCurrentMuteMask() const noexcept;
+    void triggerScene(int sceneIndex, bool immediate = false) noexcept;
+    void captureCurrentToScene(int sceneIndex) noexcept;
+    void setSongModeEnabled(bool enabled) noexcept;
+    void setSongLoopEnabled(bool loop) noexcept;
+    void jumpSongBlock(int blockIndex, bool immediate = false) noexcept;
+    [[nodiscard]] McxMidiClockEmitter& midiClock() noexcept { return midiClock_; }
+    [[nodiscard]] const McxMidiClockEmitter& midiClock() const noexcept { return midiClock_; }
+    void setSequencerPlaying(bool playing, bool resetToZero = true) noexcept;
+    void syncHostTransport(bool hostPlaying, double hostBpm, double hostPpqPos, bool ppqValid) noexcept;
+    [[nodiscard]] bool isSequencerRunning() const noexcept;
+    [[nodiscard]] int getSequencerTick() const noexcept;
+    [[nodiscard]] int getSequencerStep() const noexcept;
+    [[nodiscard]] int getSequencerTotalTicks() const noexcept;
     [[nodiscard]] std::array<float, kNumParts> getPartPeaks() const noexcept { return partPeaks_; }
     [[nodiscard]] std::array<float, kNumParts> getPartMidiPeaks() const noexcept { return partMidiPeaks_; }
-
     static float quantizeOutputSample(float x, McxOutputCharacter character) noexcept;
 
 private:
-    struct CachedSemanticIds
-    {
-        abd::synth::ModDestinationId cutoff {}, reso {}, attack {}, decay {}, sustain {}, release {}, vibrato {};
-    };
-
+    struct CachedSemanticIds { abd::synth::ModDestinationId cutoff {}, reso {}, attack {}, decay {}, sustain {}, release {}, vibrato {}; };
     static void onRomplerVoiceStolen(void* userData, int ownerSlot, int drumSlotNote) noexcept;
+    void initSequencer() noexcept;
+    void prepareSequencer(double sr) noexcept;
+    void resetSequencer() noexcept;
+    void processSequencerAndClock(int numSamples, std::int32_t baseSampleOffset = 0) noexcept;
+    void switchToResolvedEngine(int idx, int typeIdx, IMcxSoundEngine* nextEng, bool callPrepare) noexcept;
     void cacheSemanticDestIds(int partIdx) noexcept;
     void syncPartEngineControl(int partIdx) noexcept;
     void triggerInternalVoice(int partIdx, int inputNote, float velocity, float eventAccent) noexcept;
@@ -243,6 +208,7 @@ private:
     void emitExternalNoteOff(int partIdx, const McxPartState& p, int note, std::int32_t sampleOffset) noexcept;
 
     double sampleRate_ { 44100.0 };
+    bool prepared_ { false };
     int focusedPartIndex_ { 0 };
     McxMachinePersona persona_ { McxMachinePersona::FreeSuper };
     McxMachinePersonaSpec personaSpec_ { getMachinePersonaSpec(McxMachinePersona::FreeSuper) };
@@ -260,8 +226,8 @@ private:
     abd::synth::MusicalScaleTransposer transposer_ {};
     McxFilterBank diagFilter_ {};
 
-    abd::rompler::RomplerVoicePool romplerPool_ {};
-    std::vector<abd::rompler::StructuredRomplerEngine> romplerEngines_;
+    McxEngineRegistry engineRegistry_ {};
+    std::array<int, kNumParts> partEngineTypeIdx_ {};
     std::array<IMcxSoundEngine*, kNumParts> engineSlots_ {};
     std::array<McxTrackModRouter, kNumParts> modRouters_ {};
     std::array<CachedSemanticIds, kNumParts> semanticDestIds_ {};
@@ -271,6 +237,16 @@ private:
     McxOutputAndFx outputAndFx_ {};
     HardwareMirrorRouter mirrorRouter_ {};
     McxMidiOutQueue<1024>* outboundQueue_ { nullptr };
+    McxMidiClockEmitter midiClock_ {};
+    std::unique_ptr<McxPatternSequencer> sequencer_;
+    std::unique_ptr<McxSongAndScenes> songAndScenes_;
+    float kickDuckEnvelope_ { 0.0f };
+    float audioDuckEnvelope_ { 0.0f };
+    bool audioDuckEnabled_ { true };
+    bool midiDuckEnabled_ { true };
+    bool manualDuckGate_ { false };
+    double prevHostPpqPos_ { -1.0 };
+    bool prevHostPlaying_ { false };
 
     std::array<float, McxOutputAndFx::kMaxChunk> dryL_ {}, dryR_ {}, choL_ {}, choR_ {}, revL_ {}, revR_ {};
     std::array<float, McxOutputAndFx::kMaxChunk> delL_ {}, delR_ {}, auxL_ {}, auxR_ {}, partL_ {}, partR_ {};

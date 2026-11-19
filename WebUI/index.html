@@ -13,11 +13,55 @@
     } catch (e) {}
   </script>
   <title>ABDMCX0X -- Groove-Rompler &amp; Hardware Bridge</title>
+  <link rel="stylesheet" href="/src/styles/mcx0x.css" />
+  <style>
+    body:not(.is-ready) > :not(#mcx-splash) {
+      visibility: hidden;
+    }
+    .mcx-splash {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-3, 8px);
+      background: var(--color-bg-base, Canvas);
+      color: var(--color-text-main, CanvasText);
+      font-family: var(--font-mono, monospace);
+      z-index: 99999;
+      user-select: none;
+    }
+    .mcx-splash-title {
+      font-size: var(--text-xl, 13px);
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      opacity: 0.9;
+    }
+    .mcx-splash-label {
+      font-size: var(--text-sm, 9px);
+      letter-spacing: 0.08em;
+      opacity: 0.55;
+    }
+    body.is-ready .mcx-splash {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity 0.2s ease-out, visibility 0.2s ease-out;
+    }
+  </style>
 </head>
 <body class="mcx-app abd-theme-bg abd-theme-bg--full">
+  <div id="mcx-splash" class="mcx-splash" aria-live="polite">
+    <span class="mcx-splash-title">ABDMCX0X</span>
+    <span class="mcx-splash-label">Loading...</span>
+  </div>
+
   <div id="mcx-navbar-host"></div>
 
   <section class="mcx-lcd-strip">
+    <div class="mcx-scene-bar-host" id="mcx-scene-bar-host"></div>
+
     <div class="mcx-lcd" aria-live="polite">
       <div class="mcx-lcd-line1" id="lcd-line1">SUPERFREE  |  PART 01  |  64 VOICES</div>
       <div class="mcx-lcd-line2" id="lcd-line2" data-i18n="mcx.lcdReady">LISTO -- TOCA TECLAS O MUEVE MANDOS</div>
@@ -25,11 +69,6 @@
 
     <div class="mcx-scope-wrap">
       <canvas id="mcx-scope-canvas" class="mcx-scope-canvas" width="240" height="44"></canvas>
-    </div>
-
-    <div class="mcx-voice-meter">
-      <span class="mcx-voice-caption" id="voice-caption">0 / 64 VOICES</span>
-      <div class="mcx-voice-leds" id="voice-leds"></div>
     </div>
   </section>
 
@@ -49,8 +88,19 @@
       </section>
     </section>
 
-    <!-- MASTER & GLOBAL OUTPUT COLUMN -->
-    <aside class="mcx-panel mcx-master-panel" id="mcx-master-panel" aria-label="Master &amp; Global Output"></aside>
+    <!-- RIGHT SECTION: 19'' FX Rack & Master Panel (top) + Master Transport Dock (bottom) -->
+    <aside class="mcx-right-col" id="mcx-right-col">
+      <div class="mcx-right-top-row">
+        <!-- 8-SLOT MODULAR 19'' STUDIO RACK CHASSIS COLUMN -->
+        <div class="mcx-panel mcx-rack-column" id="mcx-rack-column" aria-label="19'' Studio FX Rack"></div>
+
+        <!-- MASTER & GLOBAL OUTPUT COLUMN -->
+        <div class="mcx-panel mcx-master-panel" id="mcx-master-panel" aria-label="Master &amp; Global Output"></div>
+      </div>
+
+      <!-- MASTER TRANSPORT CONTROLS DOCK (Horizontal bar under Rack & Master) -->
+      <div class="mcx-panel mcx-transport-dock" id="mcx-transport-mount" aria-label="Master Transport Controls"></div>
+    </aside>
   </main>
 
   <footer class="mcx-keyboard-dock">

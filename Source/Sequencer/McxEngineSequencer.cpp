@@ -1,0 +1,256 @@
+#include "../DSP/Core/McxEngine.h"
+#include "../Core/McxParamRouter.h"
+#include "McxPatternSequencer.h"
+#include "McxSongAndScenes.h"
+
+#include <algorithm>
+#include <cmath>
+
+namespace abdmcx
+{
+
+namespace
+{
+void seqOnNoteOn(void* ctx, int part, std::uint8_t note, std::uint8_t vel, bool slide, std::int32_t sampleOffset) noexcept
+{
+    auto* eng = static_cast<McxEngine*>(ctx);
+    if (eng == nullptr || !eng->isPartAudible(part)) return;
+    auto& p = eng->part(part);
+    auto* soundEng = eng->getPartSoundEngine(part);
+
+    if (slide && HardwareMirrorRouter::routesToExternal(p.routeMode))
+    {
+        if (auto* q = eng->getOutboundMidiQueue())
+            q->push(HardwareMirrorRouter::makeCc(p.midiChannel, 65, 127, sampleOffset, p.midiPortIndex));
+    }
+
+    float prevPorta = 0.0f;
+    float prevLegato = 1.0f;
+    if (slide && soundEng != nullptr)
+    {
+        (void)soundEng->getParamByKey("porta.enabled", prevPorta);
+        (void)soundEng->getParamByKey("porta.legato", prevLegato);
+        (void)soundEng->setParamByKey("porta.enabled", 1.0f);
+        (void)soundEng->setParamByKey("porta.legato", 0.0f);
+    }
+
+    eng->triggerPartNoteOn(part, static_cast<int>(note), static_cast<float>(vel) / 127.0f, sampleOffset);
+
+    if (slide)
+    {
+        if (soundEng != nullptr)
+        {
+            (void)soundEng->setParamByKey("porta.enabled", prevPorta);
+            (void)soundEng->setParamByKey("porta.legato", prevLegato);
+        }
+        if (HardwareMirrorRouter::routesToExternal(p.routeMode))
+        {
+            if (auto* q = eng->getOutboundMidiQueue())
+                q->push(HardwareMirrorRouter::makeCc(p.midiChannel, 65, 0, sampleOffset, p.midiPortIndex));
+        }
+    }
+}
+
+void seqOnNoteOff(void* ctx, int part, std::uint8_t note, std::int32_t sampleOffset) noexcept
+{
+    auto* eng = static_cast<McxEngine*>(ctx);
+    if (eng != nullptr)
+        eng->releasePartNoteOff(part, static_cast<int>(note), sampleOffset);
+}
+
+void seqOnMotion(void* ctx, int part, int paramId, float value, std::int32_t /*sampleOffset*/) noexcept
+{
+    auto* eng = static_cast<McxEngine*>(ctx);
+    if (eng != nullptr)
+        applyWebPartParam(*eng, part, paramId, value);
+}
+
+bool seqOnBarBoundary(void* ctx, std::int32_t sampleOffset) noexcept
+{
+    auto* eng = static_cast<McxEngine*>(ctx);
+    if (eng == nullptr) return true;
+    const auto act = eng->songAndScenes().onBarBoundary();
+    if (act.stopTransport)
+    {
+        eng->midiClock().emitStop(eng->getOutboundMidiQueue(), sampleOffset);
+        return false;
+    }
+    if (act.applied)
+        eng->applySceneStateNow(act.muteMask, act.transposeSemitones);
+    return true;
+}
+
+[[nodiscard]] McxSequencerCallbacks makeSeqCallbacks(McxEngine* eng) noexcept
+{
+    McxSequencerCallbacks cbs {};
+    cbs.ctx = eng;
+    cbs.onNoteOn = &seqOnNoteOn;
+    cbs.onNoteOff = &seqOnNoteOff;
+    cbs.onMotion = &seqOnMotion;
+    cbs.onBarBoundary = &seqOnBarBoundary;
+    return cbs;
+}
+} // namespace
+
+McxEngine::~McxEngine() noexcept = default;
+
+void McxEngine::initSequencer() noexcept
+{
+    sequencer_ = std::make_unique<McxPatternSequencer>();
+    songAndScenes_ = std::make_unique<McxSongAndScenes>();
+}
+
+void McxEngine::prepareSequencer(double sr) noexcept
+{
+    midiClock_.prepare(sr);
+    if (sequencer_) sequencer_->prepare(sr);
+}
+
+void McxEngine::resetSequencer() noexcept
+{
+    midiClock_.reset();
+    prevHostPlaying_ = false;
+    prevHostPpqPos_ = -1.0;
+    if (sequencer_) sequencer_->reset();
+    if (songAndScenes_) songAndScenes_->reset();
+}
+
+McxPatternSequencer& McxEngine::sequencer() noexcept { return *sequencer_; }
+const McxPatternSequencer& McxEngine::sequencer() const noexcept { return *sequencer_; }
+McxSongAndScenes& McxEngine::songAndScenes() noexcept { return *songAndScenes_; }
+const McxSongAndScenes& McxEngine::songAndScenes() const noexcept { return *songAndScenes_; }
+
+std::uint16_t McxEngine::captureCurrentMuteMask() const noexcept
+{
+    std::uint16_t mask = 0u;
+    for (int i = 0; i < kNumParts; ++i)
+        if (parts_[static_cast<std::size_t>(i)].mute)
+            mask |= static_cast<std::uint16_t>(1u << i);
+    return mask;
+}
+
+void McxEngine::applySceneStateNow(std::uint16_t muteMask, int transposeSemitones) noexcept
+{
+    for (int i = 0; i < kNumParts; ++i)
+        parts_[static_cast<std::size_t>(i)].mute = ((muteMask & static_cast<std::uint16_t>(1u << i)) != 0u);
+    const int clampedTr = std::clamp(transposeSemitones, -24, 24);
+    setGlobalTranspose(clampedTr);
+    if (songAndScenes_) songAndScenes_->recordAppliedState(muteMask, clampedTr);
+}
+
+void McxEngine::triggerScene(int sceneIndex, bool immediate) noexcept
+{
+    if (!songAndScenes_) return;
+    const bool running = sequencer_ && sequencer_->isRunning();
+    const auto act = songAndScenes_->triggerScene(sceneIndex, running, immediate);
+    if (act.applied) applySceneStateNow(act.muteMask, act.transposeSemitones);
+}
+
+void McxEngine::captureCurrentToScene(int sceneIndex) noexcept
+{
+    if (!songAndScenes_) return;
+    const auto mask = captureCurrentMuteMask();
+    const int tr = transposer_.getTransposeSemitones();
+    songAndScenes_->setScene(sceneIndex, mask, tr);
+    songAndScenes_->recordAppliedState(mask, tr);
+}
+
+void McxEngine::setSongModeEnabled(bool enabled) noexcept
+{
+    if (!songAndScenes_) return;
+    songAndScenes_->setSongMode(enabled);
+    if (enabled && sequencer_ && !sequencer_->isRunning())
+    {
+        const auto act = songAndScenes_->onTransportStart(0);
+        if (act.applied) applySceneStateNow(act.muteMask, act.transposeSemitones);
+    }
+}
+
+void McxEngine::setSongLoopEnabled(bool loop) noexcept
+{
+    if (songAndScenes_) songAndScenes_->setSongLoop(loop);
+}
+
+void McxEngine::jumpSongBlock(int blockIndex, bool immediate) noexcept
+{
+    if (!songAndScenes_) return;
+    const bool running = sequencer_ && sequencer_->isRunning();
+    const auto act = songAndScenes_->jumpToSongBlock(blockIndex, running, immediate);
+    if (act.applied) applySceneStateNow(act.muteMask, act.transposeSemitones);
+}
+
+void McxEngine::setSequencerPlaying(bool playing, bool resetToZero) noexcept
+{
+    if (!sequencer_) return;
+    const bool wasRunning = sequencer_->isRunning();
+    if (playing && !wasRunning)
+    {
+        if (resetToZero && songAndScenes_)
+        {
+            const auto act = songAndScenes_->onTransportStart(0);
+            if (act.applied) applySceneStateNow(act.muteMask, act.transposeSemitones);
+        }
+        sequencer_->start(resetToZero);
+        if (resetToZero) midiClock_.emitStart(outboundQueue_, 0);
+        else midiClock_.emitContinue(outboundQueue_, 0);
+    }
+    else if (!playing && wasRunning)
+    {
+        if (resetToZero)
+        {
+            sequencer_->stop(makeSeqCallbacks(this), 0);
+        }
+        else
+        {
+            sequencer_->pause();
+            allNotesOff();
+        }
+        midiClock_.emitStop(outboundQueue_, 0);
+    }
+    else if (!playing && resetToZero)
+    {
+        sequencer_->stop(makeSeqCallbacks(this), 0);
+    }
+}
+
+void McxEngine::syncHostTransport(bool hostPlaying, double hostBpm, double hostPpqPos, bool ppqValid) noexcept
+{
+    if (!sequencer_) return;
+    if (hostBpm >= 20.0 && hostBpm <= 300.0)
+        setMasterTempoBpm(static_cast<float>(hostBpm));
+
+    const bool started = hostPlaying && !prevHostPlaying_;
+    const bool seeked = hostPlaying && prevHostPlaying_ && ppqValid && prevHostPpqPos_ >= 0.0
+                        && (hostPpqPos < prevHostPpqPos_ - 0.1 || std::abs(hostPpqPos - prevHostPpqPos_) > 2.0);
+    if ((started || seeked) && songAndScenes_)
+    {
+        const int hostBar = (ppqValid && hostPpqPos >= 0.0) ? static_cast<int>(std::floor(hostPpqPos / 4.0)) : 0;
+        const auto act = songAndScenes_->onTransportStart(hostBar);
+        if (act.applied) applySceneStateNow(act.muteMask, act.transposeSemitones);
+    }
+    prevHostPlaying_ = hostPlaying;
+    if (ppqValid) prevHostPpqPos_ = hostPpqPos;
+
+    sequencer_->syncFromHostTransport(
+        hostPlaying, static_cast<double>(masterTempoBpm_), hostPpqPos, ppqValid,
+        makeSeqCallbacks(this), &midiClock_, outboundQueue_);
+}
+
+void McxEngine::processSequencerAndClock(int numSamples, std::int32_t baseSampleOffset) noexcept
+{
+    const double bpm = static_cast<double>(masterTempoBpm_);
+    midiClock_.setBpm(bpm);
+    midiClock_.processBlock(numSamples, outboundQueue_, baseSampleOffset);
+    if (sequencer_)
+    {
+        sequencer_->setBpm(bpm);
+        sequencer_->processBlock(numSamples, makeSeqCallbacks(this), baseSampleOffset);
+    }
+}
+
+bool McxEngine::isSequencerRunning() const noexcept { return sequencer_ && sequencer_->isRunning(); }
+int McxEngine::getSequencerTick() const noexcept { return sequencer_ ? sequencer_->getCurrentTick() : 0; }
+int McxEngine::getSequencerStep() const noexcept { return sequencer_ ? sequencer_->getCurrentStep() : 0; }
+int McxEngine::getSequencerTotalTicks() const noexcept { return sequencer_ ? sequencer_->getTotalTicks() : 384; }
+
+} // namespace abdmcx

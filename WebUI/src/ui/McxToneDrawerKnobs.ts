@@ -65,6 +65,15 @@ export const KNOB_DEFS: KnobDef[] = [
   { param: 'chorusSend', min: 0, max: 1, def: 0.20, bipolar: false, fmt: (v) => `${Math.round(v * 100)}%` },
   { param: 'delaySend', min: 0, max: 1, def: 0, bipolar: false, fmt: (v) => `${Math.round(v * 100)}%` },
   { param: 'auxSend', min: 0, max: 1, def: 0, bipolar: false, fmt: (v) => `${Math.round(v * 100)}%` },
+
+  // Semantic Track Offsets / External Hardware Macros (Non-destructive)
+  { param: 'cutoffOffset', min: -1, max: 1, def: 0, bipolar: true, fmt: (v) => (Math.abs(v) < 0.01 ? '0%' : `${v > 0 ? '+' : ''}${Math.round(v * 100)}%`) },
+  { param: 'resonanceOffset', min: -1, max: 1, def: 0, bipolar: true, fmt: (v) => (Math.abs(v) < 0.01 ? '0%' : `${v > 0 ? '+' : ''}${Math.round(v * 100)}%`) },
+  { param: 'envAttackOffset', min: -1, max: 1, def: 0, bipolar: true, fmt: (v) => (Math.abs(v) < 0.01 ? '0%' : `${v > 0 ? '+' : ''}${Math.round(v * 100)}%`) },
+  { param: 'envDecayOffset', min: -1, max: 1, def: 0, bipolar: true, fmt: (v) => (Math.abs(v) < 0.01 ? '0%' : `${v > 0 ? '+' : ''}${Math.round(v * 100)}%`) },
+  { param: 'envSustainOffset', min: -1, max: 1, def: 0, bipolar: true, fmt: (v) => (Math.abs(v) < 0.01 ? '0%' : `${v > 0 ? '+' : ''}${Math.round(v * 100)}%`) },
+  { param: 'envReleaseOffset', min: -1, max: 1, def: 0, bipolar: true, fmt: (v) => (Math.abs(v) < 0.01 ? '0%' : `${v > 0 ? '+' : ''}${Math.round(v * 100)}%`) },
+  { param: 'vibratoOffset', min: -1, max: 1, def: 0, bipolar: true, fmt: (v) => (Math.abs(v) < 0.01 ? '0%' : `${v > 0 ? '+' : ''}${Math.round(v * 100)}%`) },
 ];
 
 export interface KnobItem {

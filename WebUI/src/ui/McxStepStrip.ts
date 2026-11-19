@@ -47,8 +47,7 @@ export class McxStepStrip {
   private cbs: McxStepStripCallbacks;
   private partSteps: StepState[][];
   private partPorta: { enabled: boolean; timeMs: number }[];
-  private runningChaser = 0;
-  private chaserTimer: number | null = null;
+  private runningChaser = -1;
   private currentBpm = 120;
   private isRunning = false;
   private swing = 0.5;
@@ -160,7 +159,6 @@ export class McxStepStrip {
 
   public setBpm(bpm: number): void {
     this.currentBpm = Math.max(20, Math.min(300, bpm));
-    if (this.isRunning) this.setTransportRunning(true, this.currentBpm);
   }
 
   public setSwing(swing: number): void {
@@ -169,26 +167,20 @@ export class McxStepStrip {
 
   public getSwing(): number { return this.swing; }
 
+  public setChaserStep(step: number): void {
+    const next = step >= 0 ? (step % 16) : -1;
+    if (next === this.runningChaser) return;
+    this.runningChaser = next;
+    this.strip.setChaserStep(next);
+  }
+
   public setTransportRunning(running: boolean, bpm = this.currentBpm): void {
     this.isRunning = running;
     this.currentBpm = Math.max(20, Math.min(300, bpm));
-    if (this.chaserTimer != null) { clearInterval(this.chaserTimer); this.chaserTimer = null; }
-    if (running) {
-      const stepMs = Math.max(20, (60000 / this.currentBpm) / 4);
-      this.runningChaser = 0;
-      this.strip.setChaserStep(0);
-      this.chaserTimer = window.setInterval(() => {
-        this.runningChaser = (this.runningChaser + 1) % 16;
-        this.strip.setChaserStep(this.runningChaser);
-      }, stepMs);
-    } else {
-      this.runningChaser = -1;
-      this.strip.setChaserStep(-1);
-    }
+    if (!running) this.setChaserStep(-1);
   }
 
   public destroy(): void {
-    if (this.chaserTimer != null) clearInterval(this.chaserTimer);
     this.strip.destroy();
   }
 }

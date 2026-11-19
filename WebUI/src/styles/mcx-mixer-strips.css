@@ -67,19 +67,52 @@
   background: var(--color-accent);
   box-shadow: 0 0 5px var(--color-accent);
 }
-.mcx-strip-kind-btn {
-  appearance: none;
-  border: 1px solid var(--color-panel-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-panel-surface);
-  color: var(--color-text-muted);
+.mcx-strip-ch-mini {
   font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 800;
-  padding: 1px 3px;
-  cursor: pointer;
+  font-size: 8.5px;
+  font-weight: 700;
+  color: var(--color-text-dim);
 }
-.mcx-strip-kind-btn.is-drum { border-color: var(--color-warning); color: var(--color-warning); }
+.mcx-strip-route-badge {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  width: 100%;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-panel-border);
+  background: var(--color-panel-surface);
+  color: var(--color-text-main);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 800;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.mcx-route-mode-tag { letter-spacing: 0.03em; }
+.mcx-route-eng-tag { color: var(--color-text-muted); font-weight: 700; }
+.mcx-strip-route-badge.is-int { border-color: color-mix(in srgb, var(--color-accent) 55%, var(--color-panel-border)); }
+.mcx-strip-route-badge.is-int .mcx-route-mode-tag { color: var(--color-accent); }
+.mcx-strip-route-badge.is-drum { border-color: color-mix(in srgb, var(--color-warning) 65%, var(--color-panel-border)); }
+.mcx-strip-route-badge.is-drum .mcx-route-mode-tag { color: var(--color-warning); }
+.mcx-strip-route-badge.is-ext {
+  border-color: var(--color-cable-midi-out);
+  background: color-mix(in srgb, var(--color-cable-midi-out) 14%, var(--color-panel-surface));
+}
+.mcx-strip-route-badge.is-ext .mcx-route-mode-tag { color: var(--color-cable-midi-out); }
+.mcx-strip-route-badge.is-both {
+  border-color: var(--color-accent-hover);
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-panel-surface));
+}
+.mcx-strip-route-badge.is-both .mcx-route-mode-tag { color: var(--color-accent-hover); }
+.mcx-strip-route-badge:hover {
+  border-color: var(--color-accent);
+  background: var(--color-panel-surface-elevated);
+}
 
 .mcx-strip-sound-btn {
   display: flex;
@@ -94,7 +127,7 @@
   color: var(--color-text-main);
   cursor: pointer;
   text-align: center;
-  height: 36px;
+  height: 40px;
   transition: all var(--transition-fast);
 }
 .mcx-strip-sound-btn:hover {
@@ -109,32 +142,33 @@
   width: 13px;
   height: 13px;
 }
+.mcx-strip-cover-thumb { width: 14px; height: 14px; object-fit: cover; border-radius: var(--radius-sm); flex-shrink: 0; }
 .mcx-strip-sound-name {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 9px;
+  font-size: 9.5px;
   font-weight: 600;
 }
 
 .mcx-strip-drawers-row {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 2px;
+  gap: 3px;
   width: 100%;
 }
 .mcx-strip-drawer-btn {
   appearance: none;
   width: 100%;
-  height: 16px;
+  height: 24px;
   padding: 0;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--color-panel-border-dim);
   background: var(--color-panel-surface);
   color: var(--color-text-muted);
   font-family: var(--font-mono);
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 800;
   cursor: pointer;
   display: inline-flex;

@@ -3,6 +3,8 @@
  * Diccionario en Español para el Groove-Rompler ABDMCX0X.
  */
 
+import { songEs } from './songLocales';
+
 export const mcxEs = {
   mcx: {
     subtitle: 'Groovebox Modular de 16 Partes y Sinte Multi-Motor',
@@ -183,5 +185,6 @@ export const mcxEs = {
     transportRecord: 'Grabar (Record)',
     transportLoop: 'Bucle (Loop)',
     transportMetro: 'Metrónomo',
+    ...songEs,
   },
 };

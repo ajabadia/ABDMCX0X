@@ -39,6 +39,7 @@ struct McxChannelStripParams
 
     // Drive
     bool driveEnabled { false };
+    std::uint8_t driveType { 0 };
     float driveAmount { 0.0f }; // [0.0 .. 1.0]
 
     // Fader & Pan
@@ -193,8 +194,8 @@ public:
             // 2. Drive
             if (applyDrive)
             {
-                l = abd::dsp::Saturation::processSample(l, driveGain) * driveComp;
-                r = abd::dsp::Saturation::processSample(r, driveGain) * driveComp;
+                l = applyDriveSample(l, driveGain, p.driveType) * driveComp;
+                r = applyDriveSample(r, driveGain, p.driveType) * driveComp;
             }
 
             // 3. Pre-Fader Sends (tap after EQ/Drive, before Fader/Mute)
@@ -220,6 +221,14 @@ public:
     }
 
 private:
+    static inline float applyDriveSample(float x, float driveGain, std::uint8_t type) noexcept
+    {
+        if (type == 1) return std::tanh(x * driveGain * 0.85f);
+        if (type == 2) return std::clamp(x * driveGain * 0.7f, -0.95f, 0.95f);
+        if (type == 3) return std::sin(x * driveGain * 1.5707963f);
+        return abd::dsp::Saturation::processSample(x, driveGain);
+    }
+
     void updateEqCoeffs(const McxChannelStripParams& p) noexcept
     {
         const float sr = static_cast<float>(sampleRate_);

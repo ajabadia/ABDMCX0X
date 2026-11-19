@@ -8,12 +8,12 @@ namespace abdmcx
 
 int McxEngine::getActiveVoiceCount() const noexcept
 {
-    return romplerPool_.getActiveVoiceCount();
+    return engineRegistry_.romplerPool().getActiveVoiceCount();
 }
 
 int McxEngine::getActivePartialCount() const noexcept
 {
-    return romplerPool_.getActivePartialCount();
+    return engineRegistry_.romplerPool().getActivePartialCount();
 }
 
 void McxEngine::setMasterTuneHz(float a4Hz) noexcept
@@ -29,7 +29,7 @@ void McxEngine::setPartKind(int partIndex, McxPartKind kind) noexcept
     p.kind = kind;
     p.isDrumKit = (kind == McxPartKind::DrumMap);
     p.followGlobalTranspose = (kind == McxPartKind::Chromatic);
-    romplerEngines_[static_cast<std::size_t>(idx)].setDrumMode(p.isDrumKit);
+    engineRegistry_.rompler(idx).setDrumMode(p.isDrumKit);
 }
 
 bool McxEngine::isAnyPartSoloed() const noexcept
@@ -71,6 +71,31 @@ void McxEngine::routeMidiChannelNoteOff(int midiChannel1to16, int midiNote, std:
     }
 }
 
+void McxEngine::routeMidiChannelCc(int midiChannel1to16, int ccNumber, int ccValue) noexcept
+{
+    const int ch = std::clamp(midiChannel1to16, 1, 16);
+    if (ccNumber == 64)
+    {
+        const bool down = (ccValue >= 64);
+        for (int i = 0; i < kNumParts; ++i)
+        {
+            const auto& p = parts_[static_cast<std::size_t>(i)];
+            if (p.enabled && static_cast<int>(p.midiChannel) == ch)
+                setPartSustainPedal(i, down);
+        }
+    }
+}
+
+void McxEngine::setPartSustainPedal(int partIdx, bool down) noexcept
+{
+    if (partIdx >= 0 && partIdx < kNumParts)
+    {
+        auto* eng = engineSlots_[static_cast<std::size_t>(partIdx)];
+        if (eng != nullptr)
+            eng->setSustainPedal(down);
+    }
+}
+
 void McxEngine::allNotesOff() noexcept
 {
     for (int i = 0; i < kNumParts; ++i)
@@ -95,6 +120,8 @@ void McxEngine::allNotesOff() noexcept
             slot.activeSounding = false;
     }
     partMidiPeaks_.fill(0.0f);
+    kickDuckEnvelope_ = 0.0f;
+    audioDuckEnvelope_ = 0.0f;
 }
 
 void McxEngine::triggerInternalVoice(int partIdx, int inputNote, float velocity, float eventAccent) noexcept
@@ -116,7 +143,8 @@ void McxEngine::releaseInternalVoice(int partIdx, int inputNote) noexcept
     if (eng == nullptr)
         return;
 
-    romplerEngines_[static_cast<std::size_t>(idx)].setDrumMode(parts_[static_cast<std::size_t>(idx)].isDrumKit);
+    if (eng == &engineRegistry_.rompler(idx))
+        engineRegistry_.rompler(idx).setDrumMode(parts_[static_cast<std::size_t>(idx)].isDrumKit);
     eng->noteOff(inputNote);
 }
 

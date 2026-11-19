@@ -21,3 +21,9 @@
 @import './mcx-lfo-panel.css';
 @import './mcx-lfo-targets.css';
 @import './mcx-sends-panel.css';
+@import './mcx-route-modal.css';
+@import './mcx-synth-modal.css';
+@import './mcx-drawer-tabs.css';
+@import './mcx-song-scenes.css';
+@import './mcx-rack-column.css';
+

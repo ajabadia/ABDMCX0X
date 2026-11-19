@@ -39,6 +39,9 @@ list(TRANSFORM MCX_CORE_DSP_SOURCES PREPEND "../")
 
 set(WASM_DSP_SOURCES
     ../Source/Wasm/WasmBridge.cpp
+    ../Source/Wasm/WasmBankAndEngineBridge.cpp
+    ../Source/Wasm/WasmSongBridge.cpp
+    ../Source/Wasm/WasmRackBridge.cpp
     ${MCX_CORE_DSP_SOURCES}
 )
 
@@ -75,5 +78,5 @@ target_compile_definitions(mcx0x_dsp PRIVATE
 set_target_properties(mcx0x_dsp PROPERTIES
     OUTPUT_NAME "mcx0x_dsp"
     SUFFIX ".js"
-    LINK_FLAGS "-s WASM=1 -s MALLOC=emmalloc -s ALLOW_MEMORY_GROWTH=1 -s INITIAL_MEMORY=33554432 -s FILESYSTEM=0 -s EXPORTED_RUNTIME_METHODS=['ccall','cwrap','getValue','setValue','HEAPF32','HEAPU8'] -s EXPORTED_FUNCTIONS=['_initEngine','_processAudio','_noteOn','_noteOff','_allNotesOff','_setTempoBPM','_setPartParam','_setMasterVolume','_loadBankFromMemory','_getAudioSnapshot','_getPartPeaks','_getPartMidiPeaks','_resetToFactory','_malloc','_free'] -O2"
+    LINK_FLAGS "-s WASM=1 -s MALLOC=emmalloc -s ALLOW_MEMORY_GROWTH=1 -s INITIAL_MEMORY=33554432 -s FILESYSTEM=0 -s EXPORTED_RUNTIME_METHODS=['ccall','cwrap','getValue','setValue','HEAPF32','HEAPU8'] -s EXPORTED_FUNCTIONS=['_initEngine','_processAudio','_noteOn','_noteOff','_allNotesOff','_setTempoBPM','_setPartParam','_setMasterVolume','_loadBankFromMemory','_getAudioSnapshot','_getPartPeaks','_getPartMidiPeaks','_resetToFactory','_setTransportPlaying','_setSequencerBars','_setPartGroove','_clearPartPattern','_addPartNote','_addPartMotionPoint','_commitPartPattern','_getSequencerState','_drainMidiOut','_getRegisteredEngineCount','_getPartEngineTypeIndex','_selectPartEngineType','_getPartEngineTypeId','_getPartFactoryPresetCount','_getPartFactoryPresetName','_loadPartFactoryPreset','_getPartCurrentPresetName','_setPartEngineParamByKey','_getPartEngineParamByKey','_getPartEngineStateJson','_indexBankFromMemory','_getIndexedBankToneCount','_getIndexedBankKitCount','_loadIndexedToneOnDemand','_loadIndexedKitOnDemand','_collectUnusedWaves','_triggerScene','_captureScene','_updateSceneSlot','_setSongModeEnabled','_setSongLoopEnabled','_jumpSongBlock','_clearSongBlocks','_addSongBlock','_commitSongBlocks','_getSongSceneTelemetry','_getSongScenesStateJson','_setRackSlotEngine','_setRackSlotName','_removeRackSlot','_moveRackSlot','_setRackSlotBypass','_setRackSlotParams','_setRackSlotParamByKey','_setRackSlotPreset','_setRackSlotDucking','_getRackSlotTelemetry','_getRackSlotsStateJson','_loadRackSlotsStateJson','_setPartInsertSlot','_getPartInsertSlot','_setSendSlotTarget','_getSendSlotTarget','_setSlotChainTarget','_getSlotChainTarget','_getAllRackSlotsTelemetry','_malloc','_free'] -O2"
 )

@@ -3,6 +3,8 @@
  * English dictionary for ABDMCX0X Groove-Rompler.
  */
 
+import { songEn } from './songLocales';
+
 export const mcxEn = {
   mcx: {
     subtitle: '16-Part Modular Groovebox & Multi-Engine Synth',
@@ -184,5 +186,6 @@ export const mcxEn = {
     transportRecord: 'Record',
     transportLoop: 'Loop',
     transportMetro: 'Metronome',
+    ...songEn,
   },
 };

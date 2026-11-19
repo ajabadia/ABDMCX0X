@@ -1,8 +1,10 @@
 #include "WasmBridge.h"
+#include "WasmInternal.h"
 #include "../DSP/Core/McxEngine.h"
-#include "../Core/McxBankLoader.h"
 #include "../Core/McxFactoryBank.h"
+#include "../Core/McxMultiBankManager.h"
 #include "../Core/McxParamRouter.h"
+#include "../Sequencer/McxPatternSequencer.h"
 
 #include <algorithm>
 #include <cmath>
@@ -15,6 +17,7 @@ class McxWasmContainer
 public:
     McxWasmContainer()
     {
+        engine_.setOutboundMidiQueue(&midiOutQueue_);
         engine_.prepare(44100.0);
         abdmcx::McxFactoryBank::applyFactoryDefaults(engine_);
     }
@@ -22,6 +25,7 @@ public:
     void prepare(double sampleRate) noexcept
     {
         currentSampleRate_ = sampleRate;
+        engine_.setOutboundMidiQueue(&midiOutQueue_);
         engine_.prepare(sampleRate);
     }
 
@@ -79,25 +83,20 @@ public:
         if (!data || sizeBytes <= 0)
             return 0;
 
-        abdmcx::McxBankLoader loader;
-        if (!loader.loadFromMemory(data, static_cast<std::size_t>(sizeBytes)))
+        const int slot = bankManager_.mountBankFromMemory(data, static_cast<std::size_t>(sizeBytes), {}, true);
+        const auto* bank = bankManager_.getBank(slot);
+        if (bank == nullptr)
             return 0;
 
-        // Apply first drum kit to part 9 (drum part) if present
-        if (loader.getDrumKitCount() > 0)
-        {
-            loader.applyDrumKitToPart(0, engine_.part(9));
-        }
+        if (bank->getDrumKitCount() > 0)
+            (void)bankManager_.loadDrumKitToPart(slot, 0, engine_, 9);
 
-        // Apply tones to other parts
-        const int toneCount = loader.getToneCount();
+        const int toneCount = bank->getToneCount();
         for (int i = 0; i < abdmcx::McxEngine::kNumParts; ++i)
         {
             if (i == 9) continue;
             if (i < toneCount)
-            {
-                loader.applyToneToPart(i, engine_.part(i));
-            }
+                (void)bankManager_.loadToneToPart(slot, i, engine_, i);
         }
         return 1;
     }
@@ -129,8 +128,31 @@ public:
         abdmcx::McxFactoryBank::applyFactoryDefaults(engine_);
     }
 
+    abdmcx::McxEngine& engine() noexcept { return engine_; }
+    const abdmcx::McxEngine& engine() const noexcept { return engine_; }
+    abdmcx::McxMultiBankManager& bankManager() noexcept { return bankManager_; }
+
+    int drainMidi(uint8_t* outBytes, int maxBytes) noexcept
+    {
+        if (!outBytes || maxBytes < 3) return 0;
+        int written = 0;
+        abdmcx::McxMidiOutMessage msg{};
+        while (written + 3 <= maxBytes && midiOutQueue_.pop(msg))
+        {
+            if (msg.length > 0 && written + static_cast<int>(msg.length) + 2 <= maxBytes)
+            {
+                outBytes[written++] = static_cast<uint8_t>(msg.portIndex);
+                outBytes[written++] = static_cast<uint8_t>(msg.length);
+                for (std::size_t i = 0; i < msg.length; ++i) outBytes[written++] = msg.bytes[i];
+            }
+        }
+        return written;
+    }
+
 private:
     abdmcx::McxEngine engine_;
+    abdmcx::McxMultiBankManager bankManager_ {};
+    abdmcx::McxMidiOutQueue<1024> midiOutQueue_{};
     double currentSampleRate_ { 44100.0 };
     float lastPeakL_ { 0.0f };
     float lastPeakR_ { 0.0f };
@@ -147,6 +169,12 @@ McxWasmContainer& getEngine()
     return *gEngine;
 }
 } // namespace
+
+namespace abdmcx::wasm_internal
+{
+McxEngine& engine() noexcept { return getEngine().engine(); }
+McxMultiBankManager& bankManager() noexcept { return getEngine().bankManager(); }
+} // namespace abdmcx::wasm_internal
 
 extern "C"
 {
@@ -214,6 +242,11 @@ void getPartMidiPeaks(float* outPeaks16)
 void resetToFactory()
 {
     getEngine().resetToFactory();
+}
+
+int drainMidiOut(uint8_t* outBytes, int maxBytes)
+{
+    return getEngine().drainMidi(outBytes, maxBytes);
 }
 
 } // extern "C"

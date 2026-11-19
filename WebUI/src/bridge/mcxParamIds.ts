@@ -1,6 +1,6 @@
 /**
  * ABDMCX0X -- mcxParamIds.ts
- * Canonical WASM / Native WebView2 parameter ID map (0..89).
+ * Canonical WASM / Native WebView2 parameter ID map (0..96).
  * Aligned with Source/Core/McxParamRouter.h.
  */
 
@@ -24,6 +24,9 @@ export const WASM_PARAM_ID = {
   lfo2Shape: 75, lfo2Sync: 76, lfo2Trigger: 77, lfo2Rate: 78, lfo2Delay: 79, lfo2Depth: 80, lfo2Target: 81,
   cutoffOffset: 82, resonanceOffset: 83, envAttackOffset: 84, envDecayOffset: 85,
   envSustainOffset: 86, envReleaseOffset: 87, vibratoOffset: 88, partMidiPort: 89,
+  patternSwing: 90, seqPlaying: 91, seqBars: 92, midiClockEnabled: 93, seqRecording: 94,
+  partEngineType: 95, partFactoryPreset: 96,
+  driveType: 97, arpMotif: 98, arpRate: 99, arpOctaves: 100, arpGate: 101, arpSwing: 102, arpLatch: 103,
 } as const;
 
 export type McxParamKey = keyof typeof WASM_PARAM_ID;

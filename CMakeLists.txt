@@ -134,6 +134,22 @@ target_compile_definitions(McxPhase6CoreInfraTests PRIVATE
 )
 add_test(NAME McxPhase6CoreInfraTests COMMAND McxPhase6CoreInfraTests)
 
+add_executable(McxPhase7SequencerTests Tests/McxPhase7SequencerTests.cpp)
+target_link_libraries(McxPhase7SequencerTests PRIVATE ABDMCX0X_Core)
+add_test(NAME McxPhase7SequencerTests COMMAND McxPhase7SequencerTests)
+
+add_executable(McxPhase8MultiEngineTests Tests/McxPhase8MultiEngineTests.cpp)
+target_link_libraries(McxPhase8MultiEngineTests PRIVATE ABDMCX0X_Core)
+add_test(NAME McxPhase8MultiEngineTests COMMAND McxPhase8MultiEngineTests)
+
+add_executable(McxPhase9SongScenesTests Tests/McxPhase9SongScenesTests.cpp)
+target_link_libraries(McxPhase9SongScenesTests PRIVATE ABDMCX0X_Core)
+add_test(NAME McxPhase9SongScenesTests COMMAND McxPhase9SongScenesTests)
+
+add_executable(McxPhase10RackChassisTests Tests/McxPhase10RackChassisTests.cpp)
+target_link_libraries(McxPhase10RackChassisTests PRIVATE ABDMCX0X_Core)
+add_test(NAME McxPhase10RackChassisTests COMMAND McxPhase10RackChassisTests)
+
 add_executable(McxAudioRenderDemo Tests/McxAudioRenderDemo.cpp)
 target_link_libraries(McxAudioRenderDemo PRIVATE ABDMCX0X_Core)
 

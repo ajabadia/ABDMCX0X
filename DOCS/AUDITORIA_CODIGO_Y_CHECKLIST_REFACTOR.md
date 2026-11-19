@@ -1,7 +1,7 @@
 # Auditoría de Código y Checklist de Refactorización — ABDMCX0X
 
 > **Documento de Auditoría y Control de Calidad:** Detección de trampas ocultas, desconexiones, carencias y deuda técnica antes de acometer la arquitectura Workstation Multi-Motor y MIDI Out.  
-> **Estado:** Documentado y Aprobado para Ejecución (v1.0 — 2026-11-18).  
+> **Estado:** Auditado y verificado al 100 % (`.\build.bat full` **5/5** + `8/8` CTest en `0.64s`): Fase 1, Bloque 6, Fase 3 (`StructuredRompler` + `ISoundEngine`) y Fase 2 (Secuenciador PPQ + MIDI Clock `0xF8`) — **2026-11-19**.  
 > **Ámbito:** `ABDMCX0X` (C++20, JUCE 9, WASM, WebUI) y su interacción con `ABDShared`.
 
 ---
@@ -14,7 +14,7 @@ La auditoría del código fuente actual revela que, aunque la base matemática d
 
 ## 2. Trampas Críticas (Bloqueantes Funcionales Ocultos)
 
-### 🚨 Trampa 1: El "MIDI Out Fantasma" en las Notas de `McxEngine`
+### ✅ Trampa 1 (Resuelto en Fase 1): El "MIDI Out Fantasma" en las Notas de `McxEngine`
 * **Ubicación:** `Source/DSP/Core/McxEngineControl.cpp` (líneas 100–115 y 118–129).
 * **Diagnóstico:**  
   En `triggerNote()`, cuando la pista tiene `routeMode == ExternalMidi`, el código ejecuta:
@@ -36,7 +36,7 @@ La auditoría del código fuente actual revela que, aunque la base matemática d
 
 ---
 
-### 🚨 Trampa 2: La Doble Cola Desconectada (Cola Huérfana)
+### ✅ Trampa 2 (Resuelto en Fase 1): La Doble Cola Desconectada (Cola Huérfana)
 * **Ubicación:** `McxEngine.h` vs. `Source/Plugin/PluginProcessor.cpp` (líneas 125–132).
 * **Diagnóstico:**  
   1. `McxEngine` posee su propio miembro interno `HardwareMirrorRouter mirrorRouter_;`. Las llamadas de `triggerNote()` escriben en el búfer interno de esta instancia.
@@ -54,7 +54,7 @@ La auditoría del código fuente actual revela que, aunque la base matemática d
 
 ---
 
-### 🚨 Trampa 3: El Allocator de Voces está Soldado al Rompler (`McxVoice`)
+### ✅ Trampa 3 (Resuelto en Fase 3): El Allocator de Voces estaba Soldado al Rompler (`McxVoice` $\to$ `ISoundEngine` + `RomplerVoicePool`)
 * **Ubicación:** `Source/DSP/Core/McxEngine.cpp` (líneas 126–134) y `McxEngineAllocation.cpp`.
 * **Diagnóstico:**  
   La mezcla y asignación de polifonía itera exclusivamente sobre:
@@ -72,7 +72,7 @@ La auditoría del código fuente actual revela que, aunque la base matemática d
 
 ---
 
-### 🚨 Trampa 4: Pérdida del Índice de Pista en el Bridge UI
+### ✅ Trampa 4 (Resuelto en Fase 1): Pérdida del Índice de Pista en el Bridge UI (`McxCommandQueue` + `triggerPartNoteOn`)
 * **Ubicación:** `Source/Plugin/PluginProcessor.cpp` (línea 135) y `Source/Wasm/WasmBridge.cpp` (línea 49).
 * **Diagnóstico:**  
   Cuando la interfaz WebUI dispara una nota manual en la pista $X$, llama a `bridge.noteOn(partIdx, note, vel)`.  
@@ -90,7 +90,7 @@ La auditoría del código fuente actual revela que, aunque la base matemática d
 
 ## 3. Carencias y Cabos Sueltos (Gaps de Arquitectura)
 
-### ⚠️ Carencia 1: El Arpegiador Ignora el Modo Externo
+### ✅ Carencia 1 (Resuelto en Fase 1): El Arpegiador ahora enruta vía `dispatchNoteOnToOutputs` (`INT`/`EXT`/`BOTH`)
 * **Ubicación:** `Source/DSP/Core/McxEngine.cpp` (líneas 86–96).
 * **Diagnóstico:**  
   El callback del generador de arpegios ejecuta:
@@ -102,7 +102,7 @@ La auditoría del código fuente actual revela que, aunque la base matemática d
   ```
 * **Fallo:** Llama directamente a las voces internas sin comprobar `p.routeMode`. Si una pista está configurada como `ExternalMidi`, el arpegiador despierta voces del Rompler interno en lugar de emitir notas al puerto MIDI.
 
-### ⚠️ Carencia 2: LFOs sin Adaptador Diezmador para MIDI Out
+### ✅ Carencia 2 (Resuelto en Fase 1): Diezmador MIDI (`Source/MIDI/McxMidiModDecimator.h`) para LFOs y NRPN
 * **Ubicación:** `ABDShared/Code/SynthCore/LFO.h` y `LfoAnalog.h`.
 * **Diagnóstico:**  
   Los LFOs calculan ondas analíticas continuas a tasa de control (~1500 Hz). Falta construir el bloque de salida MIDI que submuestree a **30–40 Hz** y aplique un umbral de cambio $\Delta \ge 1$ para no saturar el cable MIDI DIN con miles de mensajes CC por segundo.
@@ -141,11 +141,15 @@ Para ejecutar la transición de forma limpia, segura y verificable:
 - [x] 1.3 Conectar el callback del Arpegiador a `dispatchNoteOnToOutputs` / `dispatchNoteOffToOutputs` (`INT`/`EXT`/`BOTH`) en lugar de `triggerInternalVoice`.
 - [x] 1.4 Crear `triggerPartNoteOn(partIdx, note, vel)` / `releasePartNoteOff` + `McxCommandQueue.h` para evitar la colisión de canales MIDI (+ `latchedNoteMap_[128]` anti-notas-colgadas).
 
-### Fase 2: Modularización de Motores (IMcxSoundEngine)
-- [ ] 2.1 Formalizar la interfaz abstracta pura `IMcxSoundEngine` en `ABDShared/Code/SynthEngines/`.
-- [ ] 2.2 Envolver el Rompler actual en la clase `StructuredRomplerEngine : public IMcxSoundEngine` (Fase 3 del Plan Maestro).
+### Fase 2: Modularización de Motores (`ISoundEngine` — Completada en Fase 3 del Plan Maestro)
+- [x] 2.1 Formalizar la interfaz abstracta pura `ISoundEngine` en `ABDShared/Code/SynthEngines/` (+ `TrackModRouter.h`).
+- [x] 2.2 Envolver el Rompler en la clase `StructuredRomplerEngine : public ISoundEngine` dentro de `ABDShared::StructuredRompler` (`RomplerVoicePool` compartido) y eliminar duplicados en `ABDMCX0X/Source/DSP/Synth/`.
 - [ ] 2.3 Crear el adaptador `JunoEngineAdapter : public IMcxSoundEngine` consumiendo `ABDJUNiO601` (Fase 5 del Plan Maestro).
-- [ ] 2.4 Sustituir el renderizado directo de `voices_` en `McxEngine::processAudio` por delegación en `engineSlots_[pIdx]->renderBlock()`.
+- [x] 2.4 Sustituir el renderizado directo de `voices_` en `McxEngine::processAudio` por delegación en `engineSlots_[pIdx]->renderBlock()`.
+
+### Fase 2 del Plan Maestro: Secuenciador PPQ Nativo C++20 y MIDI Clock (`0xF8`) *(✅ Verificado — `5/5 build.bat full`, `8/8` CTest en `0.64s`)*
+- [x] M1 Implementar `McxMidiClockEmitter.h` (`0xFA`/`0xFB`/`0xFC`/`0xF8` a `24 PPQ`, `priority = 0`) y `McxPatternSequencer` (doble buffer lock-free, `GrooveShuffleEngine`, `syncHostTransport`, 4 carriles de *Motion* y sub-bloques `kMaxChunk = 64` en `McxEngine`).
+- [x] M2 Convertir `McxStepStrip.ts`, `McxMasterPanel.ts` y `PianoRollModal` en espejo pasivo de la telemetría DSP (`vite build` verde), y registrar `Tests/McxPhase7SequencerTests.cpp` (`T1..T8`).
 
 ### Fase 3: Interfaz WebUI y Desglose de Pantallas
 - [ ] 3.1 Sustituir el botón plano `DRM/CHR` en `McxMixerConsole.ts` por el badge `INT:ROM`, `INT:JUNO`, `EXT:01`, `A+B`.

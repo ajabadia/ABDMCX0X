@@ -1,25 +1,19 @@
 /**
  * ABDMCX0X -- BridgeWasm.ts
  * Connects the WebUI to the C++20 McxEngine compiled to WebAssembly via AudioWorkletNode.
- * Auto-unlocks AudioContext on first user gesture (pointerdown / keydown).
  */
 
-export interface McxTelemetry {
-  peakL: number;
-  peakR: number;
-  activeVoices: number;
-  samplesL?: Float32Array;
-  peakSendA?: number;
-  peakSendB?: number;
-  peakSendC?: number;
-  peakSendD?: number;
-  limiterGrDb?: number;
-  sendBusMutes?: boolean[];
-  sendLabels?: { sendA: string; sendB: string; sendC: string; sendD: string };
-  partPeaks?: number[];
-  partMidiPeaks?: number[];
-  lfoPhase?: number;
-}
+import { parseTelemetryPayload, type McxPartEngineStateDto, type McxTelemetry } from './BridgeWasmTypes';
+
+export type {
+  McxTelemetry,
+  McxEngineDescriptorDto,
+  McxPartPresetsDto,
+  McxPartEngineStateDto,
+  McxSceneSlotDto,
+  McxSongBlockDto,
+  McxSongScenesStateDto,
+} from './BridgeWasmTypes';
 
 export class BridgeWasm {
   private audioCtx: AudioContext | null = null;
@@ -30,16 +24,20 @@ export class BridgeWasm {
   private onTelemetryCb: ((t: McxTelemetry) => void) | null = null;
   private onStatusCb: ((status: 'idle' | 'loading' | 'ready' | 'error', detail?: string) => void) | null = null;
   private onBankLoadedCb: ((ok: boolean, sizeBytes: number) => void) | null = null;
+  private onPartEngineStateCb: ((dto: McxPartEngineStateDto) => void) | null = null;
+  private onSongScenesStateCb: ((stateJson: string) => void) | null = null;
+  private onMidiOutCb: ((bytes: Uint8Array) => void) | null = null;
 
-  constructor() {
-    this.attachFirstGestureUnlock();
-  }
+  constructor() { this.attachFirstGestureUnlock(); }
 
   public get ready(): boolean { return this.isReady; }
   public get sampleRate(): number { return this.audioCtx?.sampleRate ?? 48000; }
   public onTelemetry(cb: (t: McxTelemetry) => void): void { this.onTelemetryCb = cb; }
   public onStatus(cb: (s: 'idle' | 'loading' | 'ready' | 'error', d?: string) => void): void { this.onStatusCb = cb; }
   public onBankLoaded(cb: (ok: boolean, sizeBytes: number) => void): void { this.onBankLoadedCb = cb; }
+  public onPartEngineState(cb: (dto: McxPartEngineStateDto) => void): void { this.onPartEngineStateCb = cb; }
+  public onSongScenesState(cb: (stateJson: string) => void): void { this.onSongScenesStateCb = cb; }
+  public onMidiOut(cb: (bytes: Uint8Array) => void): void { this.onMidiOutCb = cb; }
 
   private attachFirstGestureUnlock(): void {
     if (typeof window === 'undefined') return;
@@ -59,26 +57,17 @@ export class BridgeWasm {
       return true;
     }
     if (this.initPromise) return this.initPromise;
-
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (typeof AudioCtx !== 'function') return false;
-
     this.onStatusCb?.('loading');
     this.initPromise = this.bootPipeline(AudioCtx);
-    try {
-      return await this.initPromise;
-    } finally {
-      this.initPromise = null;
-    }
+    try { return await this.initPromise; } finally { this.initPromise = null; }
   }
 
   private async fetchFirst(urls: string[]): Promise<Response> {
     let lastErr: unknown;
     for (const url of urls) {
-      try {
-        const res = await fetch(url);
-        if (res.ok) return res;
-      } catch (e) { lastErr = e; }
+      try { const res = await fetch(url); if (res.ok) return res; } catch (e) { lastErr = e; }
     }
     throw lastErr ?? new Error('Unable to fetch WASM binary');
   }
@@ -86,10 +75,7 @@ export class BridgeWasm {
   private async addWorkletFirst(ctx: AudioContext, urls: string[]): Promise<void> {
     let lastErr: unknown;
     for (const url of urls) {
-      try {
-        await ctx.audioWorklet.addModule(url);
-        return;
-      } catch (e) { lastErr = e; }
+      try { await ctx.audioWorklet.addModule(url); return; } catch (e) { lastErr = e; }
     }
     throw lastErr ?? new Error('Unable to load mcx0xWorklet.js');
   }
@@ -105,9 +91,7 @@ export class BridgeWasm {
       const wasmBinary = await wasmRes.arrayBuffer();
 
       const node = new AudioWorkletNode(ctx, 'mcx0x-worklet-processor', {
-        numberOfInputs: 0,
-        numberOfOutputs: 1,
-        outputChannelCount: [2],
+        numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
       });
       this.workletNode = node;
       node.connect(ctx.destination);
@@ -123,20 +107,20 @@ export class BridgeWasm {
             this.pending = [];
             resolve(true);
           } else if (msg.type === 'WASM_ERROR') {
-            this.onStatusCb?.('error', msg.message);
-            resolve(false);
+            this.onStatusCb?.('error', msg.message); resolve(false);
           } else if (msg.type === 'TELEMETRY') {
-            this.onTelemetryCb?.({
-              peakL: msg.peakL,
-              peakR: msg.peakR,
-              activeVoices: msg.activeVoices,
-              samplesL: msg.samplesL,
-              partPeaks: Array.isArray(msg.partPeaks) ? msg.partPeaks : undefined,
-              partMidiPeaks: Array.isArray(msg.partMidiPeaks) ? msg.partMidiPeaks : undefined,
-              lfoPhase: msg.lfoPhase,
-            });
+            this.onTelemetryCb?.(parseTelemetryPayload(msg));
           } else if (msg.type === 'BANK_LOADED') {
             this.onBankLoadedCb?.(Boolean(msg.ok), Number(msg.sizeBytes || 0));
+          } else if (msg.type === 'PART_ENGINE_STATE') {
+            this.onPartEngineStateCb?.({
+              part: Number(msg.part ?? 0), engineTypeId: String(msg.engineTypeId ?? ''),
+              presetName: String(msg.presetName ?? ''), stateJson: String(msg.stateJson ?? ''),
+            });
+          } else if (msg.type === 'SONG_SCENES_STATE') {
+            this.onSongScenesStateCb?.(String(msg.stateJson ?? ''));
+          } else if (msg.type === 'MIDI_OUT' && msg.bytes) {
+            this.onMidiOutCb?.(msg.bytes);
           }
         };
         node.port.postMessage({ type: 'INIT_WASM', binary: wasmBinary, sampleRate: ctx.sampleRate }, [wasmBinary]);
@@ -165,4 +149,26 @@ export class BridgeWasm {
   public setMasterVolume(volume: number): void { this.post({ type: 'SET_MASTER_VOLUME', volume }); }
   public resetToFactory(): void { this.post({ type: 'RESET_FACTORY' }); }
   public loadBankBuffer(buffer: ArrayBuffer): void { this.post({ type: 'LOAD_BANK', buffer }, [buffer]); }
+  public indexBankBuffer(buffer: ArrayBuffer): void { this.post({ type: 'INDEX_BANK', buffer }, [buffer]); }
+  public setTransportPlaying(playing: boolean, resetOnStop = true): void { this.post({ type: 'SET_TRANSPORT', playing, resetOnStop }); }
+  public setSequencerBars(bars: number): void { this.post({ type: 'SET_SEQ_BARS', bars }); }
+  public selectPartEngineType(part: number, typeIndex: number): void { this.post({ type: 'SELECT_ENGINE', part, typeIndex }); }
+  public loadFactoryPreset(part: number, presetIndex: number): void { this.post({ type: 'LOAD_FACTORY_PRESET', part, presetIndex }); }
+  public setPartEngineParam(part: number, key: string, value: number): void { this.post({ type: 'SET_ENGINE_PARAM', part, key, value }); }
+  public requestPartEngineState(part: number): void { this.post({ type: 'GET_ENGINE_STATE', part }); }
+  public loadBankItemOnDemand(part: number, bankSlot: number, kind: 'tone' | 'drum_kit', itemIndex: number): void {
+    this.post({ type: 'LOAD_BANK_ITEM', part, bankSlot, kind, itemIndex });
+  }
+  public collectUnusedWaves(): void { this.post({ type: 'COLLECT_WAVES' }); }
+  public setGroove(part: number, cfg: { mode: string; algorithm: string; resolution: string; amount: number }): void {
+    const modes: Record<string, number> = { global: 0, custom: 1, off: 2 };
+    const algos: Record<string, number> = { mpc: 0, tr909: 1, sp1200: 2, triplet: 3, dilla: 4 };
+    this.post({
+      type: 'SET_GROOVE', part, mode: modes[cfg.mode] ?? 0, algorithm: algos[cfg.algorithm] ?? 0,
+      resolution: cfg.resolution === '1/8' ? 1 : 0, amount: cfg.amount,
+    });
+  }
+  public setPartPattern(part: number, seq: { bars?: number; ppq?: number; notes?: any[]; motion?: Record<string, any[]> }): void {
+    this.post({ type: 'SET_PATTERN', part, bars: seq.bars ?? 1, ppq: seq.ppq ?? 96, notes: seq.notes ?? [], motion: seq.motion ?? {} });
+  }
 }

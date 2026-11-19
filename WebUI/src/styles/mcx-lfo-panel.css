@@ -50,7 +50,7 @@
 .mcx-lfo-pane {
   display: none;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
@@ -116,7 +116,7 @@
 .mcx-lfo-wave-btn {
   flex: 1;
   min-width: 0;
-  height: 20px;
+  height: 17px;
   padding: 0 1px;
   display: inline-flex;
   align-items: center;

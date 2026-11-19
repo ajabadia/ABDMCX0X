@@ -10,6 +10,7 @@ import { getLocale, t } from '../i18n/mcxI18n';
 import { McxBankDrawer } from '../ui/McxBankDrawer';
 import { McxSavePresetModal } from '../ui/McxSavePresetModal';
 import type { McxAppState } from './McxAppState';
+import { createGlobalLfoBridgeAdapter, GLOBAL_LFO1_DESTS, GLOBAL_LFO2_DESTS } from './McxPianoRollSync';
 
 export const buildProbeDestinations = () => [
   { id: 1, label: t('mcx.probePostMaster'), hint: t('mcx.probePostMasterHint') },
@@ -90,71 +91,62 @@ export function createBankDrawer(bridge: McxHostBridge, state: McxAppState): Mcx
 export function createStudioModals(bridge: McxHostBridge, state: McxAppState) {
   const fxRackModal = new MultiBusFxRackModal({
     bridge: {
-      setTopology: (topo) => state.setLcdLine2(`FX RACK TOPOLOGY: ${topo}`),
-      setMacro: (slot, macro) => {
-        if (slot === 0) bridge.setParam(state.focusedPart, 'reverbMacro', macro);
-        else if (slot === 1) bridge.setParam(state.focusedPart, 'chorusMacro', macro);
-      },
-      setCascadeInjections: (cho, del) => state.setLcdLine2(`CASCADE INJECTIONS: CHO ${Math.round(cho * 100)}% | DEL ${Math.round(del * 100)}%`),
-      muteSendBus: (bus, muted) => {
-        const bNames = ['REV (A)', 'CHO (B)', 'DEL (C)', 'AUX (D)'];
-        state.setLcdLine2(`BUS ${bNames[bus]} ${muted ? 'MUTED (0% CPU)' : 'ACTIVE'}`);
-      },
-      setParam: (p, v) => {
-        if (p === 'masterTempoBpm') state.refs.stepStrip?.setBpm(v);
-        state.setLcdLine2(`FX RACK ${p}: ${v}`);
-      },
-      setGate: (g, v) => {
-        const gNames = ['DUCKING', 'GATED REV', 'DELAY FREEZE', 'FX KILL'];
-        state.setLcdLine2(`FX GATE [${gNames[g]}]: ${v ? 'TRIGGERED' : 'OFF'}`);
-      },
+      setTopology: (topo: number) => state.setLcdLine2(`FX RACK TOPOLOGY: ${topo}`),
+      setMacro: (slot: number, m: number) => bridge.setParam(state.focusedPart, slot === 0 ? 'reverbMacro' : 'chorusMacro', m),
+      setCascadeInjections: (cho: number, del: number) => state.setLcdLine2(`CASCADE: CHO ${Math.round(cho * 100)}% | DEL ${Math.round(del * 100)}%`),
+      muteSendBus: (b: number, m: boolean) => state.setLcdLine2(`BUS ${['REV (A)', 'CHO (B)', 'DEL (C)', 'AUX (D)'][b]} ${m ? 'MUTED' : 'ACTIVE'}`),
+      setParam: (p: string, v: number) => { if (p === 'masterTempoBpm') state.refs.stepStrip?.setBpm(v); state.setLcdLine2(`FX ${p}: ${v}`); },
+      setGate: (g: number, v: number) => state.setLcdLine2(`FX GATE [${['DUCK', 'GATE REV', 'FREEZE', 'KILL'][g]}]: ${v ? 'ON' : 'OFF'}`),
     },
     bpm: 120,
     locale: getLocale(),
-    onSendLabelsChange: (labels) => {
+    getRackSlots: () => (state.refs.rackColumn as any)?.getSlots?.() ?? [],
+    getSendTargets: () => (state.refs.rackColumn as any)?.getSendTargets?.() ?? [0, 1, -1, -1],
+    onSendSlotTargetChange: (bus: number, bay: number) => {
+      bridge.setSendSlotTarget(bus, bay);
+      (state.refs.rackColumn as any)?.setSendTarget?.(bus, bay);
+      state.setLcdLine2(`ENVÍO ${['A', 'B', 'C', 'D'][bus]} RUTEADO A: ${bay >= 0 ? `BAHÍA ${bay + 1}` : 'DESCONECTADO'}`);
+    },
+    onOpenFaceplate: (bay: number) => {
+      (state.refs.rackColumn as any)?.openSlotFaceplate?.(bay);
+    },
+    onSendLabelsChange: (labels: any) => {
       state.refs.toneDrawer?.updateSendLabels(labels);
       state.refreshPartList();
     },
   });
 
   const globalLfoModal = new GlobalLfoModal({
-    bridge,
+    bridge: createGlobalLfoBridgeAdapter(bridge, state),
     bpm: 120,
     locale: getLocale(),
-    destinationsLfo1: [
-      { id: 0, label: 'BUS A (REV)', title: 'Bus A Reverb' },
-      { id: 1, label: 'BUS B (CHO)', title: 'Bus B Chorus' },
-      { id: 2, label: 'BUS C (DEL)', title: 'Bus C Delay' },
-      { id: 3, label: 'BUS D (AUX)', title: 'Bus D Aux / Filter' },
-      { id: 4, label: 'MASTER VCF', title: 'Filtro Maestro' },
-      { id: 5, label: 'ALL PARTS', title: 'Modulación simultánea a 16 partes' },
-    ],
-    destinationsLfo2: [
-      { id: 0, label: 'FM -> LFO 1', title: 'Modulación cruzada hacia LFO Global 1' },
-      { id: 1, label: 'BUS C DELAY', title: 'Flutter / Delay Time' },
-      { id: 2, label: 'BUS D DRIVE', title: 'Saturación y Drive Maestro' },
-      { id: 3, label: 'MASTER PAN', title: 'Auto-Pan Maestro' },
-      { id: 4, label: 'MASTER VOL', title: 'Trémolo / Bombeo Master' },
-      { id: 5, label: 'ALL PARTS', title: 'Modulación simultánea a 16 partes' },
-    ],
+    destinationsLfo1: GLOBAL_LFO1_DESTS,
+    destinationsLfo2: GLOBAL_LFO2_DESTS,
     onParamChange: (idx, k, v) => state.setLcdLine2(`GLOBAL LFO ${idx} ${k}: ${v}`),
   });
 
-  const pianoRollModal = new PianoRollModal({
+  const pianoRollModal: PianoRollModal = new PianoRollModal({
     bridge: {
       togglePlay: () => state.setTransportPlaying(!(state.refs.masterPanel?.getTransportState()?.playing ?? false)),
       stop: () => state.setTransportPlaying(false),
-      setBars: (b: number) => state.setLcdLine2(`PATTERN LENGTH: ${b} BARS (${b * 16} STEPS)`),
+      setRecording: (rec: boolean) => bridge.setParam(state.focusedPart, 'seqRecording', rec ? 1 : 0),
+      setBars: (b: number) => {
+        bridge.setSequencerBars(b);
+        state.setLcdLine2(`PATTERN LENGTH: ${b} BARS (${b * 16} STEPS)`);
+      },
       setSwing: (sw: number) => {
         state.partsState[state.focusedPart].patternSwing = sw;
         state.refs.stepStrip?.setSwing(sw);
-        // TODO(Phase 2): route patternSwing to C++ PatternSequencerEngine
+        bridge.setParam(state.focusedPart, 'patternSwing', sw);
         state.setLcdLine2(`SHUFFLE / SWING: ${Math.round(sw * 100)}%`);
       },
       recordMotion: (target: string, tick: number, val: number) => {
         bridge.setParam(state.focusedPart, target === 'cutoff' ? 'filterCutoff' : target === 'resonance' ? 'filterResonance' : 'partPan', val);
         if (target === 'cutoff') state.refs.toneDrawer?.updateParamLive('filterCutoff', val);
         else if (target === 'resonance') state.refs.toneDrawer?.updateParamLive('filterResonance', val);
+        const seq = pianoRollModal.getSequence();
+        state.partsState[state.focusedPart].sequence = seq;
+        bridge.setPartPattern(state.focusedPart, seq);
         state.setLcdLine2(`RECORD MOTION [${target.toUpperCase()}]: ${Math.round(val * 100)}% @ TICK ${tick}`);
       },
     },
@@ -164,8 +156,10 @@ export function createStudioModals(bridge: McxHostBridge, state: McxAppState) {
     mode: state.partsState[state.focusedPart].kind === 'drum_map' ? 'drum' : 'chromatic',
     locale: getLocale(),
     onNotice: (msg: string) => state.setLcdLine2(msg),
+    onNotePreview: (m: number, v: number) => { bridge.noteOn(state.focusedPart, m, Math.max(0.05, Math.min(1, v / 127))); setTimeout(() => bridge.noteOff(state.focusedPart, m), 220); },
     onPatternChange: (pat: any) => {
       state.partsState[state.focusedPart].sequence = pat;
+      bridge.setPartPattern(state.focusedPart, pat);
       state.setLcdLine2(`PATTERN P${String(state.focusedPart + 1).padStart(2, '0')}: ${pat.notes?.length || 0} NOTES (${pat.bars} BARS)`);
     },
     onMotionPlayback: (target: string, val: number) => {
@@ -179,6 +173,7 @@ export function createStudioModals(bridge: McxHostBridge, state: McxAppState) {
     locale: getLocale(),
     partIndex: -1,
     onChange: (cfg) => {
+      bridge.setGroove(cfg.partIndex, cfg);
       if (cfg.partIndex === -1) {
         state.setLcdLine2(`MASTER GROOVE: ${cfg.algorithm.toUpperCase()} ${Math.round(cfg.amount * 100)}% [${cfg.resolution}]`);
         state.refs.stepStrip?.setSwing(cfg.amount);
@@ -186,7 +181,6 @@ export function createStudioModals(bridge: McxHostBridge, state: McxAppState) {
         const nextSwing = cfg.mode === 'off' ? 0.50 : cfg.amount;
         state.partsState[cfg.partIndex].patternSwing = nextSwing;
         state.refs.stepStrip?.setSwing(nextSwing);
-        // TODO(Phase 2): route patternSwing to C++ PatternSequencerEngine
         state.setLcdLine2(`P${String(cfg.partIndex + 1).padStart(2, '0')} GROOVE [${cfg.mode.toUpperCase()}]: ${cfg.algorithm.toUpperCase()} ${Math.round(cfg.amount * 100)}%`);
       }
     },

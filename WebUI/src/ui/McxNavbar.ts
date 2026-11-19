@@ -26,6 +26,7 @@ export interface McxNavbarCallbacks {
   onOpenGlobalLfo?: () => void;
   onOpenPianoRoll?: () => void;
   onOpenGroove?: () => void;
+  onOpenSong?: () => void;
   onSelectTab?: (tab: 'tone' | 'drums') => void;
 }
 
@@ -74,6 +75,7 @@ function buildMenus() {
         { id: 302, label: 'Master Global LFOs...', labelEs: 'LFOs Globales (Master)...', action: 'openGlobalLfo', shortcut: 'Ctrl+L' },
         { id: 303, label: 'Piano Roll Sequencer...', labelEs: 'Secuenciador Rollo Pianola...', action: 'openPianoRoll', shortcut: 'Ctrl+P' },
         { id: 304, label: 'Master Groove & Shuffle...', labelEs: 'Groove y Shuffle Maestro...', action: 'openGroove', shortcut: 'Ctrl+G' },
+        { id: 305, label: 'Song Mode & Live Scenes...', labelEs: 'Modo Canción y Escenas...', action: 'openSong', shortcut: 'Ctrl+M' },
         { id: 301, label: '440 Hz Signal Probe...', labelEs: 'Sonda de Señal 440 Hz...', action: 'toggleProbe', shortcut: 'Ctrl+4' },
       ],
     },
@@ -100,33 +102,13 @@ export class McxNavbar {
     this.mount();
   }
 
-  private createCenterSlot(): HTMLElement {
-    const slot = document.createElement('div');
-    slot.className = 'mcx-nav-group';
-    const opts = THEME_FAMILIES.map((f) => `<option value="${f.key}">${f.label}</option>`).join('');
-    slot.innerHTML = `
-      <select class="mcx-nav-select" id="nav-theme-select" aria-label="${t('mcx.visualTheme')}">${opts}</select>
-      <button type="button" class="mcx-btn" id="btn-scheme"></button>
-      <button type="button" class="mcx-btn" id="btn-settings"></button>
-    `;
-    const sel = slot.querySelector('#nav-theme-select') as HTMLSelectElement | null;
-    sel?.addEventListener('change', () => this.cb.themeMgr.setFamily(sel.value as ThemeFamilyKey));
-    slot.querySelector('#btn-scheme')?.addEventListener('click', () => this.cb.themeMgr.toggleScheme());
-    slot.querySelector('#btn-settings')?.addEventListener('click', () => this.cb.onOpenSettings());
-    return slot;
-  }
-
   private createRightSlot(): HTMLElement {
     const slot = document.createElement('div');
     slot.className = 'mcx-nav-group';
     slot.innerHTML = `
-      <button type="button" class="mcx-btn" id="btn-locale"></button>
       <button type="button" class="mcx-btn mcx-btn--audio" id="btn-audio"></button>
-      <button type="button" class="mcx-btn mcx-btn--panic" id="btn-panic"></button>
     `;
-    slot.querySelector('#btn-locale')?.addEventListener('click', () => setLocale(getLocale() === 'es' ? 'en' : 'es'));
     slot.querySelector('#btn-audio')?.addEventListener('click', () => this.cb.onEnableAudio());
-    slot.querySelector('#btn-panic')?.addEventListener('click', () => this.cb.onPanic());
     return slot;
   }
 
@@ -146,6 +128,7 @@ export class McxNavbar {
     else if (action === 'openGlobalLfo') this.cb.onOpenGlobalLfo?.();
     else if (action === 'openPianoRoll') this.cb.onOpenPianoRoll?.();
     else if (action === 'openGroove') this.cb.onOpenGroove?.();
+    else if (action === 'openSong') this.cb.onOpenSong?.();
     else if (action === 'toggleProbe') this.cb.onToggleProbe();
     else if (action === 'tab' && (value === 'tone' || value === 'drums')) this.cb.onSelectTab?.(value);
   }
@@ -154,9 +137,14 @@ export class McxNavbar {
     this.navBar?.destroy?.();
     this.container.innerHTML = '';
     this.navBar = createSynthNavBar({
-      container: this.container, locale: getLocale(), brand: { title: 'ABDMCX0X', subtitle: '' },
-      menus: buildMenus(), centerSlot: this.createCenterSlot(), rightSlot: this.createRightSlot(),
-      enableGlobalShortcuts: false, activeValues: { themeFamily: this.cb.themeMgr.getFamily(), locale: getLocale() },
+      container: this.container,
+      locale: getLocale(),
+      brand: { title: 'ABDMCX0X', subtitle: '' },
+      brandPosition: 'right',
+      menus: buildMenus(),
+      rightSlot: this.createRightSlot(),
+      enableGlobalShortcuts: false,
+      activeValues: { themeFamily: this.cb.themeMgr.getFamily(), locale: getLocale() },
       aboutDialog: {
         appName: 'ABDMCX0X', subtitle: t('mcx.subtitle'), version: '1.0.0',
         repo: 'ajabadia/ABDMCX0X', buildInfo: t('mcx.aboutBuildInfo'), author: 'ABDSynths', copyright: '© 2026 ABDSynths',
@@ -172,14 +160,8 @@ export class McxNavbar {
   }
 
   public sync(): void {
-    const family = this.cb.themeMgr.getFamily(), scheme = this.cb.themeMgr.getRenderedScheme();
-    const sel = this.container.querySelector('#nav-theme-select') as HTMLSelectElement | null;
-    if (sel) sel.value = family;
-    const q = (s: string) => this.container.querySelector(s);
-    const bSch = q('#btn-scheme'), bSet = q('#btn-settings'), bLoc = q('#btn-locale'), bPan = q('#btn-panic');
-    if (bSch) bSch.textContent = scheme === 'dark' ? t('mcx.themeLight') : t('mcx.themeDark');
-    if (bSet) bSet.textContent = t('mcx.settingsBtn'); if (bLoc) bLoc.textContent = getLocale().toUpperCase(); if (bPan) bPan.textContent = t('mcx.panic');
-    const btnAudio = q('#btn-audio');
+    const family = this.cb.themeMgr.getFamily();
+    const btnAudio = this.container.querySelector('#btn-audio');
     if (btnAudio) {
       const { state, detail } = this.audioStatus;
       btnAudio.classList.toggle('is-ready', state === 'ready');

@@ -12,6 +12,13 @@
 | **5** | Resiliencia DSP, QA Offline & Compilación WASM | ✅ VERIFICADO | Frecuencias 44.1k a 192k, buffers 32 a 4096, MC-303 28-partial budget stealing, inmunidad NaN/Inf, serialización DAW, demo de audio offline sin clipping (-0.75 dBFS, 0 clipped samples), y compilación WebAssembly `mcx0x_dsp.js` (13.4 KB) + `mcx0x_dsp.wasm` (139 KB). `McxPhase5Tests.cpp` verificado (7/7 pass). |
 | **6** | Blindaje Core C++20, MIDI Out, RT-Safety & WebUI Bloque 6 | ✅ VERIFICADO (`7/7` CTest + Vite) | Fixes de raíz en Core Groovebox (`kNumParts = 16`): `McxCommandQueue.h` SPSC por `partIdx`, MIDI Out `0x90`/`0x80` real + Arp híbrido, `midiMessages.clear()` anti-rebote VST3, fin de doble disparo, `latchedNoteMap_[128]`, `nrpnStates_[16]`, perfiles/puertos por pista, `McxMidiModDecimator.h`, `McxTrackSemanticOffsets`, EQ estéreo `copyCoeffsFrom`, `liveZeroLatency` y `McxPhase6CoreInfraTests` (`17/17` pass) + **Bloque 6 WebUI** (`mcx0x.css` en 21 módulos `< 180` lín. con 0 hex/rgba, `main.ts` descompuesto en `WebUI/src/app/`, `McxStepStrip.ts` 194 lín., puente `82..89` + `partMidiPeaks` dual y `vite build` en verde; ver `DOCS/PLAN_MAESTRO_ARQUITECTURA_Y_REFACTOR_CORE.md`). |
 | **7** | Aislamiento `StructuredRompler` y Chasis Multi-Motor (`ISoundEngine`) | ✅ VERIFICADO (`5/5 build.bat full`) | Extracción del motor completo Rompler/Drum a `ABDShared::SynthEngines` (`ISoundEngine`, `TrackModRouter`, `RomplerVoicePool`, `StructuredRomplerEngine`, `14/14` pass), integración polimórfica en `McxEngine`, retirada de `Filter 2` de `McxChannelStrip`, borrado de 11 duplicados, Test #8 en `McxPhase6CoreInfraTests` (`18/18` pass) y build completo Headless + JUCE 9 + WASM en verde. |
+| **8** | Secuenciador PPQ Nativo + MIDI Clock `0xF8` + Host Sync (Fase 2 Plan Maestro) | ✅ VERIFICADO (`5/5 build.bat full`, `8/8` CTest) | `McxPatternSequencer` doble buffer lock-free + `GrooveShuffleEngine`, `McxMidiClockEmitter.h` (`0xFA`/`0xFB`/`0xFC`/`0xF8` prio `0`), `syncHostTransport` (`AudioPlayHead`), sub-bloques `kMaxChunk = 64`, puentes `PluginEditor`/`WasmBridge`, WebUI espejo pasivo sin `setInterval`, `Tests/McxPhase7SequencerTests.cpp` (`8/8` CTest en `0.64s`), Standalone/VST3 y WASM `[12/12]` en verde. |
+| **9** | Infraestructura Multi-Motor (`McxEngineRegistry`) + `WavePool` On-Demand (Punto 1) | ✅ VERIFICADO (`5/5 build.bat full`, `9/9` CTest) | `McxEngineRegistry` estático RT-safe (`structured_rompler` + `external_midi` + custom slots), conmutación limpia de `TrackModRouter`, presets polimórficos `ISoundEngine`, `RomplerWavePool` compartido + `McxMultiBankManager` + `McxLibraryService` (`0` PCM al indexar, carga selectiva `seekg`, GC diferido), puentes JUCE/WASM/WebUI (`95..96`) y `Tests/McxPhase8MultiEngineTests.cpp` (`T1..T6`, `9/9` CTest en `0.72s`). |
+| **10** | Rediseño UX WebUI, `McxInstrumentRouteModal` y Drawer 3 Pestañas (Fase 4 — Bloque 4A) | ✅ VERIFICADO (`WebUI HMR 1280×720`) | Tiras de consola limpias (`24 px` botones, badge Motor/Ruta), `<dialog>` `McxInstrumentRouteModal` conectado a catálogo/presets de Punto 1, `McxToneDrawer` en 3 pestañas (`MOTOR` + `EnginePanelHost`, `CANAL / MEZCLA`, `MIDI FX`) sin recortes ni scroll en `1280×720`, `MANUAL_WEB_OVER_200=0` y `0` colores hardcodeados. |
+| **11** | Modo Canción (`Song Mode`) + Escenas en Vivo `1..8` (Fase 4 — Bloque 4B) | ✅ VERIFICADO (`5/5 build.bat full`, `10/10` CTest) | `McxSongAndScenes` (`S1..S8` + arreglo 64 bloques lock-free), cuantización exacta en frontera de compás sobre `McxPatternSequencer`, puentes SPSC/DAW/WASM (`11` exports), `Tests/McxPhase9SongScenesTests.cpp` (`T1..T8`, `10/10` suites en verde en `0.78s`), `McxSceneBar` (`Alt+1..8`), `McxSongDrawer` (`Ctrl+M`), integración universal de paneles de motor (`EnginePanelHost`) y cero warnings. |
+| **12** | Armario Rack FX Modular 19'' + Patchbay + Carátulas Canónicas (Fase 4 & 5) | ✅ IMPLEMENTADO (`11/11` CTest + WebUI) | Chasis modular 8 bahías (`McxRackChassis`, heap pre-alloc `SlotDsp`, dynamic auto-sleep 0% CPU, sidechain ducking, vúmetros pico dobles IN/OUT con clip hold, serialización JSON), puente `McxRackSlotBridge`, `FxFaceplateModal` en `ABDShared` con carátulas dedicadas (`RE-201`, `Zita`, `BBD Chorus`, `Stereo Delay`, `Saturation`, `Generic`), columna WebUI a la izquierda de Master con cabezal Patchbay 4 envíos, e inserciones de canal directas (`insertSlot`) exclusivas para pistas de audio (`routeMode !== 1`). |
+| **12B** | Puerta de Saneamiento Pre-Fase 13 (`[CR-01]..[CR-11]`, Sincronía, `1280x720`, DRY) | PENDIENTE (BLOQUEANTE) | Corrección previa obligatoria de ruta Master/Multi-Bus FX, bypass/DryWet/motores en Rack, thread-safety hilo audio, contratos WASM/paramIds/velocidad/modales, ergonomía `1280x720`, tokens CSS y límites `< 300` / `< 200` en `ABDMCX0X` y `ABDShared`. Detalle completo en [PLAN_SANEAMIENTO_PRE_FASE13.md](file:///d:/desarrollos/ABDSynths/ABDMCX0X/DOCS/PLAN_SANEAMIENTO_PRE_FASE13.md). |
+| **13** | Expansión a 64 Pistas (Bancos A..D) + Modo Canción / Performance en Vivo | BLOQUEADO POR 12B (0 % código) | Arquitectura de 64 pistas / partes (`kNumParts = 64`, Bancos A, B, C, D de 16 pistas), `muteMask` de 64 bits (`uint64_t`), secuenciador 64 pistas, consola y matriz de pads con conmutación ergonómica de bancos, y orquestación avanzada de escenas y bloques de canción. |
 
 ---
 
@@ -177,23 +184,15 @@
   - **Edición completa por sonido/pad en Drum Maps (paridad MC-303+):** Attack, Decay/Release, Pitch Coarse/Fine, Volume, Pan, Cutoff/Reso, Choke `0..15`, One-Shot/Gated, Start/End/Reverse, Accent y envíos `Send A..D`.
   - **Master Safety Limiter / Soft-Clipper** tras el volumen Master + indicador Peak/Clip.
 
-### Bloque 3 — Rack FX Master Multi-Slot Modular (`ABDShared`) y WebUI Zero-Fork (Drawers & Modales)
-- [ ] **Rack Modular Multi-Slot en `ABDShared` & Componente Universal `MultiBusFxRackModal` (Filosofía ABDEep):**
-  - **Ubicación Canónica en `ABDShared`:** `ABDShared/Code/DspEffects/` (núcleo C++ RT-safe con `prepare`, `processChunk`, bypass 0 % CPU y 4 envíos estéreo `Send A..D` + `Dry`) y `ABDShared/Code/DspEffects/WebUI/` (`MultiBusFxRackModal`).
-  - **Slots Polimórficos Dinámicos (Sin tipos fijos por envío):** Ningún bus ni slot está pre-ligado a un efecto concreto. Cada uno de los 4 slots puede alojar libremente cualquier clase de algoritmo.
-  - **Selector Jerárquico en 3 Niveles (Idéntico a `ABDEep`):**
-    1. **Categoría / Tipo de Efecto:** Reverb, Delay, Modulación (Chorus, Flanger, Phaser, Solina, Rotary), Distorsión/Drive/Amp, Dinámica/EQ, Especiales/Pitch/Vocoder.
-    2. **Efecto / Algoritmo Concreto:** Selección del modelo específico (ej. Reverbs: `Zita`, `FDN`, `Plate`, `Spring`; Delays: `Tape Delay`, `Space Echo RE-201`, `Analog Tape`, `Ducking Delay`; Modulación: `Roland BBD Chorus`, `Solina Ensemble`, `Flanger`, etc.).
-    3. **Presets del Efecto:** Carga de presets de fábrica (`factory_fx_presets.json`) y de usuario específicos de ese algoritmo para ajustar sus parámetros al vuelo.
-  - **Ruteo Flexible Multi-Topología (Inspirado en los Modos de Ruteo 0–9 de `ABDEep`):**
-    - Topologías conmutables: Serie (`1→2→3→4`), Pares en paralelo (`(1→2) ∥ (3→4)`), Paralelo puro (`1∥2∥3∥4`), Inyecciones en cascada (`1→(2∥3)→4`), etc.
-  - **Pantalla LCD Gráfica de Topología y Ruteo Dinámico:** Pantalla LCD panorámica virtual (Canvas/SVG con tokens de `LcdDisplay`) que dibuja el diagrama de flujo de señal en tiempo real:
-    - Entradas a la izquierda (`DRY`, `SEND A..D`), bloques centrales de proceso con nombres dinámicos del efecto activo (`[FX 1: RE-201]`, `[FX 2: BBD CHOR]`, `[FX 3: ZITA REV]`, `[FX 4: LIMITER]`), flechas vectoriales de ruteo según la topología activa y vúmetros LED integrados.
-  - **Contrato de Telemetría y Feedback Bidireccional hacia el Anfitrión:**
-    - *Nombres Dinámicos por Envío:* La modal devuelve al sintetizador anfitrión el nombre exacto de la cadena/algoritmo activo en cada envío (ej. `S-A: Space Echo`, `S-B: BBD Chorus`, `S-C: Hall 1`) para que el mezclador de tiras de canal pinte etiquetas contextuales en vivo.
-    - *Telemetría por Bus y Master:* Emisión continua de niveles peak/RMS por bus de envío, bus máster y reducción de ganancia del limitador.
-    - *Bypass Dinámico y Ahorro de CPU (0 % CPU):* Capacidad de mutear/apagar buses de envío no utilizados o partes completamente silenciadas; el motor DSP salta la ejecución del bloque de efecto si su bus está mudo o por debajo del umbral de ruido.
-  - **Adaptabilidad Universal 100% Tokenizada e I18n:** Cero dependencias específicas de ABDMCX0X; hereda el tema visual del llamador (`themeFamily`, claro/oscuro) e idioma (`locale: es|en`). Invocable en ABDMCX0X desde el botón `[ FX RACK ]` de la columna Master y desde el cajón `GLOBAL`.
+### Bloque 3 — Rack FX Master Multi-Slot Modular (`ABDShared`) y Armario de Rack 19'' con Patchbay
+> **Especificación Detallada:** Ver [DOCS/PLAN_RACK_FX_ARMARIO_MODULAR.md](file:///d:/desarrollos/ABDSynths/ABDMCX0X/DOCS/PLAN_RACK_FX_ARMARIO_MODULAR.md)
+- [ ] **Armario de Rack 19'' de Estudio (8 Bahías + Cabezal Patchbay de Envíos):**
+  - **Ubicación en UI:** Columna dedicada a la izquierda del panel Master (`.mcx-master-col`), respetando el flujo de señal analógico `Pistas -> Rack FX -> Master Output`.
+  - **Cabezal Patchbay Superior:** Administra los 4 envíos auxiliares (`Send A..D`), niveles de retorno, topología conmutable e inyecciones en cascada. Botón `[ VER TOPOLOGÍA ]` que abre la modal gráfica existente (`MultiBusFxRackModal`).
+  - **8 Bahías / Slots de Efectos:** Unidades modulares configurables con color base (`baseColor`) e icono (`icon`) definidos por cada efecto en `ABDShared`. Cada unidad cuenta con interruptor Bypass/Power (0% CPU), nombre editable (`[RE-201] Ecos Largos Lead`), botones para reordenar/desmontar y doble vúmetro estéreo horizontal (`IN L/R` y `OUT L/R`) con peak hold de clip.
+  - **Alcance Exclusivo Pistas de Audio:** Solo las pistas con audio local (`routeMode !== 1`) disponen de envíos e inserciones hacia el rack; las pistas MIDI externas (`routeMode === 1`) no participan en la ruta de audio.
+  - **Ahorro Inteligente de CPU (0% CPU):** Bypass manual, corte de ruteo huérfano y Auto-Sleep dinámico con detector de cola (*tail decay counter*) tras silencio ($-90\text{ dBFS}$).
+  - **Carátulas y Presets Centralizados en `ABDShared` (Filosofía DRY):** Carátulas específicas (*Space Echo RE-201*, *Zita Reverb*, *Roland BBD Chorus*, *Stereo Delay*, *Tape Saturation*) centralizadas en `ABDShared/Components/FxFaceplates/` y consumidas de forma universal sin duplicación de código.
 - [ ] **WebUI Zero-Fork con Drawers deslizantes:** `Knob` de `ABDShared`, `TrajectoryStick2D`, `@abdsynths/shared/scope` flotante, `EnvelopeCurve.js`, Drawers dedicados (Filtros 1/2, Envolventes, ModMatrix, EQ/Drive, Pad Editor), **Undo/Redo (`Ctrl+Z`/`Ctrl+Y`) + Compare (`A/B`)**, búsqueda/favoritos/pre-escucha en Bank Manager, y alta en `host-strip-height.test.js`.
 
 ### Bloque 3B — Promoción de Piezas Transversales a `ABDShared` (Filosofía DRY) & Nuke Universal
@@ -224,7 +223,8 @@
   - **Grabación y reproducción de movimiento de parámetros (*Motion Recording*):** Registro continuo de curvas para Cutoff, Resonance, Pan, etc. con reproducción reactiva en los controles visuales.
   - Validada con Vitest en `ABDShared/tests/pianoRollModal.test.js` (5/5 tests pass).
 - [ ] **Integración en `ABDMCX0X`:**
-  - Conectar la tira de 16 botones superiores (`McxStepStrip`), la matriz de pads (`McxPadsDrawer`) y la nueva `PianoRollModal` al mismo motor compartido.
+  - [x] Conectar la tira de 16 botones superiores (`McxStepStrip`), el transporte maestro (`McxMasterPanel`) y `PianoRollModal` al secuenciador nativo C++20 `McxPatternSequencer` como espejo pasivo del reloj DSP (`Play`/`Stop`, `Bars`, `Swing`, patrones, *Motion Recording*, `onNotePreview` y *chaser* por telemetría). *(Verificado en `.\build.bat full` — `8/8` CTest.)*
+  - [ ] Conectar la matriz de pads (`McxPadsDrawer`) para grabación en vivo y mapeo directo al secuenciador.
 - [ ] **Secuenciador / Matriz de 16 Pasos Directa por Parte (`stepMatrix`):**
   - Tira/matriz de 16 pasos estilo groovebox física MC-303 / TR-REC para programar, disparar y monitorizar patrones rítmicos o melódicos en tiempo real por parte.
   - Botones con LEDs de paso (`step-led`), estados: apagado, activo, acento y paso de cabezal de reproducción en vivo.
@@ -248,13 +248,13 @@
     - Exportar secuencias a disco local / descarga de navegador en formato JSON `.abdseq`.
     - Importar secuencias arrastrando archivos sobre la modal de pianola o mediante el selector de archivo.
     - Persistencia en `<WorkingDir>/Sequences/` accesible desde el explorador del instrumento.
-- [ ] **Modo Canción (`Song Mode`):** cadena de bloques `{ Escena/Patrón, Repeticiones, MuteMask16, Transposición }` + exportación **`.mid` multipista**, **`.wav` Master / Stems por parte** y *Drag-to-DAW*.
+- [x] **Modo Canción (`Song Mode`) y Escenas en Vivo (`1..8`) cuantizadas al compás (Bloque 4B — ✅ VERIFICADO `10/10` CTest):** `McxSongAndScenes` + `McxSongJsonCodec` + `McxSceneBar` (`Alt+1..8`) + `McxSongDrawer` (`Ctrl+M`) + `McxPhase9SongScenesTests.cpp` (`T1..T8`, `100 % pass`). Pendiente futura: exportación **`.mid` multipista**, **`.wav` Master / Stems por parte** y *Drag-to-DAW*.
 
-### Bloque 4B — Soporte Multi-Banco `.abdbank` por Pista (Fase 4/5)
-- [ ] **Mezcla Multi-Banco `.abdbank` en Wave Pool Unificado:**
-  - Permitir que diferentes pistas de las 16 partes carguen simultáneamente sonidos de distintos contenedores `.abdbank` (ej. Pista 10 kit de `MC303_Drums.abdbank`, Pista 1 bajo de `Acid_Moog.abdbank`, Pista 2 lead de `SC55_Leads.abdbank`).
-  - Coexistencia en un *Wave Pool* unificado sin colisión de identificadores de muestra (`waveId`).
-  - Carga selectiva on-demand: no volcar todo el archivo a RAM, solo las muestras requeridas por el preset de cada parte.
+### Bloque 4B — Soporte Multi-Banco `.abdbank` por Pista (`✅ VERIFICADO — Punto 1 / 9/9 CTest`)
+- [x] **Mezcla Multi-Banco `.abdbank` en Wave Pool Unificado (`McxPhase8MultiEngineTests` T4..T6):**
+  - Permitir que diferentes pistas de las 16 partes carguen simultáneamente sonidos de distintos contenedores `.abdbank` (`McxMultiBankManager` + `RomplerWavePool` compartido en `McxEngine`).
+  - Coexistencia en el *Wave Pool* unificado sin colisión de identificadores (`(bankId, waveId)`) y deduplicación por *refcounting*.
+  - Carga selectiva on-demand vía `RomplerBankIndex` (`McxLibraryService` indexa disco con `0` bytes PCM decodificados y carga solo las ondas del Tone/Kit elegido con GC diferido `collectUnusedWaves()`).
 
 ### Bloque 5 — Performance Avanzada, Multi-Motor, Multi-Out y Hardware vía MIDI Learn
 - [ ] **Performance en directo:** **Megamix** por parte cuantizado al compás, **Escenas / Hotcues (`1..8`)**, capas por pad (*Velocity Zones / Round-Robin*), Track/Pad Mute cuantizado y Q-Links contextuales.
@@ -263,17 +263,70 @@
 
 ---
 
-### Backlog Futuro Compartido (`ABDShared`) — Componente Modular de Rack de Efectos Multi-Entrada
-- [ ] **Arquitectura de Enrutamiento Flexible (Multi-Entrada):**
-  - Diseñar en `ABDShared` un componente de rack de efectos reutilizable al que puedan entrar varias rutas de audio (por defecto **1 o 2 buses estéreo**, ampliable).
-  - Topologías intercambiables de colocación de slots de efectos: **Paralelo**, **Cadena (Serie)** y **Mixto** (algoritmos de conexión conmutables).
-- [ ] **Gobierno desde la LCD Principal + Controles Rápidos:**
-  - Los algoritmos de conexión / enrutamiento de efectos deben gobernarse directamente desde la **LCD principal** del sintetizador.
-  - Evaluar ergonomía en panel principal: controles básicos compactos en vista principal vs controles avanzados al estilo `ABDEep`.
-- [ ] **Modal de Edición Dedicada por Efecto (con LCD y Tema Clásico Propio):**
-  - Al pulsar editar en cualquier efecto del rack, abrir una **modal dedicada** que cuente con:
-    - Su **propia pantalla LCD** de estado/parámetros.
-    - Su **propio tema visual** emulando hardware clásico (por ejemplo, **Roland RE-201 Space Echo** aprovechando `Re201Profile.h`, `tapeEchoVisual.js` y `FxTheme.js` ya existentes en `ABDShared`, Juno BBD Chorus, Dimension D, etc.).
-    - Controles dedicados propios del efecto seleccionado.
+### Backlog Compartido (`ABDShared`) — Componente Modular de Rack de Efectos, Inserciones y Carátulas Canónicas
+- [x] **Arquitectura de Enrutamiento Flexible (Multi-Entrada & MultiBus):**
+  - Implementado en `ABDShared::MultiBusFxRack` (`MultiBusFxRackModal`, `MultiBusFxRackLcd`): 4 buses de envío estéreo (A..D) asignables a 8 bahías físicas del armario modular 19'' o ruteo interno.
+  - Topologías intercambiables: Paralelo, Cascada Serie (1->2 | 3->4, etc.) y Mixto con matriz CRT LCD reactiva.
+  - Sincronía determinista de bahías (`syncSlotIndices()`, `rackSlots.indexOf(b)`) para ruteo consistente de títulos, selectores y carátulas.
+- [x] **Modal de Edición Dedicada por Efecto con Carátula Propia (`FxFaceplateModal` en `ABDShared`):**
+  - Al pulsar `[ Editar Carátula B# ]`, se abre `FxFaceplateModal` con su propia interfaz fotorealista:
+    - `Re201Faceplate.js` (Roland Space Echo con cinta animada y selector de 12 modos).
+    - `ZitaReverbFaceplate.js` (visualizador de curva y damping).
+    - `BbdChorusFaceplate.js` (Roland Juno BBD con modos I, II, I+II).
+    - `StereoDelayFaceplate.js` (delay BPM sync con ping-pong).
+    - `SaturationFaceplate.js` (emulación de cinta y válvulas con 4 curvas de saturación).
+    - `GenericFxFaceplate.js` para cualquier algoritmo adicional.
+- [x] **Cadena de Plugins e Inserciones MIDI en la Pista (`McxToneTabMidiFx`):**
+  - Estructuración en 4 etapas: (1) Fuentes & Edición de Secuencia (Pianola y Pads MPC 4x4), (2) Inserción MIDI 1: Arpegiador Groove (`GrooveArpeggiatorModal`), (3) Inserción MIDI 2: Escala y Transposición, y (4) Macros de Pista (offsets semánticos no destructivos).
+  - Selector de Cuantización de Entrada (`REC Q: OFF | 1/8 | 1/16 | 1/32`) en `MpcPadModal.js` para grabación en tiempo real en la pianola con 0 ms de latencia auditiva.
 - [ ] **Calibración Física de Efectos (`ABDAudioLab`):**
   - Medir en hardware real (**Roland MC-303**, **Boss DR-5**) las curvas `TIME/RATE`, `EFX LEVEL`, tiempos de tap y respuestas al impulso para pasar `RolandGsMc303FxProfile::kMeasuredHardware` de `false` a `true`.
+
+---
+
+### Fase 12B — Puerta de Saneamiento Pre-Fase 13 (Obligatoria antes de 64 Pistas)
+
+> Plan de ejecución detallado, anclajes por archivo y lista completa de verificación en [PLAN_SANEAMIENTO_PRE_FASE13.md](file:///d:/desarrollos/ABDSynths/ABDMCX0X/DOCS/PLAN_SANEAMIENTO_PRE_FASE13.md).
+
+- [ ] **Oleada P0 — Bloqueantes Críticos DSP, Realtime, Contratos y Modales (`[CR-01]`..`[CR-11]`):**
+  - Corregir ruta Master y Multi-Bus FX cuando existen bahías activas en `McxOutputAndFx`, implementar bypass real/Dry-Wet y ramas DSP faltantes en `McxRackChassis`, eliminar mutaciones desde el hilo UI hacia el DSP en `PluginEditor` / `McxRackBridgeHelpers`, evitar cortes y doble procesado en inserciones directas y remapear rutas al mover ranuras + cablear parámetros reales en `McxRackSlotBridge`.
+  - Reparar tabla `mcxParamIds.ts` y contrato `GlobalLfoModal`, corregir escala de velocidad `8..127` en `McxMidiModalsFactory`, arreglar `McxSynthModal` (pantalla en blanco y modo modeless), exportar `_drainMidiOut` con selección real de puerto WebMIDI, corregir `PianoRollModal` (`this.opts`/`partIndex` y cuantización) y pasar `MpcPadModal` a `show()`.
+- [ ] **Oleada P1 — Sincronía de los 3 Mundos (C++ / WASM / WebUI) y Persistencia (`[ME-06]`..`[ME-08]`, `[DT-01]`..`[DT-03]`, `[DT-06]`):**
+  - Cablear controles placebo de `multiBusFxRackModal.js`, WASM y `McxMasterPanel`, persistir nombres de presets guardados, asegurar resincronización DAW/WebUI vía `uiReady` sin sobrescribir con `localStorage`, centralizar sincronía de pista/formato en `McxAppState`, desacoplar `onAudioStatus` y sustituir `lfoPhase` simulado por telemetría DSP real.
+- [ ] **Oleada P2 — Ergonomía `1280x720`, Ventanas Modeless y Claridad UX (`[ME-09]`, `[DT-04]`, `[DT-05]`):**
+  - Ajustar rejilla horizontal (Rack + 16 tiras + Master/Transport) para eliminar el recorte en `P15-P16` a `1280x720`, estandarizar ventanas modeless con drag/z-order y limpieza de listeners `keydown`, reemplazar `window.prompt()` en `McxRackColumn`, añadir `SOLO ACTIVE — CLEAR`, limpiar controles muertos (`NUKE`, Macros vacío) y completar i18n/atajos.
+- [ ] **Oleada P3 — Saneamiento DRY, Tokens CSS, SVG y Límites `< 300` / `< 200` (`[ME-01]`..`[ME-05]`, `[ME-10]`, `[DT-07]`):**
+  - Definir los 11 tokens CSS faltantes, erradicar colores fijos y emojis/glifos textuales por SVG `currentColor` en `ABDShared` y `ABDMCX0X`, dividir `GrooveArpeggiator.h` (`301` lín.) y archivos JS/CSS sobredimensionados en `ABDShared`, consolidar copias duplicadas, retirar archivos muertos, resolver los 11 errores `tsc` y alinear la documentación pendiente de `MidiFaceplates`.
+- [ ] **Oleada P4 — Cobertura Automática e Infraestructura Pre-Fase 13:**
+  - Añadir tests CTest/Vitest de regresión para P0-P1 y dividir archivos puente pegados al límite (`WasmBridge.cpp`, `PluginProcessor.cpp`, `mcx0xWorklet.js`, `main.ts`, `McxHostBridge.ts`, `McxGlobalDrawer.ts`, `McxSettingsModal.ts`) antes de ampliar a `kNumParts = 64`.
+
+---
+
+### Fase 13 — Expansión a 64 Pistas (Bancos A..D de 16 Pistas) y Modo Canción / Performance en Vivo
+- [ ] **Arquitectura DSP y Secuenciador a 64 Pistas (`kNumParts = 64`):**
+  - Expansión de `McxEngine`, `McxCommandQueue` y `McxPatternSequencer` a 64 partes completas organizadas en **4 Bancos de 16 Pistas (Banco A: P01..P16, Banco B: P17..P32, Banco C: P33..P48, Banco D: P49..P64)**.
+  - Gestión lock-free de polifonía, asignación dinámica de voces (`ISoundEngine`), memoria y colas SPSC sin penalización de rendimiento en reposo (0 % CPU por pista inactiva).
+  - Máscaras de mute y solo de 64 bits (`std::uint64_t muteMask`) en `McxSongAndScenes` para control total e instantáneo por escena.
+- [ ] **Ergonomía de Superficie WebUI con Conmutador de Bancos [A] [B] [C] [D]:**
+  - Conmutador de banco activo en cabecera de la Consola de Mezcla y en la tira de pasos (Step Strip).
+  - Al seleccionar un banco, los 16 channel strips y pads reflejan inmediatamente las pistas del banco correspondiente manteniendo la cuadrícula de 16 tiras limpias sin saturación visual ni micro-faders inaccesibles.
+  - Indicador global de actividad/actividad MIDI y picos en los 4 bancos simultáneos.
+- [ ] **Modo Canción y Performance en Vivo Expandido:**
+  - Integración completa de escenas `S1..S8` cuantizadas a frontera de compás (`onBarBoundary`).
+  - Arreglo lineal de hasta 64 bloques con repeticiones, saltos, muteos y transposiciones por compás.
+  - Panel flotante o cajón dedicado de Performance en Vivo para disparo ágil de escenas y muting rítmico de pistas por grupos.
+
+---
+
+### Backlog & Análisis Técnico: Sidechain Ducking Dual (Audio vs MIDI) y Rack FX
+- [x] **Implementación Activa de Ducking Dual (Audio + MIDI):**
+  - **Detección por Audio (Envelope Follower sobre Pista de Batería/Bombo):** En producción de estudio clásica (compresores VCA estilo SSL Bus, DBX 160 o DAWs como Ableton Live / FabFilter Pro-C), el ducking se dispara mediante una señal de audio real (Key Input). El seguidor de envolvente detecta el pico o valor RMS de la pista de bombo (Pista 9 o cualquier pista configurada como `isDrumKit`), reaccionando instantáneamente a la dinámica real del sonido.
+  - **Disparo Rítmico por Notas MIDI (Ghost Trigger / MIDI Pumping):** En producción electrónica moderna (estilo Nicky Romero Kickstart, Cableguys VolumeShaper, LFO Tool), se prefiere el disparo por evento MIDI (notas 35 y 36 de bombo en la pista o una pista oculta "ghost"). Esto garantiza una envolvente de decaimiento limpia y musicalmente perfecta independientemente de si el sample de bombo es largo, corto o está muteado acústicamente.
+  - **Funcionamiento Dual en ABDMCX0X:** El chasis de efectos y el motor `McxEngine` combinan ambas señales (`manualDuckGate_ || (midiDuckEnabled_ && kickDuckEnvelope_ > 0.05f) || (audioDuckEnabled_ && audioDuckEnvelope_ > 0.08f)`), permitiendo trabajar con loops/muestras de audio o secuencias MIDI sin configuración manual previa.
+- [ ] **Puntos de Estudio Futuro para Sidechain Ducking:**
+  - Selector de pista de sidechain dedicada (permitir seleccionar arbitrariamente cualquiera de las pistas 1..64 como fuente de control Key Input, en lugar de fijarlo a P09/Drum).
+  - Filtro paso-alto (HPF sidechain conmutable 80–120 Hz) en la rama de detección de audio para prevenir que subgraves sostenidos mantengan la compuerta abierta indebidamente.
+  - Parámetros accesibles desde UI: profundidad de atenuación en dB (rango -3 dB a -48 dB) y tiempos de ataque/relajación en ms o divisiones de tempo (1/8, 1/16, 1/4).
+- [ ] **Revisión del Rack de Efectos y Monitor CRT LCD:**
+  - **Diagrama de Flujo Vectorial Dinámico:** En el monitor CRT de la modal de efectos, atenuar o apagar visualmente las ramas de señal inactivas o desconectadas, y representar flechas de interconexión directa cuando exista encadenamiento en serie entre bahías en lugar de líneas estáticas.
+  - **Centralización de Carátulas Canónicas en `ABDShared`:** Mover la definición completa de estilos, perfiles y лицевые панели (carátulas emuladas de hardware) a `ABDShared` una vez estabilizado su refactor paralelo, garantizando total consistencia visual entre instrumentos del ecosistema.

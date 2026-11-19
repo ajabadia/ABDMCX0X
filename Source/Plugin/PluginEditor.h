@@ -25,6 +25,7 @@ private:
     std::unique_ptr<abd::webview2::JuceWebView2Component> webComponent_;
     std::unique_ptr<juce::FileChooser> folderChooser_;
     bool isUiReady_{false};
+    int gcTickCounter_{0};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(McxAudioProcessorEditor)
 };

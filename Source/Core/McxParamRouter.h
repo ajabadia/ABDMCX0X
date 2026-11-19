@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../DSP/Core/McxEngine.h"
+#include "../Sequencer/McxPatternSequencer.h"
+#include "McxParamRouterExt.h"
 
 #include <algorithm>
 #include <cmath>
@@ -204,9 +206,9 @@ inline void applyWebPartParam(McxEngine& engine, int partIdx, int paramId, float
         for (auto& pt : p.partials) pt.fineCents = cents;
         break;
     }
-    case 55: p.portamentoEnabled = (value >= 0.5f); break;
-    case 56: p.portamentoTimeMs = std::clamp(value, 0.0f, 1000.0f); break;
-    case 57: p.portamentoLegatoOnly = (value >= 0.5f); break;
+    case 55: if (auto* se = engine.getPartSoundEngine(partIdx)) se->setParamByKey("porta.enabled", value >= 0.5f ? 1.0f : 0.0f); break;
+    case 56: if (auto* se = engine.getPartSoundEngine(partIdx)) se->setParamByKey("porta.timeMs", std::clamp(value, 0.0f, 1000.0f)); break;
+    case 57: if (auto* se = engine.getPartSoundEngine(partIdx)) se->setParamByKey("porta.legato", value >= 0.5f ? 1.0f : 0.0f); break;
     case 58: // Part Arp / Sequencer Enable (0/1)
         p.arp.setEnabled(value >= 0.5f);
         p.arp.setPatternMaskEnabled(true);
@@ -215,7 +217,10 @@ inline void applyWebPartParam(McxEngine& engine, int partIdx, int paramId, float
     case 59: // Part Step Mute Toggle (stepIdx * 10 + (on ? 1 : 0))
     {
         const int sIdx = std::clamp(static_cast<int>(value) / 10, 0, 15);
-        p.arp.setStepActive(sIdx, (static_cast<int>(value) % 10) != 0);
+        const bool on = (static_cast<int>(value) % 10) != 0;
+        p.arp.setStepActive(sIdx, on);
+        const auto step = p.arp.getStep(sIdx);
+        engine.sequencer().setStep(partIdx, sIdx, on, (step.velocityScale > 1.1f) ? 118 : 96, step.tie, p.isDrumKit ? 36 : 60);
         break;
     }
     case 60: // Part Step Accent Toggle (stepIdx * 10 + (accent ? 1 : 0))
@@ -224,6 +229,7 @@ inline void applyWebPartParam(McxEngine& engine, int partIdx, int paramId, float
         auto step = p.arp.getStep(sIdx);
         step.velocityScale = ((static_cast<int>(value) % 10) != 0) ? 1.5f : 1.0f;
         p.arp.setStep(sIdx, step);
+        engine.sequencer().setStep(partIdx, sIdx, step.active, (step.velocityScale > 1.1f) ? 118 : 96, step.tie, p.isDrumKit ? 36 : 60);
         break;
     }
     case 61: // Part Step Slide Toggle (stepIdx * 10 + (slide ? 1 : 0))
@@ -232,6 +238,7 @@ inline void applyWebPartParam(McxEngine& engine, int partIdx, int paramId, float
         auto step = p.arp.getStep(sIdx);
         step.tie = ((static_cast<int>(value) % 10) != 0);
         p.arp.setStep(sIdx, step);
+        engine.sequencer().setStep(partIdx, sIdx, step.active, (step.velocityScale > 1.1f) ? 118 : 96, step.tie, p.isDrumKit ? 36 : 60);
         break;
     }
     case 62: p.filter2Enabled = (value >= 0.5f); break;
@@ -242,29 +249,8 @@ inline void applyWebPartParam(McxEngine& engine, int partIdx, int paramId, float
     case 67:
         for (auto& partial : p.partials) partial.filterMode = static_cast<std::uint8_t>(std::clamp(static_cast<int>(value), 0, 3));
         break;
-    case 68: p.lfo1Shape = static_cast<std::uint8_t>(std::clamp(static_cast<int>(value), 0, 7)); break;
-    case 69: p.lfo1Sync = (value >= 0.5f); break;
-    case 70: p.lfo1Trigger = static_cast<std::uint8_t>(std::clamp(static_cast<int>(value), 0, 2)); break;
-    case 71: p.lfo1Rate = std::clamp(value, 0.01f, 1280.0f); break;
-    case 72: p.lfo1DelayMs = std::clamp(value, 0.0f, 5000.0f); break;
-    case 73: p.lfo1Depth = std::clamp(value, -1.0f, 1.0f); break;
-    case 74: p.lfo1Target = static_cast<std::uint8_t>(std::clamp(static_cast<int>(value), 0, 3)); break;
-    case 75: p.lfo2Shape = static_cast<std::uint8_t>(std::clamp(static_cast<int>(value), 0, 7)); break;
-    case 76: p.lfo2Sync = (value >= 0.5f); break;
-    case 77: p.lfo2Trigger = static_cast<std::uint8_t>(std::clamp(static_cast<int>(value), 0, 2)); break;
-    case 78: p.lfo2Rate = std::clamp(value, 0.01f, 1280.0f); break;
-    case 79: p.lfo2DelayMs = std::clamp(value, 0.0f, 5000.0f); break;
-    case 80: p.lfo2Depth = std::clamp(value, -1.0f, 1.0f); break;
-    case 81: p.lfo2Target = static_cast<std::uint8_t>(std::clamp(static_cast<int>(value), 0, 3)); break;
-    case 82: p.semanticOffsets.cutoffOctaves = std::clamp(value, -1.0f, 1.0f); break;
-    case 83: p.semanticOffsets.resonance = std::clamp(value, -1.0f, 1.0f); break;
-    case 84: p.semanticOffsets.envAttack = std::clamp(value, -1.0f, 1.0f); break;
-    case 85: p.semanticOffsets.envDecay = std::clamp(value, -1.0f, 1.0f); break;
-    case 86: p.semanticOffsets.envSustain = std::clamp(value, -1.0f, 1.0f); break;
-    case 87: p.semanticOffsets.envRelease = std::clamp(value, -1.0f, 1.0f); break;
-    case 88: p.semanticOffsets.vibratoDepth = std::clamp(value, -1.0f, 1.0f); break;
-    case 89: p.midiPortIndex = static_cast<std::uint8_t>(std::clamp(static_cast<int>(value), 0, 7)); break;
     default:
+        applyWebPartParamExt(engine, partIdx, paramId, value);
         break;
     }
 }

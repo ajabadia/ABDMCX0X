@@ -69,7 +69,10 @@
 .mcx-channel-body {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-2);
+  width: 100%;
+  min-width: 0;
 }
 .mcx-drawer-ms-group {
   display: flex;

@@ -5,7 +5,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1px;
+  gap: 2px;
   flex: 1;
   min-width: 0;
   max-width: 100%;
@@ -28,11 +28,11 @@
 }
 
 .synth-knob-num {
-  font-size: 8px;
+  font-size: 9px;
   font-family: var(--font-mono);
   color: var(--color-accent);
   font-weight: 700;
-  line-height: 1;
+  line-height: 1.1;
   text-align: center;
   font-variant-numeric: tabular-nums;
   margin-top: 1px;
@@ -43,12 +43,12 @@
 }
 
 .synth-knob-title {
-  font-size: 7.5px;
+  font-size: 8.5px;
   font-weight: 800;
   color: var(--color-text-muted);
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  line-height: 1.1;
+  line-height: 1.15;
   text-align: center;
   width: 100%;
   white-space: nowrap;
@@ -59,7 +59,7 @@
 /* Tone & FX Drawer Decks & Module Cards */
 .mcx-tone-deck {
   display: flex;
-  gap: var(--space-2);
+  gap: 6px;
   align-items: stretch;
   width: 100%;
   min-width: 0;
@@ -69,31 +69,30 @@
 .mcx-module-card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 3px;
   background: color-mix(in srgb, var(--color-panel-surface) 60%, transparent);
   border: 1px solid var(--color-panel-border-dim);
   border-radius: var(--radius-md);
-  padding: 5px 6px;
+  padding: 4px 7px;
   box-shadow: inset 0 1px 3px rgba(var(--color-scrim-rgb), 0.4);
   box-sizing: border-box;
   min-width: 0;
   overflow: hidden;
 }
 
-/* Deck 1 (Superior) */
-.mcx-card-config { flex: 1.15; min-width: 125px; }
-.mcx-card-pitch { flex: 0.85; min-width: 90px; }
-.mcx-card-glide { flex: 0.85; min-width: 90px; }
-.mcx-card-vector { flex: 0.85; min-width: 90px; }
-.mcx-card-filters { flex: 2.8; min-width: 350px; }
-.mcx-card-drive { flex: 1.0; min-width: 105px; }
+/* Tab 1 (Motor) Cards */
+.mcx-card-vector { flex: 1.15; min-width: 170px; }
+.mcx-card-filters { flex: 2.85; min-width: 440px; }
+.mcx-card-lfo { flex: 1.75; min-width: 340px; }
+.mcx-card-env { flex: 1.45; min-width: 260px; }
 
-/* Deck 2 (Inferior) */
-.mcx-card-lfo { flex: 2.3; min-width: 310px; }
-.mcx-card-env { flex: 1.5; min-width: 185px; }
-.mcx-card-eq { flex: 1.1; min-width: 140px; }
-.mcx-card-sends { flex: 2.3; min-width: 310px; }
-.mcx-card-channel { flex: 1.0; min-width: 120px; }
+/* Tab 2 (Canal / Mezcla) Cards */
+.mcx-card-pitch { flex: 0.9; min-width: 120px; }
+.mcx-card-glide { flex: 1.15; min-width: 155px; }
+.mcx-card-eq { flex: 1.3; min-width: 195px; }
+.mcx-card-drive { flex: 1.15; min-width: 165px; }
+.mcx-card-sends { flex: 2.6; min-width: 380px; }
+.mcx-card-channel { flex: 1.4; min-width: 230px; }
 
 @keyframes mcx-card-highlight-pulse {
   0% {

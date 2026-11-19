@@ -44,6 +44,8 @@ dialog.mcx-synth-dialog::backdrop {
   background: var(--color-panel-surface);
   border-bottom: 1px solid var(--color-panel-border-dim);
   cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
   user-select: none;
 }
 

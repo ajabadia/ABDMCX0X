@@ -23,6 +23,8 @@ export class McxGlobalDrawer {
   private el: HTMLElement; private opened = false; private bridge: McxHostBridge;
   private setLcdLine2: (text: string) => void; private opts: McxGlobalDrawerOptions;
   private globalTranspose = 0; private masterVol = 0.85;
+  private dacIdx = 0; private revIdx = 0; private revTime = 0.5; private choIdx = 0; private choRate = 0.5;
+  private onEscKey = (ev: KeyboardEvent): void => { if (ev.key === 'Escape' && this.opened) this.close(); };
 
   constructor(opts: McxGlobalDrawerOptions) {
     this.opts = opts; this.bridge = opts.bridge; this.setLcdLine2 = opts.setLcdLine2;
@@ -31,9 +33,12 @@ export class McxGlobalDrawer {
     this.el.id = 'mcx-global-drawer';
     this.el.setAttribute('role', 'region');
     this.el.setAttribute('aria-label', 'Global & Master Drawer');
+    this.el.addEventListener('click', (ev) => {
+      if ((ev.target as HTMLElement).closest('[data-act="close"]')) { ev.stopPropagation(); this.close(); }
+    });
     this.el.innerHTML = this.buildHtml();
     opts.hostEl.appendChild(this.el);
-    this.bindEvents();
+    this.bindDomChildren();
   }
 
   private buildHtml(): string {
@@ -43,7 +48,7 @@ export class McxGlobalDrawer {
           <span class="mcx-drawer-title-accent">GLOBAL</span>
           <h3 class="mcx-drawer-title" data-i18n="mcx.globalDrawerTitle">${t('mcx.globalDrawerTitle') || 'SESIÓN & SALIDA MASTER'}</h3>
         </div>
-        <button type="button" class="mcx-drawer-close-btn" data-act="close" title="${t('mcx.closeDrawer') || 'Cerrar'}" aria-label="${t('mcx.closeDrawer') || 'Cerrar'}">✕</button>
+        <button type="button" class="mcx-drawer-close-btn" data-act="close" title="${t('mcx.closeDrawer') || 'Cerrar'}" aria-label="${t('mcx.closeDrawer') || 'Cerrar'}"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
       </div>
       <div class="mcx-drawer-body mcx-global-body">
         <section class="mcx-module-card mcx-card-global-out">
@@ -69,23 +74,36 @@ export class McxGlobalDrawer {
             <div class="mcx-global-field"><span class="mcx-global-field-lbl">${t('mcx.dacCharacter') || 'Carácter D/A Vintage'}</span><select class="mcx-global-select" id="g-dac-character">${DAC_MODES.map((d, i) => `<option value="${i}">${d}</option>`).join('')}</select></div>
             <div class="mcx-global-field"><span class="mcx-global-field-lbl">${t('mcx.reverbMacro') || 'Macro Reverb Master'}</span><select class="mcx-global-select" id="g-reverb-macro">${REVERB_MACROS.map((r, i) => `<option value="${i}">${r}</option>`).join('')}</select></div>
             <div class="mcx-global-field">
-              <div class="mcx-global-field-head"><span class="mcx-global-field-lbl">${t('mcx.reverbTime') || 'Tiempo Reverb'}</span><span class="mcx-global-field-val" id="g-reverb-time-val">50%</span></div>
-              <input type="range" class="mcx-global-slider" id="g-reverb-time" min="0" max="1" step="0.01" value="0.5" />
+              <div class="mcx-global-field-head"><span class="mcx-global-field-lbl">${t('mcx.reverbTime') || 'Tiempo Reverb'}</span><span class="mcx-global-field-val" id="g-reverb-time-val">${Math.round(this.revTime * 100)}%</span></div>
+              <input type="range" class="mcx-global-slider" id="g-reverb-time" min="0" max="1" step="0.01" value="${this.revTime}" />
             </div>
             <div class="mcx-global-field"><span class="mcx-global-field-lbl">${t('mcx.chorusMacro') || 'Macro Chorus Master'}</span><select class="mcx-global-select" id="g-chorus-macro">${CHORUS_MACROS.map((c, i) => `<option value="${i}">${c}</option>`).join('')}</select></div>
             <div class="mcx-global-field">
-              <div class="mcx-global-field-head"><span class="mcx-global-field-lbl">${t('mcx.chorusRate') || 'Velocidad Chorus'}</span><span class="mcx-global-field-val" id="g-chorus-rate-val">50%</span></div>
-              <input type="range" class="mcx-global-slider" id="g-chorus-rate" min="0" max="1" step="0.01" value="0.5" />
+              <div class="mcx-global-field-head"><span class="mcx-global-field-lbl">${t('mcx.chorusRate') || 'Velocidad Chorus'}</span><span class="mcx-global-field-val" id="g-chorus-rate-val">${Math.round(this.choRate * 100)}%</span></div>
+              <input type="range" class="mcx-global-slider" id="g-chorus-rate" min="0" max="1" step="0.01" value="${this.choRate}" />
             </div>
-            <button type="button" class="mcx-global-rack-launch-btn" id="g-open-full-rack">ABRIR RACK MODULAR COMPLETO ➔</button>
+            <p class="mcx-midifx-hint" id="g-legacy-fx-note">${t('mcx.legacyFxNote')}</p>
+            <button type="button" class="mcx-global-rack-launch-btn" id="g-open-full-rack">${t('mcx.openFullRack')} <svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8M7 3l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
           </div>
         </section>
       </div>
     `;
   }
 
-  public open(): void { this.opened = true; this.el.classList.add('is-open'); this.setLcdLine2('GLOBAL SESSION DRAWER OPEN'); }
-  public close(): void { if (!this.opened) return; this.opened = false; this.el.classList.remove('is-open'); this.opts.onClose?.(); }
+  public refreshLocale(): void {
+    this.el.innerHTML = this.buildHtml();
+    this.bindDomChildren();
+    this.setMasterVolume(this.masterVol);
+    this.setGlobalTranspose(this.globalTranspose);
+    this.syncFromSession({ dacCharacter: this.dacIdx, reverbMacro: this.revIdx, chorusMacro: this.choIdx });
+    const revInput = this.el.querySelector<HTMLInputElement>('#g-reverb-time'), revVal = this.el.querySelector<HTMLElement>('#g-reverb-time-val');
+    if (revInput) revInput.value = String(this.revTime);
+    if (revVal) revVal.textContent = `${Math.round(this.revTime * 100)}%`;
+  }
+
+  public open(): void { this.opened = true; this.el.classList.add('is-open'); window.addEventListener('keydown', this.onEscKey); this.setLcdLine2('GLOBAL SESSION DRAWER OPEN'); }
+  public close(): void { if (!this.opened) return; this.opened = false; this.el.classList.remove('is-open'); window.removeEventListener('keydown', this.onEscKey); this.opts.onClose?.(); }
+  public destroy(): void { window.removeEventListener('keydown', this.onEscKey); this.el.remove(); }
   public toggle(): void { if (this.opened) this.close(); else this.open(); }
   public isOpen(): boolean { return this.opened; }
 
@@ -105,17 +123,16 @@ export class McxGlobalDrawer {
   public syncFromSession(dto: { masterGain?: number; globalTranspose?: number; dacCharacter?: number; reverbMacro?: number; chorusMacro?: number }): void {
     if (typeof dto.masterGain === 'number') this.setMasterVolume(dto.masterGain);
     if (typeof dto.globalTranspose === 'number') this.setGlobalTranspose(dto.globalTranspose);
+    if (typeof dto.dacCharacter === 'number') this.dacIdx = dto.dacCharacter;
+    if (typeof dto.reverbMacro === 'number') this.revIdx = dto.reverbMacro;
+    if (typeof dto.chorusMacro === 'number') this.choIdx = dto.chorusMacro;
     const setSel = (id: string, val?: number) => { const s = this.el.querySelector<HTMLSelectElement>(id); if (s && typeof val === 'number') s.value = String(val); };
     setSel('#g-dac-character', dto.dacCharacter);
     setSel('#g-reverb-macro', dto.reverbMacro);
     setSel('#g-chorus-macro', dto.chorusMacro);
   }
 
-  private bindEvents(): void {
-    this.el.addEventListener('click', (ev) => {
-      if ((ev.target as HTMLElement).closest('[data-act="close"]')) { ev.stopPropagation(); this.close(); }
-    });
-    window.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && this.opened) this.close(); });
+  private bindDomChildren(): void {
     this.el.querySelector('#g-open-full-rack')?.addEventListener('click', () => { this.close(); this.opts.onOpenFxRack?.(); });
 
     const volSlider = this.el.querySelector<HTMLInputElement>('#g-master-vol');
@@ -137,28 +154,28 @@ export class McxGlobalDrawer {
     this.el.querySelector('#g-trans-up')?.addEventListener('click', () => updateTrans(this.globalTranspose + 1));
     this.el.querySelector('#g-trans-val')?.addEventListener('click', () => updateTrans(0));
 
-    const bindSel = (id: string, param: McxParamKey, labels: string[]) => {
+    const bindSel = (id: string, param: McxParamKey, labels: string[], onIdx: (n: number) => void) => {
       this.el.querySelector<HTMLSelectElement>(id)?.addEventListener('change', (e) => {
         const idx = parseInt((e.target as HTMLSelectElement).value, 10);
-        this.bridge.setParam(0, param, idx);
+        onIdx(idx); this.bridge.setParam(0, param, idx);
         this.setLcdLine2(`${param}: ${labels[idx] || idx}`);
       });
     };
-    bindSel('#g-dac-character', 'dacCharacter', DAC_MODES);
-    bindSel('#g-reverb-macro', 'reverbMacro', REVERB_MACROS);
-    bindSel('#g-chorus-macro', 'chorusMacro', CHORUS_MACROS);
+    bindSel('#g-dac-character', 'dacCharacter', DAC_MODES, (n) => { this.dacIdx = n; });
+    bindSel('#g-reverb-macro', 'reverbMacro', REVERB_MACROS, (n) => { this.revIdx = n; });
+    bindSel('#g-chorus-macro', 'chorusMacro', CHORUS_MACROS, (n) => { this.choIdx = n; });
 
-    const bindSlider = (id: string, valId: string, param: McxParamKey) => {
+    const bindSlider = (id: string, valId: string, param: McxParamKey, onVal: (v: number) => void) => {
       const input = this.el.querySelector<HTMLInputElement>(id);
       const valEl = this.el.querySelector<HTMLElement>(valId);
       input?.addEventListener('input', () => {
         const v = parseFloat(input.value);
-        if (valEl) valEl.textContent = `${Math.round(v * 100)}%`;
+        onVal(v); if (valEl) valEl.textContent = `${Math.round(v * 100)}%`;
         this.bridge.setParam(0, param, v);
         this.setLcdLine2(`${param}: ${Math.round(v * 100)}%`);
       });
     };
-    bindSlider('#g-reverb-time', '#g-reverb-time-val', 'reverbTime');
-    bindSlider('#g-chorus-rate', '#g-chorus-rate-val', 'chorusRate');
+    bindSlider('#g-reverb-time', '#g-reverb-time-val', 'reverbTime', (v) => { this.revTime = v; });
+    bindSlider('#g-chorus-rate', '#g-chorus-rate-val', 'chorusRate', (v) => { this.choRate = v; });
   }
 }

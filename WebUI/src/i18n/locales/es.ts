@@ -4,6 +4,7 @@
  */
 
 import { songEs } from './songLocales';
+import { uxEs } from './uxLocales';
 
 export const mcxEs = {
   mcx: {
@@ -185,6 +186,7 @@ export const mcxEs = {
     transportRecord: 'Grabar (Record)',
     transportLoop: 'Bucle (Loop)',
     transportMetro: 'Metrónomo',
+    ...uxEs,
     ...songEs,
   },
 };

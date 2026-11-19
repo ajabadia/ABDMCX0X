@@ -32,8 +32,8 @@ export interface McxUiRefs {
   padModal?: MpcPadModal | null; arpModal?: GrooveArpeggiatorModal | null;
   onSongTelemetry?: (tel: McxTelemetry) => void;
   triggerLiveScene?: (idx: number, immediate?: boolean) => void;
-  toggleSongDrawer?: () => void;
-  refreshSongLocale?: () => void;
+  toggleSongDrawer?: () => void; refreshSongLocale?: () => void;
+  onSavePreset?: (isMulti: boolean) => void; onOpenBankFile?: () => void; onPanic?: () => void;
 }
 
 export class McxAppState {
@@ -72,6 +72,19 @@ export class McxAppState {
     const el = document.getElementById('part-list');
     if (el) renderMixerConsole(el, this.getPanelCallbacks(), this.bridge);
     this.refs.stepStrip?.refresh();
+    this.syncSoloIndicator();
+  }
+
+  public syncSoloIndicator(): void {
+    const anySolo = this.partsState.some((p) => p.solo);
+    const btn = document.getElementById('mcx-solo-clear-btn');
+    if (btn) { btn.hidden = !anySolo; btn.textContent = t('mcx.soloActiveClear'); }
+  }
+
+  public clearAllSolos(): void {
+    this.partsState.forEach((ps, i) => { if (ps.solo) { ps.solo = false; this.bridge.setParam(i, 'partSolo', 0); } });
+    this.refreshPartList();
+    this.setLcdLine2(t('mcx.allSolosCleared'));
   }
 
   public syncPianoRollForPart(idx: number): void {
@@ -81,13 +94,8 @@ export class McxAppState {
   public syncArpModalForPart(idx: number): void {
     const ps = this.partsState[idx];
     this.refs.arpModal?.syncPart(idx, {
-      enabled: Boolean(ps.arpEnabled),
-      motif: ps.arpMotif ?? 0,
-      rate: ps.arpRate ?? '1/16',
-      octaves: ps.arpOctaves ?? 1,
-      gate: ps.arpGate ?? 80,
-      swing: Math.round((ps.patternSwing ?? 0.5) * 100),
-      latch: ps.arpLatch ?? 0,
+      enabled: Boolean(ps.arpEnabled), motif: ps.arpMotif ?? 0, rate: ps.arpRate ?? '1/16',
+      octaves: ps.arpOctaves ?? 1, gate: ps.arpGate ?? 80, swing: Math.round((ps.patternSwing ?? 0.5) * 100), latch: ps.arpLatch ?? 0,
     });
   }
 
@@ -95,14 +103,8 @@ export class McxAppState {
     this.refs.masterPanel?.setPlaying(playing);
     this.refs.pianoRollModal?.setPlaying(playing, this.globalSettings.standaloneBpm);
     this.refs.stepStrip?.setTransportRunning(playing, this.globalSettings.standaloneBpm);
-    if (playing) {
-      this.bridge.setTempo(this.globalSettings.standaloneBpm);
-      this.bridge.setTransportPlaying(true, false);
-      this.setLcdLine2(`TRANSPORT: PLAY ▶ (${this.globalSettings.standaloneBpm.toFixed(1)} BPM)`);
-    } else {
-      this.bridge.setTransportPlaying(false, true);
-      this.setLcdLine2('TRANSPORT: STOP ■');
-    }
+    if (playing) { this.bridge.setTempo(this.globalSettings.standaloneBpm); this.bridge.setTransportPlaying(true, false); this.setLcdLine2(`TRANSPORT: PLAY (${this.globalSettings.standaloneBpm.toFixed(1)} BPM)`); }
+    else { this.bridge.setTransportPlaying(false, true); this.setLcdLine2('TRANSPORT: STOP'); }
   }
 
   public uploadInitialPatterns(): void {

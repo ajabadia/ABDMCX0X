@@ -1,24 +1,23 @@
 /* ABDMCX0X -- Instrument & Route Modal (<dialog> Top Layer, 100% ABDShared tokens) */
 
 dialog.mcx-route-dialog {
-  margin: auto; padding: 0; width: min(560px, 92vw); max-height: 88vh; overflow: hidden; box-sizing: border-box;
+  position: fixed; inset: 0; margin: auto; z-index: var(--z-modal, 9999);
+  padding: 0; width: min(560px, 92vw); max-height: 88vh; overflow: hidden; box-sizing: border-box;
   border: 1px solid var(--color-panel-border-strong); border-radius: var(--radius-lg);
   background: var(--color-bg-base); color: var(--color-text-main);
   box-shadow: 0 18px 48px rgba(var(--color-scrim-rgb), 0.72);
 }
 dialog.mcx-route-dialog[open] { display: flex; flex-direction: column; }
-dialog.mcx-route-dialog:modal { overscroll-behavior: contain; }
-dialog.mcx-route-dialog::backdrop {
-  background: rgba(var(--color-scrim-rgb), 0.72); backdrop-filter: blur(4px);
-  overflow: hidden; overscroll-behavior: contain;
-}
+dialog.mcx-route-dialog::backdrop { background: transparent; pointer-events: none; }
 
 .mcx-route-shell { display: flex; flex-direction: column; min-height: 0; width: 100%; }
 .mcx-route-head {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
   padding: var(--space-3) var(--space-4); background: var(--color-panel-surface);
   border-bottom: 1px solid var(--color-panel-border-dim);
+  cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none;
 }
+.mcx-route-head:active { cursor: grabbing; }
 .mcx-route-head-left { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .mcx-route-part-badge {
   font-family: var(--font-mono); font-weight: 900; font-size: var(--text-sm);

@@ -1,7 +1,7 @@
 /* ABDMCX0X -- 8-Slot Modular 19'' Studio Rack Chassis & Patchbay Column */
 
 .mcx-rack-column {
-  width: 240px; min-width: 220px; max-width: 260px; flex-shrink: 0; height: 100%; box-sizing: border-box;
+  width: 204px; min-width: 196px; max-width: 224px; flex-shrink: 0; height: 100%; box-sizing: border-box;
   padding: var(--space-2); display: flex; flex-direction: column; gap: var(--space-2);
   background: color-mix(in srgb, var(--color-panel-bg) 40%, transparent);
   border: 1px solid var(--color-panel-border); border-radius: var(--radius-lg);
@@ -58,8 +58,9 @@
 }
 
 .mcx-rack-add-btn {
+  appearance: none; border: none; background: transparent; padding: 0; width: 100%; cursor: pointer;
   font-family: var(--font-mono); font-size: 9px; font-weight: 700;
-  color: var(--color-text-dim); display: flex; align-items: center; gap: 4px;
+  color: var(--color-text-dim); display: flex; align-items: center; justify-content: center; gap: 4px;
 }
 
 .mcx-rack-slot-row-head {
@@ -115,4 +116,44 @@
 
 .mcx-rack-vu-clip.is-active {
   background: var(--color-danger); box-shadow: 0 0 4px var(--color-danger);
+}
+
+.mcx-rack-picker-popover {
+  display: none; flex-direction: column; gap: 4px; width: 230px; padding: var(--space-2);
+  border: 1px solid var(--color-panel-border-strong); border-radius: var(--radius-md);
+  background: var(--color-bg-base); color: var(--color-text-main);
+  box-shadow: var(--shadow-elevation-3, 0 12px 32px color-mix(in srgb, var(--color-panel-border-strong) 85%, transparent));
+  z-index: var(--z-modal, 10010);
+}
+.mcx-rack-picker-popover:is(:popover-open, .\:popover-open, .is-open) { display: flex; }
+@supports (position-area: block-end) {
+  .mcx-rack-picker-popover {
+    inset: auto; margin: 0; position-area: block-end span-inline-start;
+    position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+  }
+}
+@supports not (position-area: block-end) {
+  .mcx-rack-picker-popover { position: fixed; right: 240px; top: 50%; transform: translateY(-50%); margin: 0; }
+}
+.mcx-rack-picker-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  padding-bottom: 4px; border-bottom: 1px solid var(--color-panel-border-dim);
+  font-family: var(--font-mono); font-size: 9.5px; font-weight: 800; color: var(--color-text-muted);
+}
+.mcx-rack-picker-close {
+  appearance: none; border: 1px solid var(--color-panel-border); border-radius: var(--radius-xs);
+  background: var(--color-panel-surface); color: var(--color-text-muted); cursor: pointer;
+  width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
+}
+.mcx-rack-picker-close:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.mcx-rack-picker-list { display: flex; flex-direction: column; gap: 3px; max-height: 280px; overflow-y: auto; }
+.mcx-rack-picker-item {
+  appearance: none; width: 100%; text-align: left; display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  padding: 5px 8px; border: 1px solid var(--color-panel-border-dim); border-radius: var(--radius-sm);
+  background: var(--color-panel-surface); color: var(--color-text-main);
+  font-family: var(--font-sans); font-size: 11px; font-weight: 600; cursor: pointer;
+}
+.mcx-rack-picker-item:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.mcx-rack-picker-tag {
+  font-family: var(--font-mono); font-size: 9px; font-weight: 800; color: var(--color-text-dim);
 }

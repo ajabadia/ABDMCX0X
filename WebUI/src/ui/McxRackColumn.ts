@@ -6,6 +6,13 @@
 
 import { findAlgorithmById } from '@abdsynths/shared/components';
 import type { McxHostBridge } from '../bridge/McxHostBridge';
+import { t } from '../i18n/mcxI18n';
+
+const RACK_PICKER_ENGINES = [
+  { id: 'zita', eng: 1, name: 'Zita Reverb' }, { id: 'space_echo', eng: 2, name: 'Space Echo RE-201' }, { id: 'bbd_chorus', eng: 3, name: 'Roland BBD Chorus' },
+  { id: 'stereo_delay', eng: 4, name: 'Stereo Delay' }, { id: 'saturation', eng: 5, name: 'Tape Saturation' }, { id: 'flanger', eng: 6, name: 'Stereo Flanger' },
+  { id: 'midas_eq', eng: 7, name: 'Midas 4-Band EQ' }, { id: 'fair_comp', eng: 8, name: 'Fairchild Comp' }, { id: 'mood_filter', eng: 9, name: 'Moog Ladder Filter' },
+];
 
 export interface McxRackColumnOptions {
   bridge: McxHostBridge; setLcdLine2?: (text: string) => void;
@@ -23,6 +30,7 @@ export class McxRackColumn {
   private el: HTMLElement; private opts: McxRackColumnOptions;
   private slots: UiRackSlot[] = []; private sendTargets: number[] = [0, 1, -1, -1];
   private hasHostHydrated = false;
+  private pickerEl: HTMLElement | null = null;
 
   constructor(container: HTMLElement, opts: McxRackColumnOptions) {
     this.el = container; this.opts = opts;
@@ -115,8 +123,8 @@ export class McxRackColumn {
       const card = document.createElement('div');
       card.className = `mcx-rack-slot-card${s.engine === 0 ? ' is-empty' : ''}`; card.dataset.slot = String(idx);
       if (s.engine === 0) {
-        card.innerHTML = `<div class="mcx-rack-add-btn"><span>+</span> BAHÍA ${idx + 1}: AÑADIR EFECTO</div>`;
-        card.addEventListener('click', () => this.showAddEffectMenu(idx));
+        card.innerHTML = `<button type="button" class="mcx-rack-add-btn"><span>+</span> ${t('mcx.rackBay')} ${idx + 1}: ${t('mcx.rackAddSlot')}</button>`;
+        card.querySelector('button')?.addEventListener('click', (ev) => { ev.stopPropagation(); this.showAddEffectMenu(idx, card); });
       } else {
         const def = findAlgorithmById(s.algoId);
         card.style.background = `color-mix(in srgb, ${def.baseColor || 'transparent'} 35%, var(--color-panel-surface))`;
@@ -155,19 +163,29 @@ export class McxRackColumn {
     card.addEventListener('click', () => this.opts.onOpenEffectDetail?.(idx, s.algoId, s.name, s));
   }
 
-  private showAddEffectMenu(slotIdx: number): void {
-    const list = [
-      { id: 'space_echo', eng: 2, name: 'Space Echo RE-201' }, { id: 'zita', eng: 1, name: 'Zita Reverb' },
-      { id: 'bbd_chorus', eng: 3, name: 'Roland BBD Chorus' }, { id: 'stereo_delay', eng: 4, name: 'Stereo Delay' },
-      { id: 'saturation', eng: 5, name: 'Tape Saturation' }, { id: 'flanger', eng: 6, name: 'Stereo Flanger' },
-    ];
-    const choice = window.prompt(`Selecciona efecto para Bahía ${slotIdx + 1}:\n` + list.map((item, i) => `${i + 1}: ${item.name}`).join('\n'), '1');
-    if (choice) {
-      const chosen = list[parseInt(choice, 10) - 1] || list[0];
+  private showAddEffectMenu(slotIdx: number, anchorEl: HTMLElement): void {
+    this.pickerEl?.remove();
+    const pop = document.createElement('div');
+    pop.className = 'mcx-rack-picker-popover'; pop.setAttribute('popover', 'auto');
+    pop.innerHTML = `<div class="mcx-rack-picker-head"><span>${t('mcx.rackPickTitle')} ${slotIdx + 1}</span>` +
+      `<button type="button" class="mcx-rack-picker-close" aria-label="${t('mcx.rackClose')}"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></div>` +
+      `<div class="mcx-rack-picker-list">${RACK_PICKER_ENGINES.map((item, i) => `<button type="button" class="mcx-rack-picker-item" data-eng-idx="${i}">${item.name}</button>`).join('')}</div>`;
+    pop.addEventListener('click', (ev) => {
+      if ((ev.target as HTMLElement).closest('.mcx-rack-picker-close')) { pop.hidePopover?.(); return; }
+      const itemBtn = (ev.target as HTMLElement).closest<HTMLButtonElement>('[data-eng-idx]'); if (!itemBtn) return;
+      const chosen = RACK_PICKER_ENGINES[Number(itemBtn.dataset.engIdx)] || RACK_PICKER_ENGINES[0];
       this.slots[slotIdx] = { slot: slotIdx, engine: chosen.eng, algoId: chosen.id, name: chosen.name, bypass: false, duck: false, p1: 0.5, p2: 0.5 };
       this.opts.bridge.setRackSlotEngine(slotIdx, chosen.eng, chosen.name);
-      this.opts.setLcdLine2?.(`MONTADO EN BAHÍA ${slotIdx + 1}: ${chosen.name}`); this.syncSlotIndices(); this.renderSlots();
+      this.opts.setLcdLine2?.(`${t('mcx.rackMounted')} ${slotIdx + 1}: ${chosen.name}`); this.syncSlotIndices(); this.renderSlots(); pop.hidePopover?.();
+    });
+    pop.addEventListener('toggle', (ev) => { if ((ev as ToggleEvent).newState === 'closed') { pop.remove(); if (this.pickerEl === pop) this.pickerEl = null; } });
+    document.body.appendChild(pop); this.pickerEl = pop;
+    if (typeof CSS !== 'undefined' && !CSS.supports('position-area', 'block-end')) {
+      const r = anchorEl.getBoundingClientRect();
+      pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 240))}px`;
+      pop.style.top = `${Math.max(8, Math.min(r.bottom + 4, window.innerHeight - 280))}px`; pop.style.right = 'auto'; pop.style.transform = 'none';
     }
+    (pop as HTMLElement & { showPopover?: (opts?: { source?: HTMLElement }) => void }).showPopover?.({ source: anchorEl });
   }
 
   updateMeter(slotIdx: number, pIn: number, pOut: number, clipIn = false, clipOut = false): void {

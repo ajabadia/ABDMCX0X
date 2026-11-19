@@ -23,8 +23,8 @@
 | Oleada | Foco Principal | Ítems Cubiertos | Criterio de Salida |
 | :--- | :--- | :--- | :--- |
 | **P0** | Integridad DSP, tiempo real audio, contratos puente y errores bloqueantes | `[CR-01]` .. `[CR-11]` | Audio, rack FX, MIDI, pianola y paneles de sinte sin cuelgues, sin fugas ni pérdida silenciosa de parámetros (**VERIFICADO — `11/11` CTest, JUCE 9 VST3/Standalone, Vite, WASM**) |
-| **P1** | Sincronía total de los 3 mundos (C++ / WASM / WebUI), persistencia DAW y telemetría real | `[ME-06]`, `[ME-07]`, `[ME-08]`, `[DT-01]`, `[DT-02]`, `[DT-03]`, `[DT-06]` | Cero controles placebo en Rack/Master/Mix; estado y bancos persistidos en DAW y WebUI al recargar (**IMPLEMENTADO — Pendiente verificación de usuario**) |
-| **P2** | Ergonomía `1280x720`, ventanas flotantes modeless y claridad conceptual UX | Ergonomía `1280x720`, `[ME-09]`, `[DT-04]`, `[DT-05]`, claridad pista/sinte/secuenciador | 16 tiras + Rack + Master visibles sin recorte horizontal a `1280x720`; modales modeless movibles con z-order estable |
+| **P1** | Sincronía total de los 3 mundos (C++ / WASM / WebUI), persistencia DAW y telemetría real | `[ME-06]`, `[ME-07]`, `[ME-08]`, `[DT-01]`, `[DT-02]`, `[DT-03]`, `[DT-06]` | Cero controles placebo en Rack/Master/Mix; estado y bancos persistidos en DAW y WebUI al recargar (**VERIFICADO — CTest `11/11`, JUCE 9 VST3/Standalone, Vite, WASM `11/11`, `ABDShared` Vitest `62/62` (`738` passed)**) |
+| **P2** | Ergonomía `1280x720`, ventanas flotantes modeless y claridad conceptual UX | Ergonomía `1280x720`, `[ME-09]`, `[DT-04]`, `[DT-05]`, claridad pista/sinte/secuenciador | 16 tiras + Rack + Master visibles sin recorte horizontal a `1280x720`; modales modeless movibles con z-order estable (**IMPLEMENTADO — Pendiente compilación/test de usuario**) |
 | **P3** | Saneamiento DRY, tokens CSS, iconografía SVG, límites de líneas y coherencia documental | `[ME-01]` .. `[ME-05]`, `[ME-10]`, `[DT-07]` | 0 tokens CSS indefinidos, 0 colores fijos y 0 emojis en `ABDShared`/`ABDMCX0X`; todos los archivos bajo `< 300` / `< 200` líneas; `tsc` limpio |
 | **P4** | Cobertura automática de integración y holgura estructural para Fase 13 (`kNumParts = 64`) | Tests Rack/Secuenciador + partición preventiva de archivos al límite | Suite CTest, Vitest y verificación de tipos en verde ejecutados por el usuario; archivos puente con holgura `< 260` / `< 180` líneas |
 
@@ -71,24 +71,24 @@ Objetivo: eliminar fallos funcionales silenciosos, mutaciones inseguras en el hi
 
 Objetivo: garantizar que ningún control visible sea placebo, que el estado sobreviva a recargas de proyecto DAW / navegador y que la telemetría refleje valores reales del DSP.
 
-- [x] **`[ME-06]` Cablear controles placebo en Multi-Bus FX Rack, WASM, Master y Presets:** *(Pendiente compilación/test de usuario)*
+- [x] **`[ME-06]` Cablear controles placebo en Multi-Bus FX Rack, WASM, Master y Presets:** *(Verificado por usuario: CTest 11/11 + JUCE 9 + WASM + Vitest 62/62)*
   - Alinear eventos en [multiBusFxRackModal.js](file:///d:/desarrollos/ABDSynths/ABDShared/Components/MultiBusFxRack/multiBusFxRackModal.js) (`setMute` vs `muteSendBus`, `setTopology`, `setCascadeInjections`, `setGate`, `lim-toggle`, `toggle-sync`) y montar el knob `limCeiling`.
   - Exponer y atender en WASM y [mcx0xWorklet.js](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/wasm/mcx0xWorklet.js) los mensajes faltantes: `setSendBusMute`, `requestEngineCatalog`, `requestPartPresets`, `setLimiterEnabled`, `setManualDuckGate`, `setAudioDuckEnabled` y `setMidiDuckEnabled`.
   - En [McxMasterPanel.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxMasterPanel.ts#L114-L132), conectar `LIM`, `onRecord`, `onLoop` y pasar la pista enfocada actual en vez de `onOpenGroove(0)` fijo.
   - Persistir el nombre/preset guardado desde `McxSavePresetModal` y `McxBankDrawer` en C++ / estado serializable en lugar de mutar únicamente `ps.name` en RAM.
-- [x] **`[ME-07]` Unificar persistencia de estado en DAW (`setStateInformation`), rack local y señal `uiReady`:** *(Pendiente compilación/test de usuario)*
+- [x] **`[ME-07]` Unificar persistencia de estado en DAW (`setStateInformation`), rack local y señal `uiReady`:** *(Verificado por usuario: CTest 11/11 + JUCE 9 + WASM + Vitest 62/62)*
   - En [PluginProcessor.cpp](file:///d:/desarrollos/ABDSynths/ABDMCX0X/Source/Plugin/PluginProcessor.cpp#L241-L274), [PluginEditor.cpp](file:///d:/desarrollos/ABDSynths/ABDMCX0X/Source/Plugin/PluginEditor.cpp#L178-L186) y [McxBankManagerBridge.cpp](file:///d:/desarrollos/ABDSynths/ABDMCX0X/Source/Core/McxBankManagerBridge.cpp#L43-L82), asegurar que `setStateInformation` emita una resincronización completa hacia la WebUI en cuanto `uiReady` llegue, sin perder cambios si la ventana WebView aún no estaba montada al restaurar sesión.
   - Evitar en [McxRackColumn.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxRackColumn.ts#L31-L38) que la lectura inicial de `localStorage` sobrescriba el estado real cargado desde el proyecto DAW o banco `.abdbank`.
-- [x] **`[ME-08]` Unificar sincronía de pista enfocada, formato (Drum Map / Cromático), `McxStepStrip` y listeners:** *(Pendiente compilación/test de usuario)*
+- [x] **`[ME-08]` Unificar sincronía de pista enfocada, formato (Drum Map / Cromático), `McxStepStrip` y listeners:** *(Verificado por usuario: CTest 11/11 + JUCE 9 + WASM + Vitest 62/62)*
   - Centralizar en [McxAppState.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/app/McxAppState.ts#L113-L135) el cambio de pista y modo (`trackFormat` / `routeMode`), actualizando automáticamente [McxStepStrip.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxStepStrip.ts#L58-L131), [McxInstrumentRouteModal.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxInstrumentRouteModal.ts#L98-L105) y el cableado de [main.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/main.ts#L99-L100).
   - En [McxHostBridge.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/bridge/McxHostBridge.ts#L99), permitir múltiples suscriptores de `onAudioStatus` o desacoplar para que [main.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/main.ts#L170) no sobrescriba el listener registrado en [McxSongWiring.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/app/McxSongWiring.ts#L131).
-- [x] **`[DT-01]` Integrar `McxMidiModDecimator.h` en `McxHardwareBridge` (o retirarlo si queda sustituido):** *(Pendiente compilación/test de usuario)*
+- [x] **`[DT-01]` Integrar `McxMidiModDecimator.h` en `McxHardwareBridge` (o retirarlo si queda sustituido):** *(Verificado por usuario: CTest 11/11 + JUCE 9 + WASM + Vitest 62/62)*
   - Resolver el archivo huérfano `McxMidiModDecimator.h` conectando el decimador en el puente MIDI hardware o eliminando el código no utilizado.
-- [x] **`[DT-02]` Migrar mutación directa de `p.partials` en `McxParamRouter.h`:** *(Pendiente compilación/test de usuario)*
+- [x] **`[DT-02]` Migrar mutación directa de `p.partials` en `McxParamRouter.h`:** *(Verificado por usuario: CTest 11/11 + JUCE 9 + WASM + Vitest 62/62)*
   - En [McxParamRouter.h](file:///d:/desarrollos/ABDSynths/ABDMCX0X/Source/Core/McxParamRouter.h#L26-L61) (`case 0..5`), asegurar que los parámetros de parciales sigan las reglas de comando/enrutado limpio compatibles con el refactor multi-motor y futura expansión a 64 pistas.
-- [x] **`[DT-03]` Corregir doble envío de `partLevel` y sincronía de `McxGlobalDrawer` / `McxSettingsModal` / `McxMasterPanel`:** *(Pendiente compilación/test de usuario)*
+- [x] **`[DT-03]` Corregir doble envío de `partLevel` y sincronía de `McxGlobalDrawer` / `McxSettingsModal` / `McxMasterPanel`:** *(Verificado por usuario: CTest 11/11 + JUCE 9 + WASM + Vitest 62/62)*
   - Eliminar el envío duplicado de `partLevel` en [McxMixerConsole.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxMixerConsole.ts#L180) y mantener sincronizados los estados iniciales de `McxGlobalDrawer`, `McxSettingsModal` y `McxMasterPanel` al cambiar de banco o proyecto.
-- [x] **`[DT-06]` Sustituir `lfoPhase` simulado por telemetría real del DSP:** *(Pendiente compilación/test de usuario)*
+- [x] **`[DT-06]` Sustituir `lfoPhase` simulado por telemetría real del DSP:** *(Verificado por usuario: CTest 11/11 + JUCE 9 + WASM + Vitest 62/62)*
   - En [PluginProcessor.cpp](file:///d:/desarrollos/ABDSynths/ABDMCX0X/Source/Plugin/PluginProcessor.cpp#L205) y [McxInputAndTelemetry.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/app/McxInputAndTelemetry.ts#L134), emitir la fase real del LFO en curso desde el motor DSP.
 
 ---
@@ -97,18 +97,18 @@ Objetivo: garantizar que ningún control visible sea placebo, que el estado sobr
 
 Objetivo: que la workstation completa quepa de una pieza a `1280x720`, con modales flotantes coherentes y separación visual clara entre configurar pista, editar sonido y secuenciar.
 
-- [ ] **Ajuste de rejilla horizontal a `1280x720` (cero desborde en mezclador y Master):**
+- [x] **Ajuste de rejilla horizontal a `1280x720` (cero desborde en mezclador y Master):** *(Pendiente compilación/test de usuario)*
   - Revisar anchos en [mcx-rack-column.css](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/styles/mcx-rack-column.css#L4) (`240px`), [mcx-master-panel.css](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/styles/mcx-master-panel.css#L4) (`108px`) y paddings de [mcx-workspace.css](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/styles/mcx-workspace.css) para que las 16 tiras (`P01..P16`, actualmente recortadas en ~86 px en `P15-P16`) quepan íntegras junto al Rack y Master sin scroll horizontal forzado.
   - Alojar `.mcx-master-quick-row` (`LIM`, `SHUFFLE`, `SONG`) y `CompactTransportBar` aprovechando `.mcx-transport-dock` ya declarado en [mcx-workspace.css](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/styles/mcx-workspace.css#L85-L104) o redistribuyendo el ancho del Master para evitar compresión en `108px`.
-- [ ] **`[ME-09]` Estandarizar comportamiento modeless, dragging, z-order y limpieza de eventos en ventanas flotantes:**
+- [x] **`[ME-09]` Estandarizar comportamiento modeless, dragging, z-order y limpieza de eventos en ventanas flotantes:** *(Pendiente compilación/test de usuario)*
   - Unificar `McxSynthModal`, `MpcPadModal`, `GrooveArpeggiatorModal`, `PianoRollModal`, `FxFaceplateModal` y `McxInstrumentRouteModal` con apertura no bloqueante (`show()`), arrastre mediante `attachDialogDrag`, gestor compartido `bringToFront(dialog)` y cierre con `Escape` sin fugas.
   - Añadir `position: fixed` y `z-index` en [groove-arpeggiator-modal.css](file:///d:/desarrollos/ABDSynths/ABDShared/Assets/styles/components/groove-arpeggiator-modal.css#L4-L13).
   - Limpiar listeners globales `window.keydown` al cerrar en [MpcPadModal.js](file:///d:/desarrollos/ABDSynths/ABDShared/Components/Pads/MpcPadModal.js#L100) y [GrooveArpeggiatorModal.js](file:///d:/desarrollos/ABDSynths/ABDShared/Components/Arpeggiator/GrooveArpeggiatorModal.js#L99).
   - Reemplazar telemetría estática en [FxFaceplateModal.js](file:///d:/desarrollos/ABDSynths/ABDShared/Components/FxFaceplates/FxFaceplateModal.js#L58-L70) (`SC DUCK [ON]`, `mix=1.0`, `44.1 kHz`) por valores reales de la bahía y frecuencia de muestreo activa.
   - Añadir `role="button"` y `tabindex` accesible en [MpcPadMatrix.js](file:///d:/desarrollos/ABDSynths/ABDShared/Components/Controls/MpcPadMatrix.js).
-- [ ] **`[DT-05]` Sustituir `window.prompt()` en `McxRackColumn`:**
+- [x] **`[DT-05]` Sustituir `window.prompt()` en `McxRackColumn`:** *(Pendiente compilación/test de usuario)*
   - En [McxRackColumn.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxRackColumn.ts#L161), reemplazar `window.prompt()` por un selector/menú popover no bloqueante estilizado con tokens CSS del tema.
-- [ ] **Claridad conceptual (Pista vs Motor vs Secuenciador), `SOLO ACTIVE — CLEAR`, i18n y atajos:**
+- [x] **Claridad conceptual (Pista vs Motor vs Secuenciador), `SOLO ACTIVE — CLEAR`, i18n y atajos:** *(Pendiente compilación/test de usuario)*
   - Eliminar o implementar realmente el botón muerto `NUKE` en [McxMixerConsole.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxMixerConsole.ts#L132) y revisar los macros heredados de Reverb/Chorus en [McxGlobalDrawer.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxGlobalDrawer.ts#L87-L108) frente al nuevo Rack FX.
   - Añadir botón e indicador maestro `SOLO ACTIVE — CLEAR` para limpiar todos los Solos activos de un clic.
   - Diferenciar claramente la acción de ruta de pista vs editor de síntesis en [McxToneDrawerSync.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxToneDrawerSync.ts#L34), completar o retirar la tarjeta vacía `Macros` (`0` knobs) en [McxToneTabMidiFx.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxToneTabMidiFx.ts#L60-L71) y aclarar etiquetas de puertos Layer A+B en [McxInstrumentRouteModalView.ts](file:///d:/desarrollos/ABDSynths/ABDMCX0X/WebUI/src/ui/McxInstrumentRouteModalView.ts#L86).

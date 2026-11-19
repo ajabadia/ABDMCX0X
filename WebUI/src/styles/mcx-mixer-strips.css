@@ -2,8 +2,8 @@
 
 .mcx-mixer-console {
   display: grid;
-  grid-template-columns: repeat(16, minmax(56px, 1fr));
-  gap: 4px;
+  grid-template-columns: repeat(16, minmax(49px, 1fr));
+  gap: 3px;
   width: 100%;
   flex: 1;
   min-height: 0;
@@ -20,13 +20,13 @@
   flex-direction: column;
   align-items: stretch;
   justify-content: space-between;
-  gap: 3px;
+  gap: 2px;
   width: 100%;
   height: 100%;
   min-height: 0;
-  min-width: 56px;
+  min-width: 49px;
   box-sizing: border-box;
-  padding: 6px 4px 6px;
+  padding: 5px 3px 5px;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-panel-border-dim);
   background: color-mix(in srgb, var(--color-panel-surface) 40%, transparent);
@@ -184,4 +184,4 @@
 .mcx-strip-drawer-btn.is-tone:hover { border-color: var(--color-accent); color: var(--color-accent); }
 .mcx-strip-drawer-btn.is-pads:hover { border-color: var(--color-warning); color: var(--color-warning); }
 .mcx-strip-drawer-btn.is-seq:hover { border-color: var(--color-accent-hover); color: var(--color-accent-hover); }
-.mcx-strip-drawer-btn.is-nuke:hover { border-color: var(--color-danger); color: var(--color-danger); }
+.mcx-strip-drawer-btn.is-arp:hover { border-color: var(--color-success); color: var(--color-success); }

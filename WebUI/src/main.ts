@@ -48,8 +48,10 @@ function initApp(): void {
     onClose: () => byId('mcx-global-btn')?.classList.remove('is-active'), onOpenFxRack: () => modals.fxRackModal.toggle(),
     onMasterVolumeChange: (v) => state.refs.masterPanel?.setVolume(v), onGlobalTransposeChange: (st) => settingsModal.syncGlobalTranspose(st),
   });
-  state.refs = { ...state.refs, bankDrawer, settingsModal, globalDrawer, ...modals, ...midiModals };
   const fileInput = byId('bank-file-input') as HTMLInputElement | null, navHost = byId('mcx-navbar-host');
+  const onPanic = () => { bridge.allNotesOff(); state.setLcdLine2(t('mcx.allNotesOff')); };
+  state.refs = { ...state.refs, bankDrawer, settingsModal, globalDrawer, ...modals, ...midiModals, onPanic, onSavePreset: (multi) => openSavePresetModal(bridge, state, multi ? 'multi' : 'part'), onOpenBankFile: () => fileInput?.click() };
+  byId('mcx-solo-clear-btn')?.addEventListener('click', () => state.clearAllSolos());
   const navbar = navHost ? new McxNavbar(navHost, {
     themeMgr,
     onConfigureFolder: () => (bridge.isNative ? bridge.chooseWorkingDir() : settingsModal.open()),
@@ -59,7 +61,7 @@ function initApp(): void {
     onSaveMultiPreset: () => openSavePresetModal(bridge, state, 'multi'),
     onLoadBank: () => fileInput?.click(),
     onFactoryReset: () => { bridge.resetToFactory(); bridge.requestPartEngineState(state.focusedPart); bridge.requestPartPresets(state.focusedPart); state.setLcdLine2(t('mcx.factoryReset')); },
-    onPanic: () => { bridge.allNotesOff(); state.setLcdLine2(t('mcx.allNotesOff')); },
+    onPanic,
     onEnableAudio: () => { void bridge.enableAudio(); },
     onToggleProbe: () => probeModal?.toggle({ theme: document.documentElement.getAttribute('data-theme'), locale: getLocale(), sampleRate: bridge.getSampleRate(), frequencyHz: state.globalSettings.masterTuneHz || 440 }),
     onOpenFxRack: () => modals.fxRackModal.toggle(), onOpenGlobalLfo: () => modals.globalLfoModal.toggle(),
@@ -176,8 +178,9 @@ function initApp(): void {
     const loc = getLocale() === 'en' ? 'en' : 'es';
     applyI18n(document.body); state.syncOctaveTooltips();
     probeModal?.setLocale(getLocale()); probeModal?.setDestinations(buildProbeDestinations());
-    settingsModal.refreshLocale(); navbar?.mount(); state.updateLcdLine1(0); state.refreshPartList();
+    settingsModal.refreshLocale(); globalDrawer.refreshLocale(); navbar?.mount(); state.updateLcdLine1(0); state.refreshPartList();
     state.refs.toneDrawer?.setLocale(loc); state.refs.refreshSongLocale?.();
+    state.refs.routeModal?.setLocale(); state.refs.synthModal?.setLocale(loc);
     modals.fxRackModal.setLocale(getLocale()); modals.globalLfoModal.setLocale(getLocale());
     modals.pianoRollModal.setLocale(getLocale()); modals.grooveModal.setLocale(getLocale());
     midiModals.padModal.setLocale(loc); midiModals.arpModal.setLocale(loc);

@@ -5,12 +5,12 @@
  */
 
 import { EnginePanelHost } from '@abdsynths/shared/components/synth-engines';
-import { attachDialogDrag } from '@abdsynths/shared/diagnostic-probe';
+import { attachDialogDrag, bringToFront } from '@abdsynths/shared/diagnostic-probe';
 import type { McxEngineDescriptorDto, McxHostBridge, McxPartEngineStateDto, McxPartPresetsDto } from '../bridge/McxHostBridge';
 import { McxPartEngineBridge } from '../bridge/McxPartEngineBridge';
 import { DEFAULT_ENGINE_CATALOG } from './McxEngineCatalogDefaults';
 import type { McxPartUiState } from './McxMixerConsole';
-import { getLocale } from '../i18n/mcxI18n';
+import { getLocale, t } from '../i18n/mcxI18n';
 
 export interface McxSynthModalOptions {
   bridge: McxHostBridge; getPartState: (idx: number) => McxPartUiState;
@@ -34,7 +34,10 @@ export class McxSynthModal {
     this.dialog.className = 'mcx-synth-dialog';
     this.dialog.setAttribute('aria-labelledby', 'mcx-synth-title');
     document.body.appendChild(this.dialog);
-    this.dialog.addEventListener('close', () => { this.dialog.returnValue = ''; this.opts.onPartUpdated(this.currentPart); });
+    this.onEscKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape' && this.dialog.open) this.close(); };
+    this.dialog.addEventListener('close', () => {
+      this.dialog.returnValue = ''; window.removeEventListener('keydown', this.onEscKey); this.opts.onPartUpdated(this.currentPart);
+    });
     this.dialog.addEventListener('click', (ev) => {
       const target = ev.target as HTMLElement | null;
       const actEl = target?.closest<HTMLElement>('[data-act]');
@@ -42,8 +45,6 @@ export class McxSynthModal {
       if (act === 'close') { ev.stopPropagation(); this.close(); }
       else if (act === 'open-route') { ev.stopPropagation(); this.close(); this.opts.onOpenRouteModal(this.currentPart); }
     });
-    this.onEscKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape' && this.dialog.open) this.close(); };
-    window.addEventListener('keydown', this.onEscKey);
   }
 
   private getOrCreatePartBridge(partIdx: number): McxPartEngineBridge {
@@ -66,7 +67,10 @@ export class McxSynthModal {
     this.getOrCreatePartBridge(dto.part).applyRemoteState(dto.engineTypeId, dto.stateJson, dto.presetName, dto.coverDataUrl);
     if (this.dialog.open && dto.part === this.currentPart) this.syncEnginePanel();
   }
-  public setLocale(locale: 'en' | 'es'): void { this.enginePanelHost?.setLocale(locale); }
+  public setLocale(locale: 'en' | 'es'): void {
+    if (this.dialog.open) { this.render(); this.syncEnginePanel(); }
+    else this.enginePanelHost?.setLocale(locale);
+  }
 
   public open(partIdx: number): void {
     this.currentPart = partIdx; this.syncTheme();
@@ -76,12 +80,15 @@ export class McxSynthModal {
       if (typeof this.dialog.show === 'function') this.dialog.show();
       else this.dialog.setAttribute('open', '');
     }
+    window.addEventListener('keydown', this.onEscKey);
+    bringToFront(this.dialog);
     this.syncEnginePanel();
     const ps = this.opts.getPartState(partIdx);
     this.opts.setLcdLine2(`INSTRUMENT [P${String(partIdx + 1).padStart(2, '0')}] ${ps.name || 'Tone'}`);
   }
 
   public close(): void {
+    window.removeEventListener('keydown', this.onEscKey);
     if (!this.dialog.open) return;
     if (typeof this.dialog.close === 'function') this.dialog.close();
     else this.dialog.removeAttribute('open');
@@ -103,7 +110,7 @@ export class McxSynthModal {
     const p = this.currentPart, ps = this.opts.getPartState(p);
     const isExt = ps.routeMode === 1;
     const desc = this.catalog.find((e) => e.index === ps.engineTypeIndex);
-    const engineTitle = isExt ? 'Sintetizador Externo MIDI' : (desc?.displayName || 'ABD Structured Rompler');
+    const engineTitle = isExt ? t('mcx.synthExtTitle') : (desc?.displayName || 'ABD Structured Rompler');
 
     this.dialog.innerHTML = `
       <div class="mcx-synth-shell">
@@ -113,8 +120,8 @@ export class McxSynthModal {
             <h2 class="mcx-synth-title" id="mcx-synth-title">${engineTitle}</h2>
           </div>
           <div class="mcx-synth-head-actions">
-            <button type="button" class="mcx-synth-route-btn" data-act="open-route" title="Cambiar Instrumento o Enrutamiento"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg> <span>Cambiar Instrumento</span></button>
-            <button type="button" class="mcx-synth-close-btn" data-act="close" aria-label="Cerrar"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            <button type="button" class="mcx-synth-route-btn" data-act="open-route" title="${t('mcx.synthChangeRouteTitle')}"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg> <span>${t('mcx.synthChangeRoute')}</span></button>
+            <button type="button" class="mcx-synth-close-btn" data-act="close" aria-label="${t('mcx.closeDrawer')}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
         </header>
         <div class="mcx-synth-body"><div class="mcx-synth-slot" id="mcx-synth-slot"></div></div>
@@ -133,7 +140,7 @@ export class McxSynthModal {
     const ps = this.opts.getPartState(this.currentPart);
     const isExt = ps.routeMode === 1;
     const desc = this.catalog.find((c) => c.index === ps.engineTypeIndex);
-    titleEl.textContent = isExt ? 'Sintetizador Externo MIDI' : (desc?.displayName || 'ABD Structured Rompler');
+    titleEl.textContent = isExt ? t('mcx.synthExtTitle') : (desc?.displayName || 'ABD Structured Rompler');
   }
 
   private syncEnginePanel(): void {
@@ -145,10 +152,10 @@ export class McxSynthModal {
         this.slotEl.innerHTML = `
           <div class="mcx-motor-external">
             <div class="mcx-ext-head">
-              <span class="mcx-ext-title">SINTETIZADOR EXTERNO MIDI (PUERTO ${(ps.midiPortIndex ?? 0) + 1} · CANAL ${ps.midiChannel || 1})</span>
-              <button type="button" class="mcx-synth-route-btn" data-act="open-route">Cambiar Puerto / Canal</button>
+              <span class="mcx-ext-title">${t('mcx.synthExtUpper')} (${t('mcx.routePort').toUpperCase()} ${(ps.midiPortIndex ?? 0) + 1} · ${t('mcx.routeCh').toUpperCase()} ${ps.midiChannel || 1})</span>
+              <button type="button" class="mcx-synth-route-btn" data-act="open-route">${t('mcx.synthChangePortCh')}</button>
             </div>
-            <p class="mcx-ext-hint">Esta pista envía notas del secuenciador hacia hardware o plugin externo (0 % CPU interna).</p>
+            <p class="mcx-ext-hint">${t('mcx.synthExtHint')}</p>
           </div>`;
       }
       return;

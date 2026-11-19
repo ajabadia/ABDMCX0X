@@ -129,8 +129,8 @@ export function renderMixerConsole(container: HTMLElement, cb: McxMixerCallbacks
       <div class="mcx-strip-drawers-row">
         <button type="button" class="mcx-strip-drawer-btn is-tone" data-act="open-part" title="${t('mcx.toneDrawerBtn')}">${t('mcx.toneShort') || 'PART'}</button>
         <button type="button" class="mcx-strip-drawer-btn is-pads" data-act="pads" title="${t('mcx.padsDrawerBtn')}">${t('mcx.padsShort') || 'PAD'}</button>
-        <button type="button" class="mcx-strip-drawer-btn is-seq" data-act="seq" title="Piano Roll Sequencer">SEQ</button>
-        <button type="button" class="mcx-strip-drawer-btn is-nuke" data-act="nuke" title="Performance & Nuke Deck">NUKE</button>
+        <button type="button" class="mcx-strip-drawer-btn is-seq" data-act="seq" title="${t('mcx.seqDrawerBtn')}">SEQ</button>
+        <button type="button" class="mcx-strip-drawer-btn is-arp" data-act="arp" title="${t('mcx.arpDrawerBtn')}">${t('mcx.arpShort')}</button>
       </div>
       <div class="mcx-strip-fader-section">
         <div class="mcx-strip-fader-row">
@@ -167,7 +167,7 @@ export function renderMixerConsole(container: HTMLElement, cb: McxMixerCallbacks
       else if (act === 'tone' || act === 'open-part') { cb.setFocusedPart(i); cb.onOpenToneForPart?.(i, sec); }
       else if (act === 'pads') { cb.setFocusedPart(i); cb.onOpenPadsForPart?.(i); }
       else if (act === 'seq') { cb.setFocusedPart(i); cb.onOpenPianoRollForPart?.(i); }
-      else if (act === 'nuke') { cb.setFocusedPart(i); cb.onOpenNukeForPart ? cb.onOpenNukeForPart(i) : cb.setLcdLine2(`PART ${String(i + 1).padStart(2, '0')}: PERFORMANCE & NUKE DECK`); }
+      else if (act === 'arp') { cb.setFocusedPart(i); cb.onOpenArpForPart?.(i); }
       else if (act === 'mute') cb.onToggleMute(i);
       else if (act === 'solo') cb.onToggleSolo(i);
     });

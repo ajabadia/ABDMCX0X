@@ -5,6 +5,7 @@
  * Strict line limit: < 200 lines.
  */
 
+import { attachDialogDrag, bringToFront } from '@abdsynths/shared/diagnostic-probe';
 import type { McxEngineDescriptorDto, McxHostBridge, McxPartPresetsDto } from '../bridge/McxHostBridge';
 import { DEFAULT_ENGINE_CATALOG, getFallbackPresetsForEngine } from './McxEngineCatalogDefaults';
 import { buildRouteModalHtml } from './McxInstrumentRouteModalView';
@@ -26,29 +27,21 @@ export class McxInstrumentRouteModal {
   private currentPart = 0;
   private catalog: McxEngineDescriptorDto[] = [...DEFAULT_ENGINE_CATALOG];
   private presetsByPart = new Map<number, McxPartPresetsDto>();
+  private readonly onEscKey: (ev: KeyboardEvent) => void;
 
   constructor(opts: McxInstrumentRouteModalOptions) {
     this.opts = opts;
     this.dialog = document.createElement('dialog');
     this.dialog.className = 'mcx-route-dialog';
-    this.dialog.setAttribute('closedby', 'any');
     this.dialog.setAttribute('aria-labelledby', 'mcx-route-title');
     document.body.appendChild(this.dialog);
+    this.onEscKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape' && this.dialog.open) this.close(); };
 
     this.dialog.addEventListener('close', () => {
       this.dialog.returnValue = '';
+      window.removeEventListener('keydown', this.onEscKey);
       this.opts.onPartUpdated(this.currentPart);
     });
-
-    if (!('closedBy' in HTMLDialogElement.prototype)) {
-      let pressedOutside = false;
-      const isOutside = (e: PointerEvent): boolean => {
-        const r = this.dialog.getBoundingClientRect();
-        return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
-      };
-      this.dialog.addEventListener('pointerdown', (e) => { pressedOutside = isOutside(e); });
-      this.dialog.addEventListener('pointerup', (e) => { if (pressedOutside && isOutside(e)) this.dialog.close(); });
-    }
   }
 
   public syncTheme(): void {
@@ -62,12 +55,23 @@ export class McxInstrumentRouteModal {
     this.opts.bridge.requestPartPresets(partIdx);
     void webMidiService.init().then(() => { if (this.dialog.open) this.render(); });
     this.render();
-    if (!this.dialog.open) this.dialog.showModal();
+    if (!this.dialog.open) {
+      if (typeof this.dialog.show === 'function') this.dialog.show();
+      else this.dialog.setAttribute('open', '');
+    }
+    window.addEventListener('keydown', this.onEscKey);
+    bringToFront(this.dialog);
   }
 
   public close(): void {
-    if (this.dialog.open) this.dialog.close();
+    window.removeEventListener('keydown', this.onEscKey);
+    if (!this.dialog.open) return;
+    if (typeof this.dialog.close === 'function') this.dialog.close();
+    else this.dialog.removeAttribute('open');
   }
+
+  public setLocale(): void { if (this.dialog.open) this.render(); }
+  public destroy(): void { window.removeEventListener('keydown', this.onEscKey); this.dialog.remove(); }
 
   public getEngineCatalog(): McxEngineDescriptorDto[] { return this.catalog; }
 
@@ -88,6 +92,8 @@ export class McxInstrumentRouteModal {
     const engIdx = ps.engineTypeIndex ?? ((ps.routeMode ?? 0) === 1 ? 1 : 0);
     const presets = this.presetsByPart.get(p)?.presets ?? getFallbackPresetsForEngine(engIdx);
     this.dialog.innerHTML = buildRouteModalHtml(p, ps, this.catalog, presets, webMidiService.getOutputs());
+    const head = this.dialog.querySelector<HTMLElement>('.mcx-route-head');
+    if (head) attachDialogDrag(this.dialog, head);
     this.bindEvents(presets);
   }
 

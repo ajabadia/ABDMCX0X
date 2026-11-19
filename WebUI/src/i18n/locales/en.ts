@@ -4,6 +4,7 @@
  */
 
 import { songEn } from './songLocales';
+import { uxEn } from './uxLocales';
 
 export const mcxEn = {
   mcx: {
@@ -186,6 +187,7 @@ export const mcxEn = {
     transportRecord: 'Record',
     transportLoop: 'Loop',
     transportMetro: 'Metronome',
+    ...uxEn,
     ...songEn,
   },
 };

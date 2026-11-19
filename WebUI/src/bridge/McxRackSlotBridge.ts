@@ -73,6 +73,7 @@ export class McxRackSlotBridge implements FxFaceplateBridge {
   }
 
   getDescriptor(): FxDescriptor { return this.desc; }
+  getSampleRate(): number { return this.host.getSampleRate(); }
 
   setParam(key: string, value: number): void {
     this.state[key] = value;

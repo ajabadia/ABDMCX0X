@@ -31,14 +31,15 @@ export function buildToneDrawerShellHtml(): string {
       <div class="mcx-drawer-title-row">
         <span class="mcx-drawer-title-accent" id="mcx-drawer-part-badge">P01</span>
         <span class="mcx-drawer-part-name" id="mcx-drawer-part-name">Part 01</span>
-        <button type="button" class="mcx-drawer-route-pill" id="mcx-drawer-route-pill" data-act="open-synth" title="Abrir Sintetizador de esta pista">SINTETIZADOR ↗</button>
+        <button type="button" class="mcx-drawer-route-pill" id="mcx-drawer-route-pill" data-act="open-route" title="${t('mcx.drawerRoutingTitle')}">${t('mcx.drawerRoutingBtn')}</button>
+        <button type="button" class="mcx-drawer-route-pill" id="mcx-drawer-synth-pill" data-act="open-synth" title="${t('mcx.drawerEditSynthTitle')}">${t('mcx.drawerEditSynthBtn')}</button>
         <span class="mcx-drawer-mute-badge is-hidden" id="mcx-drawer-mute-badge">${t('mcx.mute')}</span>
       </div>
-      <div class="mcx-drawer-tablist" role="tablist" focusgroup="tablist nomemory" aria-label="Secciones de parte">
-        <button type="button" role="tab" class="mcx-drawer-tab" id="mcx-tab-mix" data-drawer-tab="mix" aria-selected="true" tabindex="0" focusgroupstart>CANAL / MEZCLA</button>
-        <button type="button" role="tab" class="mcx-drawer-tab" id="mcx-tab-midifx" data-drawer-tab="midifx" aria-selected="false" tabindex="-1">MIDI FX</button>
+      <div class="mcx-drawer-tablist" role="tablist" focusgroup="tablist nomemory" aria-label="${t('mcx.drawerDefaultTitle')}">
+        <button type="button" role="tab" class="mcx-drawer-tab" id="mcx-tab-mix" data-drawer-tab="mix" aria-selected="true" tabindex="0" focusgroupstart>${t('mcx.drawerTabMixLabel')}</button>
+        <button type="button" role="tab" class="mcx-drawer-tab" id="mcx-tab-midifx" data-drawer-tab="midifx" aria-selected="false" tabindex="-1">${t('mcx.drawerTabMidiFxLabel')}</button>
       </div>
-      <button type="button" class="mcx-drawer-close-btn" data-act="close" title="${t('mcx.closeDrawer')}" aria-label="${t('mcx.closeDrawer')}">✕</button>
+      <button type="button" class="mcx-drawer-close-btn" data-act="close" title="${t('mcx.closeDrawer')}" aria-label="${t('mcx.closeDrawer')}"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
     </div>
     <div class="mcx-drawer-body">
       <div class="mcx-tab-panels">
@@ -112,7 +113,9 @@ export function syncToneDrawerDom(
   setText('#mcx-drawer-part-badge', `P${String(partIdx + 1).padStart(2, '0')}`);
   setText('#mcx-drawer-part-name', partName);
   const rPill = el.querySelector<HTMLElement>('#mcx-drawer-route-pill');
-  if (rPill) { rPill.textContent = `${badge.routeTag} · ${badge.engineTag}`; rPill.className = `mcx-drawer-route-pill is-${badge.variant}`; }
+  if (rPill) { rPill.textContent = `${badge.routeTag} · CH ${String(ps.midiChannel || 1).padStart(2, '0')}`; rPill.className = `mcx-drawer-route-pill is-${badge.variant}`; }
+  const sPill = el.querySelector<HTMLElement>('#mcx-drawer-synth-pill');
+  if (sPill) { sPill.textContent = `${badge.engineTag} · ${t('mcx.drawerEditSynthBtn')}`; sPill.className = `mcx-drawer-route-pill is-${badge.variant}`; }
   el.querySelector('#mcx-drawer-mute-badge')?.classList.toggle('is-hidden', !ps.mute);
   el.querySelectorAll<HTMLElement>('[data-learnable]').forEach((c) => { c.dataset.part = String(partIdx); });
 
@@ -134,7 +137,7 @@ export function syncToneDrawerDom(
   const trActive = ps.followTranspose !== false && !isDrum;
   el.querySelectorAll<HTMLButtonElement>('[data-act="drawer-tr"]').forEach((btn) => {
     btn.classList.toggle('is-active', trActive); btn.disabled = isDrum;
-    if (btn.id === 'mcx-midifx-tr-btn') btn.textContent = isDrum ? 'MAPA DRUM (SIN TRANS.)' : `SEGUIR TRANSPOSICIÓN: ${trActive ? 'ON' : 'OFF'}`;
+    if (btn.id === 'mcx-midifx-tr-btn') btn.textContent = trActive ? t('mcx.midiTrOn') : t('mcx.midiTrOff');
   });
   el.querySelector<HTMLButtonElement>('[data-act="drawer-mute"]')?.classList.toggle('is-mute', Boolean(ps.mute));
   el.querySelector<HTMLButtonElement>('[data-act="drawer-solo"]')?.classList.toggle('is-solo', Boolean(ps.solo));
@@ -142,10 +145,10 @@ export function syncToneDrawerDom(
   const arpBtn = el.querySelector<HTMLButtonElement>('#mcx-drawer-arp-btn');
   if (arpBtn) {
     const arpOn = Boolean(ps.arpEnabled); arpBtn.classList.toggle('is-active', arpOn);
-    arpBtn.textContent = `ARPEGIADOR: ${arpOn ? 'ACTIVO' : 'APAGADO'}`;
+    arpBtn.textContent = arpOn ? t('mcx.midiArpOn') : t('mcx.midiArpOff');
   }
   const seq = ps.sequence, sw = Math.round((ps.patternSwing ?? 0.5) * 100);
-  setText('#mcx-midifx-seq-summary', `${seq?.bars ?? 1} compás · ${seq?.notes?.length ?? 0} notas · Swing ${sw}%`);
+  setText('#mcx-midifx-seq-summary', `${seq?.bars ?? 1} bar · ${seq?.notes?.length ?? 0} notes · Swing ${sw}%`);
 
   for (const k of SEG_KEYS) {
     const v = k === 'portaMode' ? (!ps.portaEnabled ? 0 : (ps.portaLegatoOnly ? 2 : 1)) : ((ps as any)[k] ?? 0);
@@ -167,8 +170,8 @@ export function syncInsertSelectOptions(el: HTMLElement, rackSlots?: Array<{ slo
   if (Array.isArray(rackSlots)) {
     const active = rackSlots.filter((b) => b && b.engine !== 0);
     sel.innerHTML = [
-      `<option value="-1"${curSlot === -1 ? ' selected' : ''}>-- SIN INSERCIÓN --</option>`,
-      ...active.map((b) => `<option value="${b.slot}"${b.slot === curSlot ? ' selected' : ''}>BAHÍA ${b.slot + 1}: ${b.name || b.algoId}</option>`),
+      `<option value="-1"${curSlot === -1 ? ' selected' : ''}>${t('mcx.mixNoInsert')}</option>`,
+      ...active.map((b) => `<option value="${b.slot}"${b.slot === curSlot ? ' selected' : ''}>${t('mcx.rackBay')} ${b.slot + 1}: ${b.name || b.algoId}</option>`),
     ].join('');
   }
   sel.value = String(curSlot);

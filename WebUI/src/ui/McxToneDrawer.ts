@@ -32,21 +32,32 @@ export class McxToneDrawer {
   private bridge: McxHostBridge; private getPartState: (idx: number) => McxPartUiState;
   private setLcdLine2: (text: string) => void; private opts: McxToneDrawerOptions;
   private knobsMgr = new McxToneDrawerKnobsManager();
+  private lastSendLabels?: { sendA: string; sendB: string; sendC: string; sendD: string };
+  private onEscKey = (ev: KeyboardEvent): void => { if (ev.key === 'Escape' && this.opened) this.close(); };
 
   constructor(opts: McxToneDrawerOptions) {
     this.opts = opts; this.bridge = opts.bridge; this.getPartState = opts.getPartState; this.setLcdLine2 = opts.setLcdLine2;
     this.el = document.createElement('div');
     this.el.className = 'mcx-bottom-drawer'; this.el.id = 'mcx-tone-drawer';
     this.el.setAttribute('role', 'region'); this.el.setAttribute('aria-label', 'Consola de Canal de Pista');
+    this.bindShellClicksOnce();
     this.el.innerHTML = buildToneDrawerShellHtml();
     opts.hostEl.appendChild(this.el);
-    this.bindEvents();
+    this.bindDomChildren();
   }
 
   public setEngineCatalog(engines: McxEngineDescriptorDto[]): void { if (engines.length > 0) this.catalog = engines; if (this.opened) this.syncPart(this.currentPart, this.getPartState(this.currentPart)); }
   public setPartPresets(_dto: McxPartPresetsDto): void {}
   public applyPartEngineState(_dto: McxPartEngineStateDto): void {}
-  public setLocale(_locale: 'en' | 'es'): void {}
+  public setLocale(_locale: 'en' | 'es'): void {
+    const prevTab = this.activeTab;
+    this.knobsMgr.destroy();
+    this.el.innerHTML = buildToneDrawerShellHtml();
+    this.bindDomChildren();
+    this.setActiveTab(prevTab);
+    this.syncPart(this.currentPart, this.getPartState(this.currentPart));
+    if (this.lastSendLabels) updateDrawerSendLabels(this.el, this.lastSendLabels);
+  }
 
   public setActiveTab(tabId: McxDrawerTabId, focusTab = false): void {
     this.activeTab = tabId;
@@ -65,10 +76,15 @@ export class McxToneDrawer {
 
   public open(partIdx: number, focusSection?: string): void {
     this.currentPart = partIdx; this.opened = true; this.el.classList.add('is-open');
+    window.addEventListener('keydown', this.onEscKey);
     this.syncPart(partIdx, this.getPartState(partIdx)); this.highlightSection(focusSection);
     this.setLcdLine2(`TRACK MIXER [P${String(partIdx + 1).padStart(2, '0')}]${focusSection ? ` -> ${focusSection.toUpperCase()}` : ''}`);
   }
-  public close(): void { if (!this.opened) return; this.opened = false; this.el.classList.remove('is-open'); this.highlightSection(); this.opts.onClose?.(); }
+  public close(): void {
+    if (!this.opened) return;
+    this.opened = false; this.el.classList.remove('is-open'); window.removeEventListener('keydown', this.onEscKey);
+    this.highlightSection(); this.opts.onClose?.();
+  }
   public toggle(partIdx: number, focusSection?: string): void { if (this.opened && this.currentPart === partIdx && !focusSection) this.close(); else this.open(partIdx, focusSection); }
   public highlightSection(sec?: string): void {
     this.el.querySelectorAll('.mcx-module-card').forEach((c) => c.classList.remove('is-highlighted'));
@@ -81,7 +97,9 @@ export class McxToneDrawer {
     (this.getPartState(this.currentPart) as any)[param] = rawVal;
     if (this.opened) this.knobsMgr.updateSingle(param, rawVal);
   }
-  public updateSendLabels(labels?: { sendA: string; sendB: string; sendC: string; sendD: string }): void { updateDrawerSendLabels(this.el, labels); }
+  public updateSendLabels(labels?: { sendA: string; sendB: string; sendC: string; sendD: string }): void {
+    this.lastSendLabels = labels; updateDrawerSendLabels(this.el, labels);
+  }
   public updateSendTelemetry(peaks: number[], busMutes?: boolean[]): void { if (this.opened) updateDrawerSendTelemetry(this.el, peaks, busMutes); }
   public updateLfoPhase(_phase: number): void {}
 
@@ -118,13 +136,7 @@ export class McxToneDrawer {
     else if (act === 'drawer-solo') { this.opts.onToggleSolo?.(p); this.syncPart(p, this.getPartState(p)); }
   }
 
-  private bindEvents(): void {
-    this.el.querySelector<HTMLElement>('.mcx-drawer-tablist')?.addEventListener('keydown', (ev) => {
-      const idx = TAB_ORDER.indexOf(this.activeTab);
-      const next = ev.key === 'ArrowRight' ? (idx + 1) % 2 : ev.key === 'ArrowLeft' ? (idx + 1) % 2 : ev.key === 'Home' ? 0 : ev.key === 'End' ? 1 : -1;
-      if (next >= 0) { ev.preventDefault(); this.setActiveTab(TAB_ORDER[next], true); }
-    });
-    this.el.querySelectorAll<HTMLElement>('[data-tab-panel]').forEach((p) => p.addEventListener('beforematch', () => { const id = p.dataset.tabPanel as McxDrawerTabId; if (id) this.setActiveTab(id); }));
+  private bindShellClicksOnce(): void {
     this.el.addEventListener('click', (ev) => {
       const tgt = ev.target as HTMLElement, tabBtn = tgt.closest<HTMLButtonElement>('[data-drawer-tab]');
       if (tabBtn?.dataset.drawerTab) { ev.stopPropagation(); this.setActiveTab(tabBtn.dataset.drawerTab as McxDrawerTabId); return; }
@@ -140,7 +152,15 @@ export class McxToneDrawer {
         this.setLcdLine2(`P${String(this.currentPart + 1).padStart(2, '0')} ${param}: ${val}`);
       }
     });
-    window.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && this.opened) this.close(); });
+  }
+
+  private bindDomChildren(): void {
+    this.el.querySelector<HTMLElement>('.mcx-drawer-tablist')?.addEventListener('keydown', (ev) => {
+      const idx = TAB_ORDER.indexOf(this.activeTab);
+      const next = ev.key === 'ArrowRight' ? (idx + 1) % 2 : ev.key === 'ArrowLeft' ? (idx + 1) % 2 : ev.key === 'Home' ? 0 : ev.key === 'End' ? 1 : -1;
+      if (next >= 0) { ev.preventDefault(); this.setActiveTab(TAB_ORDER[next], true); }
+    });
+    this.el.querySelectorAll<HTMLElement>('[data-tab-panel]').forEach((p) => p.addEventListener('beforematch', () => { const id = p.dataset.tabPanel as McxDrawerTabId; if (id) this.setActiveTab(id); }));
     this.knobsMgr.mount(this.el, (param, val, fmtTxt) => {
       const ps = this.getPartState(this.currentPart) as any; ps[param] = val;
       if (param === 'driveAmount') this.bridge.setParam(this.currentPart, 'driveEnabled', val > 0.005 ? 1 : 0);
@@ -153,9 +173,9 @@ export class McxToneDrawer {
       const ps = this.getPartState(this.currentPart);
       ps.insertSlot = slot;
       this.bridge.setPartInsertSlot(this.currentPart, slot);
-      this.setLcdLine2(`P${String(this.currentPart + 1).padStart(2, '0')} INSERT FX: ${slot < 0 ? 'OFF (DIRECTO)' : `BAHÍA ${slot + 1}`}`);
+      this.setLcdLine2(`P${String(this.currentPart + 1).padStart(2, '0')} INSERT FX: ${slot < 0 ? 'OFF' : `BAY ${slot + 1}`}`);
     });
   }
 
-  public destroy(): void { this.knobsMgr.destroy(); this.el.remove(); }
+  public destroy(): void { window.removeEventListener('keydown', this.onEscKey); this.knobsMgr.destroy(); this.el.remove(); }
 }

@@ -24,18 +24,18 @@ export function bindGlobalShortcuts(state: McxAppState): void {
       if (scNum >= 1 && scNum <= 8) { ev.preventDefault(); state.refs.triggerLiveScene?.(scNum - 1, false); }
       return;
     }
-    if (!mod && key === 'b') {
-      ev.preventDefault();
-      state.refs.bankDrawer?.toggle(state.focusedPart);
+    if (!mod && !ev.altKey && ev.key === 'Escape') {
+      if (!document.querySelector('dialog[open], .is-open, [popover]:popover-open')) { ev.preventDefault(); state.refs.onPanic?.(); }
       return;
     }
+    if (!mod && key === 'b') { ev.preventDefault(); state.refs.bankDrawer?.toggle(state.focusedPart); return; }
     if (!mod) return;
     const actions: Record<string, (() => void) | undefined> = {
-      f: () => state.refs.fxRackModal?.toggle(),
-      l: () => state.refs.globalLfoModal?.toggle(),
+      f: () => state.refs.fxRackModal?.toggle(), l: () => state.refs.globalLfoModal?.toggle(),
       p: () => { state.syncPianoRollForPart(state.focusedPart); state.refs.pianoRollModal?.toggle(); },
-      g: () => state.refs.grooveModal?.open(-1),
-      m: () => state.refs.toggleSongDrawer?.(),
+      g: () => state.refs.grooveModal?.open(-1), m: () => state.refs.toggleSongDrawer?.(),
+      s: () => state.refs.onSavePreset?.(ev.shiftKey), o: () => state.refs.onOpenBankFile?.(),
+      ',': () => state.refs.settingsModal?.toggle(), '4': () => state.refs.bankDrawer?.toggle(state.focusedPart),
     };
     const fn = actions[key];
     if (fn) { ev.preventDefault(); fn(); }

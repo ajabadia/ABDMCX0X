@@ -1,6 +1,8 @@
 #include "WasmBridge.h"
 #include "WasmInternal.h"
+#include "../Sequencer/McxPatternSequencer.h"
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 
@@ -134,6 +136,73 @@ WASM_EXPORT void getAllRackSlotsTelemetry(float* outPeaks16, int* outFlags16)
         outFlags16[i] = t.isClipIn ? 1 : 0;
         outFlags16[8 + i] = t.isClipOut ? 1 : 0;
     }
+}
+
+WASM_EXPORT void setSendBusMute(int busIdx, int muted)
+{
+    abdmcx::wasm_internal::engine().getOutputAndFx().setSendBusMute(busIdx, muted != 0);
+}
+
+WASM_EXPORT void setFxTopology(int uiTopo)
+{
+    abdmcx::wasm_internal::engine().getOutputAndFx().setUiTopology(uiTopo);
+}
+
+WASM_EXPORT void setFxCascade(float choToRev, float delToRev)
+{
+    abdmcx::wasm_internal::engine().getOutputAndFx().setCascadeInjections(choToRev, delToRev);
+}
+
+WASM_EXPORT void setFxGate(int gateIdx, int active)
+{
+    abdmcx::wasm_internal::engine().setFxGate(gateIdx, active != 0);
+}
+
+WASM_EXPORT void setFxTempoSync(int enabled)
+{
+    abdmcx::wasm_internal::engine().setFxTempoSync(enabled != 0);
+}
+
+WASM_EXPORT void setLimiterEnabled(int enabled)
+{
+    abdmcx::wasm_internal::engine().getOutputAndFx().setLimiterEnabled(enabled != 0);
+}
+
+WASM_EXPORT void setLimiterCeilingDb(float db)
+{
+    abdmcx::wasm_internal::engine().getOutputAndFx().setLimiterCeilingDb(db);
+}
+
+WASM_EXPORT void setDuckMode(int kind, int enabled)
+{
+    auto& eng = abdmcx::wasm_internal::engine();
+    if (kind == 0) eng.setManualDuckGate(enabled != 0);
+    else if (kind == 1) eng.setAudioDuckEnabled(enabled != 0);
+    else if (kind == 2) eng.setMidiDuckEnabled(enabled != 0);
+}
+
+WASM_EXPORT void setSequencerLoop(int loop)
+{
+    abdmcx::wasm_internal::engine().sequencer().setLoopEnabled(loop != 0);
+}
+
+WASM_EXPORT void setPartPresetName(int partIdx, const char* name)
+{
+    abdmcx::wasm_internal::engine().setPartPresetName(partIdx, name);
+}
+
+WASM_EXPORT void getMasterFxTelemetry(float* out7Floats, int* out4Mutes)
+{
+    if (!out7Floats || !out4Mutes) return;
+    const auto& eng = abdmcx::wasm_internal::engine();
+    const auto& fx = eng.getOutputAndFx();
+    const auto t = fx.getTelemetry();
+    out7Floats[0] = t.peakSendA; out7Floats[1] = t.peakSendB;
+    out7Floats[2] = t.peakSendC; out7Floats[3] = t.peakSendD;
+    out7Floats[4] = t.limiterGainReductionDb;
+    out7Floats[5] = eng.getFocusedLfoValue(0);
+    out7Floats[6] = eng.getFocusedLfoValue(1);
+    for (int b = 0; b < 4; ++b) out4Mutes[b] = fx.isSendBusMuted(b) ? 1 : 0;
 }
 
 }

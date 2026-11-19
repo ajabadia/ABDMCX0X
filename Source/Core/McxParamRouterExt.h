@@ -12,22 +12,24 @@ namespace abdmcx
 inline void applyWebPartParamExt(McxEngine& engine, int partIdx, int paramId, float value) noexcept
 {
     auto& p = engine.part(partIdx);
+    auto* se = engine.getPartSoundEngine(partIdx);
+    auto setK = [&](const char* k, float v) noexcept { if (se != nullptr) (void)se->setParamByKey(k, v); };
     switch (paramId)
     {
-    case 68: p.lfo1Shape = static_cast<std::uint8_t>(std::clamp(static_cast<int>(value), 0, 7)); break;
-    case 69: p.lfo1Sync = (value >= 0.5f); break;
-    case 70: p.lfo1Trigger = static_cast<std::uint8_t>(std::clamp(static_cast<int>(value), 0, 2)); break;
-    case 71: p.lfo1Rate = std::clamp(value, 0.01f, 1280.0f); break;
-    case 72: p.lfo1DelayMs = std::clamp(value, 0.0f, 5000.0f); break;
-    case 73: p.lfo1Depth = std::clamp(value, -1.0f, 1.0f); break;
-    case 74: p.lfo1Target = static_cast<std::uint8_t>(std::clamp(static_cast<int>(value), 0, 5)); break;
-    case 75: p.lfo2Shape = static_cast<std::uint8_t>(std::clamp(static_cast<int>(value), 0, 7)); break;
-    case 76: p.lfo2Sync = (value >= 0.5f); break;
-    case 77: p.lfo2Trigger = static_cast<std::uint8_t>(std::clamp(static_cast<int>(value), 0, 2)); break;
-    case 78: p.lfo2Rate = std::clamp(value, 0.01f, 1280.0f); break;
-    case 79: p.lfo2DelayMs = std::clamp(value, 0.0f, 5000.0f); break;
-    case 80: p.lfo2Depth = std::clamp(value, -1.0f, 1.0f); break;
-    case 81: p.lfo2Target = static_cast<std::uint8_t>(std::clamp(static_cast<int>(value), 0, 5)); break;
+    case 68: setK("lfo1.shape", static_cast<float>(std::clamp(static_cast<int>(value), 0, 7))); break;
+    case 69: setK("lfo1.sync", (value >= 0.5f) ? 1.0f : 0.0f); break;
+    case 70: setK("lfo1.trigger", static_cast<float>(std::clamp(static_cast<int>(value), 0, 2))); break;
+    case 71: setK("lfo1.rate", std::clamp(value, 0.01f, 1280.0f)); break;
+    case 72: setK("lfo1.delayMs", std::clamp(value, 0.0f, 5000.0f)); break;
+    case 73: setK("lfo1.depth", std::clamp(value, -1.0f, 1.0f)); break;
+    case 74: setK("lfo1.target", static_cast<float>(std::clamp(static_cast<int>(value), 0, 5))); break;
+    case 75: setK("lfo2.shape", static_cast<float>(std::clamp(static_cast<int>(value), 0, 7))); break;
+    case 76: setK("lfo2.sync", (value >= 0.5f) ? 1.0f : 0.0f); break;
+    case 77: setK("lfo2.trigger", static_cast<float>(std::clamp(static_cast<int>(value), 0, 2))); break;
+    case 78: setK("lfo2.rate", std::clamp(value, 0.01f, 1280.0f)); break;
+    case 79: setK("lfo2.delayMs", std::clamp(value, 0.0f, 5000.0f)); break;
+    case 80: setK("lfo2.depth", std::clamp(value, -1.0f, 1.0f)); break;
+    case 81: setK("lfo2.target", static_cast<float>(std::clamp(static_cast<int>(value), 0, 5))); break;
     case 82: p.semanticOffsets.cutoffOctaves = std::clamp(value, -1.0f, 1.0f); break;
     case 83: p.semanticOffsets.resonance = std::clamp(value, -1.0f, 1.0f); break;
     case 84: p.semanticOffsets.envAttack = std::clamp(value, -1.0f, 1.0f); break;

@@ -30,6 +30,17 @@ public:
     void setTopology(Topology topo) noexcept { rack_.setTopology(topo); }
     [[nodiscard]] Topology getTopology() const noexcept { return rack_.getTopology(); }
 
+    void setUiTopology(int uiTopo) noexcept
+    {
+        uiTopology_ = std::clamp(uiTopo, 0, 9);
+        Topology mapped = Topology::CascadeInjection;
+        if (uiTopology_ == 0 || uiTopology_ == 9) mapped = Topology::SerialMaster;
+        else if (uiTopology_ == 3) mapped = Topology::ParallelSends;
+        else if (uiTopology_ == 2 || uiTopology_ == 6 || uiTopology_ == 7 || uiTopology_ == 8) mapped = Topology::HybridSendInsert;
+        rack_.setTopology(mapped);
+    }
+    [[nodiscard]] int getUiTopology() const noexcept { return uiTopology_; }
+
     void setSendReturns(float chorusMix, float delayMix, float reverbMix, float auxMix = 1.0f) noexcept;
     void setCascadeInjections(float chorusToReverb, float delayToReverb) noexcept
     {
@@ -50,6 +61,8 @@ public:
 
     void setLimiterEnabled(bool enabled) noexcept { rack_.getLimiter().setEnabled(enabled); }
     void setLimiterCeilingDb(float db) noexcept { rack_.getLimiter().setCeilingDb(db); }
+    [[nodiscard]] bool isLimiterEnabled() const noexcept { return rack_.getLimiter().isEnabled(); }
+    [[nodiscard]] float getLimiterCeilingDb() const noexcept { return rack_.getLimiter().getCeilingDb(); }
     [[nodiscard]] const abd::dsp::MasterSafetyLimiter& getLimiter() const noexcept { return rack_.getLimiter(); }
     [[nodiscard]] abd::dsp::MasterSafetyLimiter& getLimiter() noexcept { return rack_.getLimiter(); }
 
@@ -135,6 +148,7 @@ private:
 
     int reverbMacro_ { 3 }; // Default: Hall 1
     int chorusMacro_ { 1 }; // Default: Chorus 2
+    int uiTopology_ { 1 };  // Default: Cascade Injection (0..9 UI index)
     float chorusMix_ { 0.35f };
     float delayMix_ { 0.25f };
     float reverbMix_ { 0.35f };

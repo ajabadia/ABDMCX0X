@@ -12,6 +12,8 @@ import { t } from '../i18n/mcxI18n';
 export interface McxMasterPanelOptions {
   bridge: McxHostBridge; setLcdLine2?: (text: string) => void;
   initialVolume?: number; initialBpm?: number;
+  getFocusedPart?: () => number; onVolumeChange?: (v: number) => void;
+  onRecordChange?: (rec: boolean) => void; onLimiterChange?: (enabled: boolean) => void;
   onOpenGlobal?: () => void; onOpenFxRack?: () => void; onOpenGlobalLfo?: () => void;
   onOpenGroove?: (partIndex: number) => void;
   onOpenSong?: () => void;
@@ -90,7 +92,7 @@ export class McxMasterPanel {
         size: 52, value: this.prevVolume, numLeds: 15,
         onChange: (normVal: number) => {
           this.isMuted = false; this.updateMuteState(); this.updateReadouts(normVal);
-          this.bridge.setMasterVolume(normVal);
+          this.bridge.setMasterVolume(normVal); this.opts.onVolumeChange?.(normVal);
           this.opts.setLcdLine2?.(`MASTER VOL: ${Math.round(normVal * 100)}% (${normToDb(normVal)})`);
         },
       });
@@ -107,8 +109,8 @@ export class McxMasterPanel {
         },
         onPlay: () => { this.bridge.setTempo(this.transport?.getState().bpm ?? 120); this.bridge.setTransportPlaying(true, false); this.opts.setLcdLine2?.('TRANSPORT: PLAY'); },
         onStop: () => { this.bridge.setTransportPlaying(false, true); this.opts.setLcdLine2?.('TRANSPORT: STOP'); },
-        onRecord: (rec) => this.opts.setLcdLine2?.(rec ? 'TRANSPORT: REC ARMED' : 'TRANSPORT: REC OFF'),
-        onLoop: (loop) => this.opts.setLcdLine2?.(loop ? 'LOOP: ON' : 'LOOP: ONE-SHOT'),
+        onRecord: (rec) => { this.bridge.setParam(this.opts.getFocusedPart?.() ?? 0, 'seqRecording', rec ? 1 : 0); this.opts.onRecordChange?.(rec); this.opts.setLcdLine2?.(rec ? 'TRANSPORT: REC ARMED' : 'TRANSPORT: REC OFF'); },
+        onLoop: (loop) => { this.bridge.setSequencerLoop(loop); this.opts.setLcdLine2?.(loop ? 'LOOP: ON' : 'LOOP: ONE-SHOT'); },
         onMetro: (metro) => this.opts.setLcdLine2?.(metro ? 'METRONOME: ON' : 'METRONOME: OFF'),
         onTempoChange: (bpm) => { this.bridge.setTempo(bpm); this.opts.onBpmChange?.(bpm); this.opts.setLcdLine2?.(`TEMPO: ${bpm.toFixed(1)} BPM`); },
         onTransportChange: this.opts.onTransportChange,
@@ -117,12 +119,13 @@ export class McxMasterPanel {
 
     this.container.querySelector('#mcx-global-btn')?.addEventListener('click', () => this.opts.onOpenGlobal?.());
     this.container.querySelector('#mcx-btn-open-glfo')?.addEventListener('click', () => (this.opts.onOpenGlobalLfo ? this.opts.onOpenGlobalLfo() : this.opts.setLcdLine2?.('GLOBAL LFOS MODAL')));
-    this.container.querySelector('#mcx-btn-open-groove')?.addEventListener('click', () => (this.opts.onOpenGroove ? this.opts.onOpenGroove(0) : this.opts.setLcdLine2?.('GROOVE & SHUFFLE MODAL')));
+    this.container.querySelector('#mcx-btn-open-groove')?.addEventListener('click', () => (this.opts.onOpenGroove ? this.opts.onOpenGroove(this.opts.getFocusedPart?.() ?? 0) : this.opts.setLcdLine2?.('GROOVE & SHUFFLE MODAL')));
     this.container.querySelector('#mcx-btn-open-song')?.addEventListener('click', () => this.opts.onOpenSong?.());
 
     this.container.querySelector('#mcx-btn-toggle-lim')?.addEventListener('click', (e) => {
       this.limiterEnabled = !this.limiterEnabled;
       (e.currentTarget as HTMLElement).classList.toggle('is-active', this.limiterEnabled);
+      this.bridge.setLimiterEnabled(this.limiterEnabled); this.opts.onLimiterChange?.(this.limiterEnabled);
       this.opts.setLcdLine2?.(`MASTER SAFETY LIMITER: ${this.limiterEnabled ? 'ON (-0.3 dBFS)' : 'BYPASS'}`);
     });
 
@@ -130,13 +133,13 @@ export class McxMasterPanel {
       this.isMuted = !this.isMuted; this.updateMuteState();
       const v = this.isMuted ? 0 : (this.prevVolume > 0.01 ? this.prevVolume : 0.85);
       if (this.isMuted) this.prevVolume = this.volumeKnob?.getValue() ?? 0.85;
-      this.volumeKnob?.setValue(v); this.bridge.setMasterVolume(v);
+      this.volumeKnob?.setValue(v); this.bridge.setMasterVolume(v); this.opts.onVolumeChange?.(v);
       this.isMuted ? this.updateMutedReadouts() : this.updateReadouts(v);
       if (this.isMuted) this.updateMeter(0, 0);
       this.opts.setLcdLine2?.(this.isMuted ? 'MASTER OUTPUT: MUTED' : `MASTER OUTPUT: UNMUTED (${Math.round(v * 100)}%)`);
     });
 
-    this.bridge.setMasterVolume(this.prevVolume);
+    if (!this.bridge.isNative) this.bridge.setMasterVolume(this.prevVolume);
     this.updateReadouts(this.prevVolume);
   }
 
@@ -159,7 +162,8 @@ export class McxMasterPanel {
     this.vuMeter?.setLevels(l, r);
   }
 
-  public setVolume(v: number): void { this.volumeKnob?.setValue(v); this.updateReadouts(v); }
+  public setVolume(v: number): void { this.prevVolume = v; this.volumeKnob?.setValue(v); this.updateReadouts(v); }
+  public setLimiterEnabled(enabled: boolean): void { this.limiterEnabled = enabled; this.container.querySelector('#mcx-btn-toggle-lim')?.classList.toggle('is-active', enabled); }
   public setBpm(bpm: number): void { this.transport?.setTempo(bpm); }
   public setPlaying(p: boolean): void { this.transport?.setPlaying(p); }
   public getTransportState(): CompactTransportBarState | undefined { return this.transport?.getState(); }

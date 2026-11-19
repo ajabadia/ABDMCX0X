@@ -3,6 +3,7 @@
 #include "McxEngineBridgeHelpers.h"
 #include "McxSongBridgeHelpers.h"
 #include "McxRackBridgeHelpers.h"
+#include "McxSessionStateBuilder.h"
 #include <WebView2Bridge/WebView2ResourceProvider.h>
 
 #if JUCE_WINDOWS
@@ -145,6 +146,7 @@ void McxAudioProcessorEditor::timerCallback() {
     if (processor_.consumeSongStateDirty()) {
         webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildSongAndScenesStatePayload(processor_.engine()));
     }
+    if (processor_.consumeSessionStateDirty()) { const juce::ScopedLock sl(processor_.engineLock()); webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildSessionStatePayload(processor_.engine())); }
     const auto snap = processor_.readTelemetrySnapshot();
     if (snap.activeVoices == 0 && ++gcTickCounter_ >= 30) {
         gcTickCounter_ = 0;
@@ -176,12 +178,14 @@ void McxAudioProcessorEditor::handleJsEvent(const juce::var& msg) {
     const auto type = obj->getProperty("type").toString();
 
     if (type == "uiReady") {
-        isUiReady_ = true;
-        emitSystemSettings();
+        isUiReady_ = true; emitSystemSettings();
+        const juce::ScopedLock sl(processor_.engineLock());
         webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildEngineCatalogPayload(processor_.engine()));
         webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildPartPresetsPayload(processor_.engine(), 0));
         webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildPartEngineStatePayload(processor_.engine(), 0));
         webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildSongAndScenesStatePayload(processor_.engine()));
+        webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildSessionStatePayload(processor_.engine()));
+        webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildLibraryCatalogPayload(processor_.libraryService()));
         return;
     }
     if (handleSequencerJsEvent(processor_, type, *obj)) {

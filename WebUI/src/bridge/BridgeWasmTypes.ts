@@ -18,6 +18,7 @@ export interface McxTelemetry {
   partPeaks?: number[];
   partMidiPeaks?: number[];
   lfoPhase?: number;
+  lfo2Phase?: number;
   seqPlaying?: boolean;
   seqTick?: number;
   seqStep?: number;
@@ -103,7 +104,7 @@ export function parseTelemetryPayload(raw: any): McxTelemetry {
     sendLabels: raw.sendLabels,
     partPeaks: Array.isArray(raw.partPeaks) ? raw.partPeaks.map(Number) : undefined,
     partMidiPeaks: Array.isArray(raw.partMidiPeaks) ? raw.partMidiPeaks.map(Number) : undefined,
-    lfoPhase: Number(raw.lfoPhase ?? 0), seqPlaying: Boolean(raw.seqPlaying),
+    lfoPhase: Number(raw.lfoPhase ?? 0), lfo2Phase: Number(raw.lfo2Phase ?? 0), seqPlaying: Boolean(raw.seqPlaying),
     seqTick: Number(raw.seqTick ?? 0), seqStep: Number(raw.seqStep ?? 0),
     seqTotalTicks: Number(raw.seqTotalTicks ?? 384), bpm: Number(raw.bpm ?? 0),
     activeScene: raw.activeScene !== undefined ? Number(raw.activeScene) : undefined,
@@ -116,7 +117,30 @@ export function parseTelemetryPayload(raw: any): McxTelemetry {
     sceneApplySeq: raw.sceneApplySeq !== undefined ? Number(raw.sceneApplySeq) : undefined,
     appliedMuteMask: raw.appliedMuteMask !== undefined ? Number(raw.appliedMuteMask) : undefined,
     appliedTranspose: raw.appliedTranspose !== undefined ? Number(raw.appliedTranspose) : undefined,
+    rackPeakIn: Array.isArray(raw.rackPeakIn) ? raw.rackPeakIn.map(Number) : undefined,
+    rackPeakOut: Array.isArray(raw.rackPeakOut) ? raw.rackPeakOut.map(Number) : undefined,
+    rackClipIn: Array.isArray(raw.rackClipIn) ? raw.rackClipIn.map(Boolean) : undefined,
+    rackClipOut: Array.isArray(raw.rackClipOut) ? raw.rackClipOut.map(Boolean) : undefined,
   };
+}
+
+export interface McxSessionPartDto {
+  index: number; name: string; kind: 'chromatic' | 'drum_map';
+  midiChannel: number; midiPortIndex: number; routeMode: number; mute: boolean; solo: boolean; followTranspose: boolean;
+  engineTypeIndex: number; engineTypeId: string; partLevel: number; partPan: number;
+  reverbSend: number; chorusSend: number; delaySend: number; auxSend: number;
+  sendAPre: boolean; sendBPre: boolean; sendCPre: boolean; sendDPre: boolean; insertSlot: number;
+  driveType: number; driveAmount: number; eqLowGain: number; eqMidGain: number; eqHighGain: number;
+  filterCutoff: number; filterResonance: number; filterModel: number; structureMode: number;
+  pitchCoarse: number; pitchFine: number;
+  lfo1Shape: number; lfo1Sync: boolean; lfo1Rate: number; lfo1Depth: number; lfo1Target: number;
+  lfo2Shape: number; lfo2Sync: boolean; lfo2Rate: number; lfo2Depth: number; lfo2Target: number;
+}
+
+export interface McxSessionStateDto {
+  masterGain: number; globalTranspose: number; dacCharacter: number;
+  reverbMacro: number; chorusMacro: number; limiterEnabled: boolean; limiterCeilingDb: number;
+  fxTopology: number; sendTargets: number[]; rackJson: string; parts: McxSessionPartDto[];
 }
 
 export function parseSongScenesStateJson(json: string): McxSongScenesStateDto | null {

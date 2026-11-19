@@ -69,6 +69,8 @@ void McxEngine::prepare(double sampleRate) noexcept
 void McxEngine::reset() noexcept
 {
     fxTailSamplesLeft_ = 0;
+    fxGates_.fill(false); fxTempoSync_ = true; manualDuckGate_ = false;
+    lfoPhase01_.fill(0.0f); lfoValueBipolar_.fill(0.0f);
     partMidiPeaks_.fill(0.0f);
     mirrorRouter_.clear();
     outputAndFx_.reset();
@@ -106,6 +108,7 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
     while (offset < numSamples)
     {
         const int chunk = std::min(McxOutputAndFx::kMaxChunk, numSamples - offset);
+        advanceFocusedLfoTelemetry(chunk);
         processSequencerAndClock(chunk, offset);
         for (int partIdx = 0; partIdx < kNumParts; ++partIdx)
         {
@@ -247,9 +250,13 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
 
             McxOutputAndFx::ControlFrame fxCtrl;
             fxCtrl.bpm = static_cast<double>(masterTempoBpm_);
-            fxCtrl.tempoSync = true;
+            fxCtrl.tempoSync = fxTempoSync_;
             const bool duckTriggered = manualDuckGate_ || (midiDuckEnabled_ && kickDuckEnvelope_ > 0.05f) || (audioDuckEnabled_ && audioDuckEnvelope_ > 0.08f);
             fxCtrl.gates[0] = duckTriggered ? 1.0f : 0.0f;
+            fxCtrl.gates[1] = fxGates_[1] ? 1.0f : 0.0f;
+            fxCtrl.gates[2] = fxGates_[2] ? 1.0f : 0.0f;
+            fxCtrl.gates[3] = fxGates_[3] ? 1.0f : 0.0f;
+            if (fp.lfo1Target < 4) fxCtrl.lfoMod[fp.lfo1Target] = std::clamp(lfoValueBipolar_[0] * fp.lfo1Depth, -1.0f, 1.0f);
             if (kickDuckEnvelope_ > 0.01f) kickDuckEnvelope_ *= std::exp(-static_cast<float>(chunk) / static_cast<float>(sampleRate_ * 0.18));
             else kickDuckEnvelope_ = 0.0f;
             if (audioDuckEnvelope_ > 0.01f) audioDuckEnvelope_ *= std::exp(-static_cast<float>(chunk) / static_cast<float>(sampleRate_ * 0.18));

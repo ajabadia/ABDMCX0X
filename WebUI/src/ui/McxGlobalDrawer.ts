@@ -15,6 +15,8 @@ export interface McxGlobalDrawerOptions {
   hostEl: HTMLElement; bridge: McxHostBridge;
   setLcdLine2: (text: string) => void; onClose?: () => void;
   onOpenFxRack?: () => void;
+  onMasterVolumeChange?: (v: number) => void;
+  onGlobalTransposeChange?: (st: number) => void;
 }
 
 export class McxGlobalDrawer {
@@ -43,27 +45,16 @@ export class McxGlobalDrawer {
         </div>
         <button type="button" class="mcx-drawer-close-btn" data-act="close" title="${t('mcx.closeDrawer') || 'Cerrar'}" aria-label="${t('mcx.closeDrawer') || 'Cerrar'}">✕</button>
       </div>
-
       <div class="mcx-drawer-body mcx-global-body">
-        <!-- Section 1: Master Output & Transpose -->
         <section class="mcx-module-card mcx-card-global-out">
-          <div class="mcx-module-head">
-            <span class="mcx-module-title">${t('mcx.masterOutputSection') || 'SALIDA MAESTRA & TRANSPOSICIÓN'}</span>
-            <span class="mcx-module-badge">BUS</span>
-          </div>
+          <div class="mcx-module-head"><span class="mcx-module-title">${t('mcx.masterOutputSection') || 'SALIDA MAESTRA & TRANSPOSICIÓN'}</span><span class="mcx-module-badge">BUS</span></div>
           <div class="mcx-global-card-body">
             <div class="mcx-global-field">
-              <div class="mcx-global-field-head">
-                <span class="mcx-global-field-lbl">${t('mcx.masterVol') || 'Nivel Master'}</span>
-                <span class="mcx-global-field-val" id="g-master-vol-val">85%</span>
-              </div>
+              <div class="mcx-global-field-head"><span class="mcx-global-field-lbl">${t('mcx.masterVol') || 'Nivel Master'}</span><span class="mcx-global-field-val" id="g-master-vol-val">85%</span></div>
               <input type="range" id="g-master-vol" class="mcx-strip-fader mcx-global-slider" min="0" max="1" step="0.01" value="0.85" />
             </div>
-
             <div class="mcx-global-field">
-              <div class="mcx-global-field-head">
-                <span class="mcx-global-field-lbl">${t('mcx.transposeLabel') || 'Transposición Global'}</span>
-              </div>
+              <div class="mcx-global-field-head"><span class="mcx-global-field-lbl">${t('mcx.transposeLabel') || 'Transposición Global'}</span></div>
               <div class="mcx-live-trans-row">
                 <button type="button" class="mcx-trans-btn" id="g-trans-down">-</button>
                 <span class="mcx-trans-val" id="g-trans-val" title="Clic para resetear a 0">0</span>
@@ -72,38 +63,18 @@ export class McxGlobalDrawer {
             </div>
           </div>
         </section>
-
-        <!-- Section 2: Bus Master FX & D/A Character -->
         <section class="mcx-module-card mcx-card-global-fx">
-          <div class="mcx-module-head">
-            <span class="mcx-module-title">${t('mcx.masterFxSection') || 'BUS MASTER FX & CONVERTIDOR D/A'}</span>
-            <span class="mcx-module-badge">DSP</span>
-          </div>
+          <div class="mcx-module-head"><span class="mcx-module-title">${t('mcx.masterFxSection') || 'BUS MASTER FX & CONVERTIDOR D/A'}</span><span class="mcx-module-badge">DSP</span></div>
           <div class="mcx-global-card-body">
+            <div class="mcx-global-field"><span class="mcx-global-field-lbl">${t('mcx.dacCharacter') || 'Carácter D/A Vintage'}</span><select class="mcx-global-select" id="g-dac-character">${DAC_MODES.map((d, i) => `<option value="${i}">${d}</option>`).join('')}</select></div>
+            <div class="mcx-global-field"><span class="mcx-global-field-lbl">${t('mcx.reverbMacro') || 'Macro Reverb Master'}</span><select class="mcx-global-select" id="g-reverb-macro">${REVERB_MACROS.map((r, i) => `<option value="${i}">${r}</option>`).join('')}</select></div>
             <div class="mcx-global-field">
-              <span class="mcx-global-field-lbl">${t('mcx.dacCharacter') || 'Carácter D/A Vintage'}</span>
-              <select class="mcx-global-select" id="g-dac-character">${DAC_MODES.map((d, i) => `<option value="${i}">${d}</option>`).join('')}</select>
-            </div>
-            <div class="mcx-global-field">
-              <span class="mcx-global-field-lbl">${t('mcx.reverbMacro') || 'Macro Reverb Master'}</span>
-              <select class="mcx-global-select" id="g-reverb-macro">${REVERB_MACROS.map((r, i) => `<option value="${i}">${r}</option>`).join('')}</select>
-            </div>
-            <div class="mcx-global-field">
-              <div class="mcx-global-field-head">
-                <span class="mcx-global-field-lbl">${t('mcx.reverbTime') || 'Tiempo Reverb'}</span>
-                <span class="mcx-global-field-val" id="g-reverb-time-val">50%</span>
-              </div>
+              <div class="mcx-global-field-head"><span class="mcx-global-field-lbl">${t('mcx.reverbTime') || 'Tiempo Reverb'}</span><span class="mcx-global-field-val" id="g-reverb-time-val">50%</span></div>
               <input type="range" class="mcx-global-slider" id="g-reverb-time" min="0" max="1" step="0.01" value="0.5" />
             </div>
+            <div class="mcx-global-field"><span class="mcx-global-field-lbl">${t('mcx.chorusMacro') || 'Macro Chorus Master'}</span><select class="mcx-global-select" id="g-chorus-macro">${CHORUS_MACROS.map((c, i) => `<option value="${i}">${c}</option>`).join('')}</select></div>
             <div class="mcx-global-field">
-              <span class="mcx-global-field-lbl">${t('mcx.chorusMacro') || 'Macro Chorus Master'}</span>
-              <select class="mcx-global-select" id="g-chorus-macro">${CHORUS_MACROS.map((c, i) => `<option value="${i}">${c}</option>`).join('')}</select>
-            </div>
-            <div class="mcx-global-field">
-              <div class="mcx-global-field-head">
-                <span class="mcx-global-field-lbl">${t('mcx.chorusRate') || 'Velocidad Chorus'}</span>
-                <span class="mcx-global-field-val" id="g-chorus-rate-val">50%</span>
-              </div>
+              <div class="mcx-global-field-head"><span class="mcx-global-field-lbl">${t('mcx.chorusRate') || 'Velocidad Chorus'}</span><span class="mcx-global-field-val" id="g-chorus-rate-val">50%</span></div>
               <input type="range" class="mcx-global-slider" id="g-chorus-rate" min="0" max="1" step="0.01" value="0.5" />
             </div>
             <button type="button" class="mcx-global-rack-launch-btn" id="g-open-full-rack">ABRIR RACK MODULAR COMPLETO ➔</button>
@@ -113,30 +84,14 @@ export class McxGlobalDrawer {
     `;
   }
 
-  public open(): void {
-    this.opened = true;
-    this.el.classList.add('is-open');
-    this.setLcdLine2(`GLOBAL SESSION DRAWER OPEN`);
-  }
-
-  public close(): void {
-    if (!this.opened) return;
-    this.opened = false;
-    this.el.classList.remove('is-open');
-    this.opts.onClose?.();
-  }
-
-  public toggle(): void {
-    if (this.opened) this.close();
-    else this.open();
-  }
-
+  public open(): void { this.opened = true; this.el.classList.add('is-open'); this.setLcdLine2('GLOBAL SESSION DRAWER OPEN'); }
+  public close(): void { if (!this.opened) return; this.opened = false; this.el.classList.remove('is-open'); this.opts.onClose?.(); }
+  public toggle(): void { if (this.opened) this.close(); else this.open(); }
   public isOpen(): boolean { return this.opened; }
 
   public setMasterVolume(v: number): void {
     this.masterVol = v;
-    const input = this.el.querySelector<HTMLInputElement>('#g-master-vol');
-    const val = this.el.querySelector<HTMLElement>('#g-master-vol-val');
+    const input = this.el.querySelector<HTMLInputElement>('#g-master-vol'), val = this.el.querySelector<HTMLElement>('#g-master-vol-val');
     if (input) input.value = String(v);
     if (val) val.textContent = `${Math.round(v * 100)}%`;
   }
@@ -145,6 +100,15 @@ export class McxGlobalDrawer {
     this.globalTranspose = Math.max(-24, Math.min(24, Math.round(val)));
     const el = this.el.querySelector<HTMLElement>('#g-trans-val');
     if (el) el.textContent = `${this.globalTranspose > 0 ? '+' : ''}${this.globalTranspose}`;
+  }
+
+  public syncFromSession(dto: { masterGain?: number; globalTranspose?: number; dacCharacter?: number; reverbMacro?: number; chorusMacro?: number }): void {
+    if (typeof dto.masterGain === 'number') this.setMasterVolume(dto.masterGain);
+    if (typeof dto.globalTranspose === 'number') this.setGlobalTranspose(dto.globalTranspose);
+    const setSel = (id: string, val?: number) => { const s = this.el.querySelector<HTMLSelectElement>(id); if (s && typeof val === 'number') s.value = String(val); };
+    setSel('#g-dac-character', dto.dacCharacter);
+    setSel('#g-reverb-macro', dto.reverbMacro);
+    setSel('#g-chorus-macro', dto.chorusMacro);
   }
 
   private bindEvents(): void {
@@ -158,13 +122,15 @@ export class McxGlobalDrawer {
     const volVal = this.el.querySelector<HTMLElement>('#g-master-vol-val');
     volSlider?.addEventListener('input', () => {
       const v = parseFloat(volSlider.value);
-      if (volVal) volVal.textContent = `${Math.round(v * 100)}%`;
-      this.bridge.setMasterVolume(v); this.setLcdLine2(`MASTER VOL: ${Math.round(v * 100)}%`);
+      this.masterVol = v; if (volVal) volVal.textContent = `${Math.round(v * 100)}%`;
+      this.bridge.setMasterVolume(v); this.opts.onMasterVolumeChange?.(v);
+      this.setLcdLine2(`MASTER VOL: ${Math.round(v * 100)}%`);
     });
 
     const updateTrans = (st: number) => {
       this.setGlobalTranspose(st);
       this.bridge.setParam(0, 'globalTranspose', this.globalTranspose);
+      this.opts.onGlobalTransposeChange?.(this.globalTranspose);
       this.setLcdLine2(`GLOBAL TRANSPOSE: ${this.globalTranspose > 0 ? '+' : ''}${this.globalTranspose} st`);
     };
     this.el.querySelector('#g-trans-down')?.addEventListener('click', () => updateTrans(this.globalTranspose - 1));

@@ -10,19 +10,22 @@ import {
   type McxEngineDescriptorDto,
   type McxPartEngineStateDto,
   type McxPartPresetsDto,
+  type McxSessionPartDto,
+  type McxSessionStateDto,
   type McxTelemetry,
 } from './BridgeWasmTypes';
-import { arrayBufferToBase64, routeNativeBridgeEvent } from './McxHostBridgeHelpers';
+import { arrayBufferToBase64, readLocalSettingsJson, routeNativeBridgeEvent, routeWasmWorkletEvent, type NativeBridgeCallbacks } from './McxHostBridgeHelpers';
 import { WASM_PARAM_ID, type McxParamKey } from './mcxParamIds';
 
 export { WASM_PARAM_ID, type McxParamKey };
-export type { McxTelemetry, McxEngineDescriptorDto, McxPartPresetsDto, McxPartEngineStateDto };
+export type { McxTelemetry, McxEngineDescriptorDto, McxPartPresetsDto, McxPartEngineStateDto, McxSessionStateDto, McxSessionPartDto };
 
 export interface McxSystemSettingsDto {
   workingDirectory: string; maxPolyphony: number; masterTuneHz: number; standaloneBpm: number;
   themeFamily?: string; colorScheme?: string; locale?: string;
 }
 
+type AudioStatusCb = (s: 'idle' | 'loading' | 'ready' | 'error', detail?: string) => void;
 const STORAGE_SETTINGS = 'abdmcx0x.systemSettings';
 
 export class McxHostBridge {
@@ -30,34 +33,45 @@ export class McxHostBridge {
   private wasm: BridgeWasm | null = null;
   private nativeSampleRate = 48000;
   private telemetryCb: ((t: McxTelemetry) => void) | null = null;
-  private statusCb: ((s: 'idle' | 'loading' | 'ready' | 'error', detail?: string) => void) | null = null;
+  private statusCbs = new Set<AudioStatusCb>();
+  private lastStatus: ['idle' | 'loading' | 'ready' | 'error', string?] | null = null;
   private bankLoadedCb: ((ok: boolean, sizeBytes: number) => void) | null = null;
   private settingsCb: ((s: McxSystemSettingsDto) => void) | null = null;
   private engineCatalogCb: ((engines: McxEngineDescriptorDto[]) => void) | null = null;
   private partPresetsCb: ((dto: McxPartPresetsDto) => void) | null = null;
   private partEngineStateCb: ((dto: McxPartEngineStateDto) => void) | null = null;
   private songScenesStateCb: ((stateJson: string) => void) | null = null;
+  private sessionStateCb: ((dto: McxSessionStateDto) => void) | null = null;
+  private libraryCatalogCb: ((catalogJson: string) => void) | null = null;
+  private rackStateCb: ((rackJson: string) => void) | null = null;
 
   constructor() {
     const juceBackend = (window as any).__JUCE__?.backend;
     this.isNative = Boolean(juceBackend?.emitEvent || (window as any).chrome?.webview?.postMessage);
+    const cbs: NativeBridgeCallbacks = {
+      dispatchTelemetry: (data) => this.dispatchNativeTelemetry(data),
+      onBankLoaded: (ok, sizeBytes) => this.bankLoadedCb?.(ok, sizeBytes),
+      onEngineCatalog: (engines) => this.engineCatalogCb?.(engines),
+      onPartPresets: (dto) => this.partPresetsCb?.(dto),
+      onPartEngineState: (dto) => this.partEngineStateCb?.(dto),
+      onSongScenesState: (json) => this.songScenesStateCb?.(json),
+      onSessionState: (dto) => this.sessionStateCb?.(dto),
+      onLibraryCatalog: (json) => this.libraryCatalogCb?.(json),
+      onRackState: (json) => this.rackStateCb?.(json),
+      onSystemSettings: (s) => this.settingsCb?.(s),
+    };
     if (this.isNative) {
-      const handleNative = (ev: any) => routeNativeBridgeEvent(ev?.data ?? ev, {
-        dispatchTelemetry: (data) => this.dispatchNativeTelemetry(data),
-        onBankLoaded: (ok, sizeBytes) => this.bankLoadedCb?.(ok, sizeBytes),
-        onEngineCatalog: (engines) => this.engineCatalogCb?.(engines),
-        onPartPresets: (dto) => this.partPresetsCb?.(dto),
-        onPartEngineState: (dto) => this.partEngineStateCb?.(dto),
-        onSongScenesState: (json) => this.songScenesStateCb?.(json),
-        onSystemSettings: (s) => this.settingsCb?.(s),
-      });
+      this.lastStatus = ['ready', `JUCE ${this.nativeSampleRate} Hz`];
+      const handleNative = (ev: any) => routeNativeBridgeEvent(ev?.data ?? ev, cbs);
       juceBackend?.addEventListener?.('onNativeTelemetry', handleNative);
       (window as any).chrome?.webview?.addEventListener?.('message', handleNative);
     } else {
       this.wasm = new BridgeWasm();
+      this.wasm.onStatus((s, d) => { this.lastStatus = [s, d]; this.statusCbs.forEach((cb) => cb(s, d)); });
       this.wasm.onTelemetry((t) => this.telemetryCb?.(t));
       this.wasm.onPartEngineState((dto) => this.partEngineStateCb?.(dto));
       this.wasm.onSongScenesState((json) => this.songScenesStateCb?.(json));
+      this.wasm.onWorkletEvent((msg) => routeWasmWorkletEvent(msg, cbs));
       this.wasm.onMidiOut((bytes) => webMidiService.sendRawBytes(bytes));
     }
   }
@@ -65,7 +79,10 @@ export class McxHostBridge {
   private dispatchNativeTelemetry(data: any): void {
     if (Number(data.sampleRate) > 1000) {
       const sr = Math.round(Number(data.sampleRate));
-      if (sr !== this.nativeSampleRate) { this.nativeSampleRate = sr; this.statusCb?.('ready', `JUCE ${sr} Hz`); }
+      if (sr !== this.nativeSampleRate) {
+        this.nativeSampleRate = sr; this.lastStatus = ['ready', `JUCE ${sr} Hz`];
+        this.statusCbs.forEach((cb) => cb('ready', `JUCE ${sr} Hz`));
+      }
     }
     this.telemetryCb?.(parseTelemetryPayload(data));
   }
@@ -77,68 +94,51 @@ export class McxHostBridge {
   public onPartPresets(cb: (dto: McxPartPresetsDto) => void): void { this.partPresetsCb = cb; }
   public onPartEngineState(cb: (dto: McxPartEngineStateDto) => void): void { this.partEngineStateCb = cb; }
   public onSongScenesState(cb: (stateJson: string) => void): void { this.songScenesStateCb = cb; }
-  public onAudioStatus(cb: (s: 'idle' | 'loading' | 'ready' | 'error', detail?: string) => void): void {
-    this.statusCb = cb; if (this.isNative) cb('ready', `JUCE ${this.nativeSampleRate} Hz`); else this.wasm?.onStatus(cb);
-  }
-  public onBankLoaded(cb: (ok: boolean, sizeBytes: number) => void): void {
-    this.bankLoadedCb = cb; if (!this.isNative) this.wasm?.onBankLoaded(cb);
-  }
-  public async enableAudio(): Promise<boolean> {
-    void webMidiService.init();
-    return this.isNative ? true : ((await this.wasm?.initAudio()) ?? false);
-  }
-  public sendCommand(nativeMsg: Record<string, unknown>, wasmMsg: Record<string, unknown>): void {
-    if (this.isNative) this.postNative(nativeMsg); else this.wasm?.post(wasmMsg);
-  }
+  public onSessionState(cb: (dto: McxSessionStateDto) => void): void { this.sessionStateCb = cb; }
+  public onLibraryCatalog(cb: (catalogJson: string) => void): void { this.libraryCatalogCb = cb; }
+  public onRackState(cb: (rackJson: string) => void): void { this.rackStateCb = cb; }
+  public onAudioStatus(cb: AudioStatusCb): void { this.statusCbs.add(cb); if (this.lastStatus) cb(this.lastStatus[0], this.lastStatus[1]); }
+  public onBankLoaded(cb: (ok: boolean, sizeBytes: number) => void): void { this.bankLoadedCb = cb; if (!this.isNative) this.wasm?.onBankLoaded(cb); }
+  public async enableAudio(): Promise<boolean> { void webMidiService.init(); return this.isNative ? true : ((await this.wasm?.initAudio()) ?? false); }
+  public sendCommand(nativeMsg: Record<string, unknown>, wasmMsg: Record<string, unknown>): void { if (this.isNative) this.postNative(nativeMsg); else this.wasm?.post(wasmMsg); }
   public noteOn(part: number, note: number, velocity = 0.85): void { this.isNative ? this.postNative({ type: 'noteOn', part, note, velocity }) : this.wasm?.noteOn(part, note, velocity); }
   public noteOff(part: number, note: number): void { this.isNative ? this.postNative({ type: 'noteOff', part, note }) : this.wasm?.noteOff(part, note); }
   public allNotesOff(): void { this.isNative ? this.postNative({ type: 'allNotesOff' }) : this.wasm?.allNotesOff(); }
   public setParam(part: number, key: McxParamKey, value: number): void {
-    const paramId = WASM_PARAM_ID[key];
-    if (paramId === undefined) return;
-    if (this.isNative) this.postNative({ type: 'setParam', part, id: key, paramId, value });
-    else this.wasm?.setPartParam(part, paramId, value);
+    const paramId = WASM_PARAM_ID[key]; if (paramId === undefined) return;
+    if (this.isNative) this.postNative({ type: 'setParam', part, id: key, paramId, value }); else this.wasm?.setPartParam(part, paramId, value);
   }
   public setTempo(bpm: number): void { this.isNative ? this.postNative({ type: 'setTempo', bpm }) : this.wasm?.setTempo(bpm); }
   public setMasterVolume(volume: number): void { this.isNative ? this.postNative({ type: 'setMasterVolume', volume }) : this.wasm?.setMasterVolume(volume); }
-  public loadBankBuffer(buffer: ArrayBuffer): void {
-    if (this.isNative) this.postNative({ type: 'loadBankBase64', base64: arrayBufferToBase64(buffer) });
-    else this.wasm?.loadBankBuffer(buffer);
-  }
+  public loadBankBuffer(buffer: ArrayBuffer): void { if (this.isNative) this.postNative({ type: 'loadBankBase64', base64: arrayBufferToBase64(buffer) }); else this.wasm?.loadBankBuffer(buffer); }
   public resetToFactory(): void { this.isNative ? this.postNative({ type: 'resetToFactory' }) : this.wasm?.resetToFactory(); }
-  public setTransportPlaying(playing: boolean, resetOnStop = true): void {
-    if (this.isNative) this.postNative({ type: 'setTransport', playing, reset: resetOnStop });
-    else this.wasm?.setTransportPlaying(playing, resetOnStop);
-  }
-  public setSequencerBars(bars: number): void {
-    if (this.isNative) this.postNative({ type: 'setSequencerBars', bars });
-    else this.wasm?.setSequencerBars(bars);
-  }
-  public setGroove(part: number, cfg: { mode: string; algorithm: string; resolution: string; amount: number }): void {
-    if (this.isNative) this.postNative({ type: 'setGroove', part, ...cfg });
-    else this.wasm?.setGroove(part, cfg);
-  }
-  public setPartPattern(part: number, seq: { bars?: number; ppq?: number; notes?: any[]; motion?: Record<string, any[]> }): void {
-    if (this.isNative) this.postNative({ type: 'setPattern', part, bars: seq.bars ?? 1, ppq: seq.ppq ?? 96, notes: seq.notes ?? [], motion: seq.motion ?? {} });
-    else this.wasm?.setPartPattern(part, seq);
-  }
-  public requestEngineCatalog(): void { if (this.isNative) this.postNative({ type: 'getEngineCatalog' }); }
-  public requestPartPresets(part: number): void { if (this.isNative) this.postNative({ type: 'getPartPresets', part }); }
-  public selectPartEngineType(part: number, typeIndex: number): void {
-    if (this.isNative) this.postNative({ type: 'setPartEngine', part, typeIndex });
-    else this.wasm?.selectPartEngineType(part, typeIndex);
-  }
-  public loadFactoryPreset(part: number, presetIndex: number): void {
-    if (this.isNative) this.postNative({ type: 'loadFactoryPreset', part, presetIndex });
-    else this.wasm?.loadFactoryPreset(part, presetIndex);
-  }
-  public setEngineParam(part: number, key: string, value: number): void {
-    if (this.isNative) this.postNative({ type: 'setPartEngineParam', part, key, value });
-    else this.wasm?.setPartEngineParam(part, key, value);
-  }
+  public setTransportPlaying(playing: boolean, resetOnStop = true): void { if (this.isNative) this.postNative({ type: 'setTransport', playing, reset: resetOnStop }); else this.wasm?.setTransportPlaying(playing, resetOnStop); }
+  public setSequencerBars(bars: number): void { this.sendCommand({ type: 'setSequencerBars', bars }, { type: 'SET_SEQ_BARS', bars }); }
+  public setSequencerLoop(loop: boolean): void { this.sendCommand({ type: 'setSeqLoop', loop }, { type: 'SET_SEQ_LOOP', loop }); }
+  public setGroove(part: number, cfg: { mode: string; algorithm: string; resolution: string; amount: number }): void { if (this.isNative) this.postNative({ type: 'setGroove', part, ...cfg }); else this.wasm?.setGroove(part, cfg); }
+  public setPartPattern(part: number, seq: { bars?: number; ppq?: number; notes?: any[]; motion?: Record<string, any[]> }): void { if (this.isNative) this.postNative({ type: 'setPattern', part, bars: seq.bars ?? 1, ppq: seq.ppq ?? 96, notes: seq.notes ?? [], motion: seq.motion ?? {} }); else this.wasm?.setPartPattern(part, seq); }
+  public requestEngineCatalog(): void { this.sendCommand({ type: 'getEngineCatalog' }, { type: 'GET_ENGINE_CATALOG' }); }
+  public requestPartPresets(part: number): void { this.sendCommand({ type: 'getPartPresets', part }, { type: 'GET_PART_PRESETS', part }); }
+  public requestSessionState(): void { if (this.isNative) this.postNative({ type: 'getSessionState' }); }
+  public requestLibraryCatalog(): void { if (this.isNative) this.postNative({ type: 'getLibraryCatalog' }); }
+  public requestRackState(): void { if (!this.isNative) this.wasm?.post({ type: 'GET_RACK_STATE' }); }
+  public selectPartEngineType(part: number, typeIndex: number): void { this.isNative ? this.postNative({ type: 'setPartEngine', part, typeIndex }) : this.wasm?.selectPartEngineType(part, typeIndex); }
+  public loadFactoryPreset(part: number, presetIndex: number): void { this.isNative ? this.postNative({ type: 'loadFactoryPreset', part, presetIndex }) : this.wasm?.loadFactoryPreset(part, presetIndex); }
+  public setPartPresetName(part: number, name: string): void { this.sendCommand({ type: 'setPartPresetName', part, name }, { type: 'SET_PART_PRESET_NAME', part, name }); }
+  public setEngineParam(part: number, key: string, value: number): void { this.isNative ? this.postNative({ type: 'setPartEngineParam', part, key, value }) : this.wasm?.setPartEngineParam(part, key, value); }
   public requestPartEngineState(part: number): void { this.isNative ? this.postNative({ type: 'getPartEngineState', part }) : this.wasm?.requestPartEngineState(part); }
   public loadBankItemOnDemand(part: number, bankSlot: number, kind: 'tone' | 'drum_kit', itemIndex: number): void { this.isNative ? this.postNative({ type: 'loadBankItemOnDemand', part, bankSlot, kind, itemIndex }) : this.wasm?.loadBankItemOnDemand(part, bankSlot, kind, itemIndex); }
-  public setSendBusMute(bus: number, mute: boolean): void { if (this.isNative) this.postNative({ type: 'setSendBusMute', bus, mute }); }
+  public savePartPreset(part: number, name: string, sublibrary: string, categoryId: number): void { if (this.isNative) this.postNative({ type: 'savePartPreset', part, name, sublibrary, categoryId }); else this.setPartPresetName(part, name); }
+  public saveMultiPreset(name: string, sublibrary: string, categoryId: number): void { if (this.isNative) this.postNative({ type: 'saveMultiPreset', name, sublibrary, categoryId }); }
+  public loadCatalogItem(part: number, itemId: string, filePath = ''): void { if (this.isNative) this.postNative({ type: 'loadCatalogItem', part, itemId, filePath }); }
+  public setSendBusMute(bus: number, mute: boolean): void { this.sendCommand({ type: 'setSendBusMute', bus, mute }, { type: 'SET_SEND_BUS_MUTE', bus, mute }); }
+  public setFxTopology(topology: number): void { this.sendCommand({ type: 'setFxTopology', topology }, { type: 'SET_FX_TOPOLOGY', topology }); }
+  public setFxCascade(cho: number, del: number): void { this.sendCommand({ type: 'setFxCascade', cho, del }, { type: 'SET_FX_CASCADE', cho, del }); }
+  public setFxGate(gate: number, value: number): void { this.sendCommand({ type: 'setFxGate', gate, value }, { type: 'SET_FX_GATE', gate, value }); }
+  public setFxTempoSync(enabled: boolean): void { this.sendCommand({ type: 'setFxTempoSync', enabled }, { type: 'SET_FX_TEMPO_SYNC', enabled }); }
+  public setLimiterEnabled(enabled: boolean): void { this.sendCommand({ type: 'setLimiterEnabled', enabled }, { type: 'SET_LIMITER_ENABLED', enabled }); }
+  public setLimiterCeilingDb(db: number): void { this.sendCommand({ type: 'setLimiterCeilingDb', db }, { type: 'SET_LIMITER_CEILING', db }); }
+  public setDuckMode(kind: 0 | 1 | 2, enabled: boolean): void { this.sendCommand({ type: 'setDuckMode', kind, enabled }, { type: 'SET_DUCK_MODE', kind, enabled }); }
   public setRackSlotEngine(slot: number, engine: number, name = ''): void { this.sendCommand({ type: 'setRackSlot', slot, engine, name }, { type: 'SET_RACK_SLOT', slot, engine, name }); }
   public setRackSlotName(slot: number, name: string): void { this.sendCommand({ type: 'setRackSlotName', slot, name }, { type: 'SET_RACK_NAME', slot, name }); }
   public removeRackSlot(slot: number): void { this.sendCommand({ type: 'removeRackSlot', slot }, { type: 'REMOVE_RACK_SLOT', slot }); }
@@ -152,13 +152,7 @@ export class McxHostBridge {
   public setSendSlotTarget(bus: number, slot: number): void { this.sendCommand({ type: 'setSendSlotTarget', bus, slot }, { type: 'SET_SEND_SLOT_TARGET', bus, slot }); }
   public setSlotChainTarget(slot: number, target: number): void { this.sendCommand({ type: 'setSlotChainTarget', slot, target }, { type: 'SET_SLOT_CHAIN_TARGET', slot, target }); }
 
-  public loadLocalSettingsFallback(): McxSystemSettingsDto {
-    try {
-      const raw = localStorage.getItem(STORAGE_SETTINGS);
-      if (raw) return { workingDirectory: '', maxPolyphony: 64, masterTuneHz: 440, standaloneBpm: 120, ...JSON.parse(raw) };
-    } catch { /* ignore */ }
-    return { workingDirectory: '', maxPolyphony: 64, masterTuneHz: 440, standaloneBpm: 120 };
-  }
+  public loadLocalSettingsFallback(): McxSystemSettingsDto { return readLocalSettingsJson(STORAGE_SETTINGS); }
   public updateSystemSettings(next: McxSystemSettingsDto): void {
     try { localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(next)); } catch { /* ignore */ }
     this.setParam(0, 'globalMaxPolyphony', next.maxPolyphony);
@@ -167,12 +161,7 @@ export class McxHostBridge {
     if (this.isNative) this.postNative({ type: 'updateSystemSettings', ...next });
   }
   public chooseWorkingDir(): void { if (this.isNative) this.postNative({ type: 'chooseWorkingDir' }); }
-  public notifyReady(): void {
-    if (this.isNative) {
-      this.postNative({ type: 'uiReady' });
-      (window as any).__JUCE__?.backend?.emitEvent?.('pageLoaded', {});
-    }
-  }
+  public notifyReady(): void { if (this.isNative) { this.postNative({ type: 'uiReady' }); (window as any).__JUCE__?.backend?.emitEvent?.('pageLoaded', {}); } }
   private postNative(msg: Record<string, unknown>): void {
     const juceBackend = (window as any).__JUCE__?.backend;
     if (juceBackend?.emitEvent) juceBackend.emitEvent('mcxEvent', msg);

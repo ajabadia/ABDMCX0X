@@ -99,7 +99,16 @@ public:
     void setAccentAmount(float accent01) noexcept;
     [[nodiscard]] float getAccentAmount() const noexcept { return accentAmount_; }
 
+    void setPartPresetName(int partIndex, const char* name) noexcept;
+    [[nodiscard]] const char* getPartDisplayPresetName(int partIndex) const noexcept;
+    void setFxGate(int gateIdx, bool active) noexcept;
+    [[nodiscard]] bool getFxGate(int gateIdx) const noexcept;
+    void setFxTempoSync(bool enabled) noexcept { fxTempoSync_ = enabled; }
+    [[nodiscard]] bool isFxTempoSync() const noexcept { return fxTempoSync_; }
+    [[nodiscard]] float getFocusedLfoValue(int lfoIdx01) const noexcept;
+
     void setMasterVolume(float gain) noexcept;
+    [[nodiscard]] float getMasterVolume() const noexcept { return masterGain_; }
     void setFxMix(float chorusMix, float delayMix, float reverbMix) noexcept;
 
     void setOutputCharacter(McxOutputCharacter character) noexcept;
@@ -206,6 +215,7 @@ private:
     void dispatchNoteOffToOutputs(int partIdx, int note, std::int32_t sampleOffset) noexcept;
     void emitExternalNoteOn(int partIdx, const McxPartState& p, int note, float velocity, std::int32_t sampleOffset) noexcept;
     void emitExternalNoteOff(int partIdx, const McxPartState& p, int note, std::int32_t sampleOffset) noexcept;
+    void advanceFocusedLfoTelemetry(int numSamples) noexcept;
 
     double sampleRate_ { 44100.0 };
     bool prepared_ { false };
@@ -245,6 +255,11 @@ private:
     bool audioDuckEnabled_ { true };
     bool midiDuckEnabled_ { true };
     bool manualDuckGate_ { false };
+    bool fxTempoSync_ { true };
+    std::array<bool, 4> fxGates_ { false, false, false, false };
+    std::array<float, 2> lfoPhase01_ { 0.0f, 0.0f };
+    std::array<float, 2> lfoValueBipolar_ { 0.0f, 0.0f };
+    std::uint32_t lfoRng_ { 0x12345678u };
     double prevHostPpqPos_ { -1.0 };
     bool prevHostPlaying_ { false };
 

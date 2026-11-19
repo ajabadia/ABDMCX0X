@@ -112,6 +112,8 @@ extern "C"
     WASM_EXPORT int setPartEngineParamByKey(int partIdx, const char* key, float value);
     WASM_EXPORT float getPartEngineParamByKey(int partIdx, const char* key);
     WASM_EXPORT const char* getPartEngineStateJson(int partIdx);
+    WASM_EXPORT const char* getRegisteredEngineCatalogJson();
+    WASM_EXPORT const char* getPartPresetsJson(int partIdx);
 
     /** Selective multi-bank on-demand archive indexing, loading & deferred wave GC. */
     WASM_EXPORT int indexBankFromMemory(const uint8_t* data, int sizeBytes);
@@ -154,4 +156,15 @@ extern "C"
     WASM_EXPORT void setSlotChainTarget(int slotIdx, int targetSlotIdx);
     WASM_EXPORT int getSlotChainTarget(int slotIdx);
     WASM_EXPORT void getAllRackSlotsTelemetry(float* outPeaks16, int* outFlags16);
+    WASM_EXPORT void setSendBusMute(int busIdx, int muted);
+    WASM_EXPORT void setFxTopology(int uiTopo);
+    WASM_EXPORT void setFxCascade(float choToRev, float delToRev);
+    WASM_EXPORT void setFxGate(int gateIdx, int active);
+    WASM_EXPORT void setFxTempoSync(int enabled);
+    WASM_EXPORT void setLimiterEnabled(int enabled);
+    WASM_EXPORT void setLimiterCeilingDb(float db);
+    WASM_EXPORT void setDuckMode(int kind, int enabled);
+    WASM_EXPORT void setSequencerLoop(int loop);
+    WASM_EXPORT void setPartPresetName(int partIdx, const char* name);
+    WASM_EXPORT void getMasterFxTelemetry(float* out7Floats, int* out4Mutes);
 }

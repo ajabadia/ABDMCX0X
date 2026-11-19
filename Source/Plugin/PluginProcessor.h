@@ -11,6 +11,7 @@
 #include "../Hardware/McxHardwareBridge.h"
 #include "../Core/McxBankManagerBridge.h"
 #include "../Core/McxCommandQueue.h"
+#include "../Core/McxLibraryService.h"
 #include "../Core/McxMultiBankManager.h"
 #include "../Core/McxSystemSettings.h"
 #include "../State/ParameterRegistry.gen.h"
@@ -71,8 +72,12 @@ public:
     void enqueueUiCommand(const McxUiCommand& cmd) { uiCommandQueue_.push(cmd); }
     void markSongStateDirty() noexcept { pendingSongStateDirty_.store(true, std::memory_order_release); }
     [[nodiscard]] bool consumeSongStateDirty() noexcept { return pendingSongStateDirty_.exchange(false, std::memory_order_acq_rel); }
+    void markSessionStateDirty() noexcept { pendingSessionStateDirty_.store(true, std::memory_order_release); }
+    [[nodiscard]] bool consumeSessionStateDirty() noexcept { return pendingSessionStateDirty_.exchange(false, std::memory_order_acq_rel); }
     void markEngineStateDirty(int partIdx) noexcept;
     [[nodiscard]] std::uint16_t consumePendingEngineStateMask() noexcept { return pendingEngineStateMask_.exchange(0, std::memory_order_acq_rel); }
+    [[nodiscard]] McxLibraryService& libraryService() noexcept { return libraryService_; }
+    [[nodiscard]] const juce::CriticalSection& engineLock() const noexcept { return engineMutex_; }
     std::size_t collectUnusedWaves() noexcept;
     int mountBankFromMemory(const std::uint8_t* data, std::size_t sizeBytes, const std::string& bankId = {});
     int mountBankFromFile(const std::string& filePath);
@@ -96,10 +101,12 @@ private:
     McxEngine engine_;
     McxHardwareBridge hardwareBridge_;
     McxMultiBankManager multiBankManager_;
+    McxLibraryService libraryService_{};
     McxSystemSettings settings_{};
     McxCommandQueue<1024> uiCommandQueue_;
     std::atomic<std::uint16_t> pendingEngineStateMask_{0};
     std::atomic<bool> pendingSongStateDirty_{false};
+    std::atomic<bool> pendingSessionStateDirty_{false};
     mutable juce::CriticalSection engineMutex_{};
 
     std::atomic<uint32_t> focusedPartIndex_{0};

@@ -178,10 +178,18 @@ export function renderMixerConsole(container: HTMLElement, cb: McxMixerCallbacks
     fader?.addEventListener('input', () => {
       const v = parseFloat(fader.value);
       if (lvlVal) lvlVal.textContent = `${Math.round(v * 100)}%`;
-      ps.partLevel = v; bridge?.setParam(i, 'partLevel', v); cb.onChangeLevel?.(i, v);
+      ps.partLevel = v; if (cb.onChangeLevel) cb.onChangeLevel(i, v); else bridge?.setParam(i, 'partLevel', v);
       cb.setLcdLine2(`P${String(i + 1).padStart(2, '0')} LEVEL: ${Math.round(v * 100)}%`);
     });
 
     container.appendChild(strip);
   }
+}
+
+export function updatePartFaderDom(container: HTMLElement, partIdx: number, lvl: number): void {
+  const strip = container.querySelectorAll('.mcx-strip')[partIdx];
+  if (!strip) return;
+  const fader = strip.querySelector<HTMLInputElement>('.mcx-strip-fader'), val = strip.querySelector('.mcx-strip-lvl-val');
+  if (fader) fader.value = String(lvl);
+  if (val) val.textContent = `${Math.round(lvl * 100)}%`;
 }

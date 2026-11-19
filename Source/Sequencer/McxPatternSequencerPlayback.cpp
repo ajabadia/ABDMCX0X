@@ -150,6 +150,12 @@ void McxPatternSequencer::stepSingleTick(const McxSequencerCallbacks& cbs, std::
         }
     }
 
+    if (!loopEnabled_.load(std::memory_order_relaxed) && (tick + 1) >= totalTicks)
+    {
+        stop(cbs, sampleOffset);
+        return;
+    }
+
     currentTick_ = (tick + 1) % totalTicks;
     const int ticksPerBar = std::max(1, 4 * ppq);
     if ((currentTick_ % ticksPerBar) == 0)

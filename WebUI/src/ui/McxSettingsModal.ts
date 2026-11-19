@@ -7,15 +7,23 @@ import { attachDialogDrag } from '@abdsynths/shared/diagnostic-probe/DiagnosticP
 import type { McxHostBridge, McxSystemSettingsDto } from '../bridge/McxHostBridge';
 import { t } from '../i18n/mcxI18n';
 
+const SCALE_NAMES = [
+  'Off (Chromatic)', 'Major', 'Minor Natural', 'Minor Harmonic', 'Minor Melodic',
+  'Dorian', 'Phrygian', 'Lydian', 'Mixolydian', 'Locrian',
+  'Pentatonic Major', 'Pentatonic Minor', 'Blues', 'Whole Tone', 'Diminished',
+];
+
 export interface SettingsModalCallbacks {
   bridge: McxHostBridge;
   onSettingsApplied: (settings: McxSystemSettingsDto) => void;
+  onGlobalTransposeChange?: (st: number) => void;
 }
 
 export class McxSettingsModal {
   private dialog: HTMLDialogElement;
   private cb: SettingsModalCallbacks;
   private state: McxSystemSettingsDto;
+  private globalTranspose = 0; private scaleRoot = 0; private scaleType = 0;
 
   constructor(cb: SettingsModalCallbacks) {
     this.cb = cb;
@@ -31,6 +39,14 @@ export class McxSettingsModal {
   }
 
   public getState(): McxSystemSettingsDto { return { ...this.state }; }
+
+  public syncGlobalTranspose(st: number): void {
+    this.globalTranspose = Math.max(-24, Math.min(24, Math.round(st)));
+    const lbl = this.dialog.querySelector('#val-trans');
+    const transIn = this.dialog.querySelector('#set-trans') as HTMLInputElement | null;
+    if (lbl) lbl.textContent = `${this.globalTranspose > 0 ? '+' : ''}${this.globalTranspose} st`;
+    if (transIn) transIn.value = String(this.globalTranspose);
+  }
 
   public syncFromHost(next: McxSystemSettingsDto): void {
     this.state = { ...this.state, ...next };
@@ -97,32 +113,17 @@ export class McxSettingsModal {
           </label>
 
           <label class="mcx-settings-field">
-            <span class="abd-probe-section-label">GLOBAL TRANSPOSE (<strong id="val-trans">0 st</strong>)</span>
-            <input type="range" id="set-trans" min="-24" max="24" step="1" value="0" />
+            <span class="abd-probe-section-label">GLOBAL TRANSPOSE (<strong id="val-trans">${this.globalTranspose > 0 ? '+' : ''}${this.globalTranspose} st</strong>)</span>
+            <input type="range" id="set-trans" min="-24" max="24" step="1" value="${this.globalTranspose}" />
           </label>
-
           <div class="mcx-settings-field">
             <span class="abd-probe-section-label">MUSICAL SCALE QUANTIZE</span>
             <div class="mcx-settings-row">
               <select class="mcx-select" id="set-scale-root" style="width: 70px;">
-                ${['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'].map((n, idx) => `<option value="${idx}">${n}</option>`).join('')}
+                ${['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'].map((n, idx) => `<option value="${idx}"${idx === this.scaleRoot ? ' selected' : ''}>${n}</option>`).join('')}
               </select>
               <select class="mcx-select" id="set-scale-type" style="flex: 1;">
-                <option value="0">Off (Chromatic)</option>
-                <option value="1">Major</option>
-                <option value="2">Minor Natural</option>
-                <option value="3">Minor Harmonic</option>
-                <option value="4">Minor Melodic</option>
-                <option value="5">Dorian</option>
-                <option value="6">Phrygian</option>
-                <option value="7">Lydian</option>
-                <option value="8">Mixolydian</option>
-                <option value="9">Locrian</option>
-                <option value="10">Pentatonic Major</option>
-                <option value="11">Pentatonic Minor</option>
-                <option value="12">Blues</option>
-                <option value="13">Whole Tone</option>
-                <option value="14">Diminished</option>
+                ${SCALE_NAMES.map((name, idx) => `<option value="${idx}"${idx === this.scaleType ? ' selected' : ''}>${name}</option>`).join('')}
               </select>
             </div>
           </div>
@@ -176,22 +177,22 @@ export class McxSettingsModal {
 
     const transIn = this.dialog.querySelector('#set-trans') as HTMLInputElement | null;
     transIn?.addEventListener('input', () => {
-      const val = parseInt(transIn.value, 10);
+      this.globalTranspose = parseInt(transIn.value, 10);
       const lbl = this.dialog.querySelector('#val-trans');
-      if (lbl) lbl.textContent = `${val > 0 ? '+' : ''}${val} st`;
-      this.cb.bridge.setParam(0, 'globalTranspose', val);
+      if (lbl) lbl.textContent = `${this.globalTranspose > 0 ? '+' : ''}${this.globalTranspose} st`;
+      this.cb.bridge.setParam(0, 'globalTranspose', this.globalTranspose);
+      this.cb.onGlobalTransposeChange?.(this.globalTranspose);
     });
-
     const scaleRoot = this.dialog.querySelector('#set-scale-root') as HTMLSelectElement | null;
     scaleRoot?.addEventListener('change', () => {
-      this.cb.bridge.setParam(0, 'globalScaleRoot', parseInt(scaleRoot.value, 10));
+      this.scaleRoot = parseInt(scaleRoot.value, 10);
+      this.cb.bridge.setParam(0, 'globalScaleRoot', this.scaleRoot);
     });
-
     const scaleType = this.dialog.querySelector('#set-scale-type') as HTMLSelectElement | null;
     scaleType?.addEventListener('change', () => {
-      const scaleVal = parseInt(scaleType.value, 10);
-      this.cb.bridge.setParam(0, 'globalScale', scaleVal);
-      this.cb.bridge.setParam(0, 'globalScaleQuantize', scaleVal > 0 ? 1 : 0);
+      this.scaleType = parseInt(scaleType.value, 10);
+      this.cb.bridge.setParam(0, 'globalScale', this.scaleType);
+      this.cb.bridge.setParam(0, 'globalScaleQuantize', this.scaleType > 0 ? 1 : 0);
     });
   }
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "McxSessionStateBuilder.h"
 #include <WebView2Bridge/JuceWebView2Component.h>
 #include <juce_core/juce_core.h>
 
@@ -134,6 +135,36 @@ inline bool handleEngineAndBankJsEvent(McxAudioProcessor& proc,
         reply->setProperty("part", part);
         reply->setProperty("ok", ok);
         if (web != nullptr) web->emitEventIfBrowserIsVisible("onNativeTelemetry", juce::var(reply.get()));
+        if (ok && web != nullptr) web->emitEventIfBrowserIsVisible("onNativeTelemetry", buildPartEngineStatePayload(proc.engine(), part));
+        return true;
+    }
+    if (type == "getSessionState")
+    {
+        const juce::ScopedLock sl(proc.engineLock());
+        if (web != nullptr) web->emitEventIfBrowserIsVisible("onNativeTelemetry", buildSessionStatePayload(proc.engine()));
+        return true;
+    }
+    if (type == "getLibraryCatalog")
+    {
+        if (web != nullptr) web->emitEventIfBrowserIsVisible("onNativeTelemetry", buildLibraryCatalogPayload(proc.libraryService()));
+        return true;
+    }
+    if (type == "savePartPreset")
+    {
+        (void)savePartPresetToDisk(proc, obj);
+        if (web != nullptr) web->emitEventIfBrowserIsVisible("onNativeTelemetry", buildLibraryCatalogPayload(proc.libraryService()));
+        return true;
+    }
+    if (type == "saveMultiPreset")
+    {
+        (void)saveMultiPresetToDisk(proc, obj);
+        if (web != nullptr) web->emitEventIfBrowserIsVisible("onNativeTelemetry", buildLibraryCatalogPayload(proc.libraryService()));
+        return true;
+    }
+    if (type == "loadCatalogItem")
+    {
+        const int part = static_cast<int>(obj.getProperty("part"));
+        const bool ok = loadCatalogItemFromDisk(proc, part, obj.getProperty("itemId").toString(), obj.getProperty("filePath").toString());
         if (ok && web != nullptr) web->emitEventIfBrowserIsVisible("onNativeTelemetry", buildPartEngineStatePayload(proc.engine(), part));
         return true;
     }

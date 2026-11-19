@@ -25,6 +25,7 @@ inline juce::var buildTelemetryPayload(const McxTelemetrySnapshot& snap)
     payload->setProperty("focusedPart", snap.focusedPart);
     payload->setProperty("sampleRate", snap.sampleRate);
     payload->setProperty("lfoPhase", snap.lfoPhase);
+    payload->setProperty("lfo2Phase", snap.lfo2Phase);
     payload->setProperty("seqPlaying", snap.seqPlaying);
     payload->setProperty("seqTick", snap.seqTick);
     payload->setProperty("seqStep", snap.seqStep);

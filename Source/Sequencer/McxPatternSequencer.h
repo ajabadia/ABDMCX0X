@@ -66,6 +66,8 @@ public:
     [[nodiscard]] int getPpq() const noexcept { return ppq_.load(std::memory_order_relaxed); }
     void setRecording(bool rec) noexcept { recording_.store(rec, std::memory_order_relaxed); }
     [[nodiscard]] bool isRecording() const noexcept { return recording_.load(std::memory_order_relaxed); }
+    void setLoopEnabled(bool loop) noexcept { loopEnabled_.store(loop, std::memory_order_relaxed); }
+    [[nodiscard]] bool isLoopEnabled() const noexcept { return loopEnabled_.load(std::memory_order_relaxed); }
 
     // Musical swing 0.50..0.75 maps cleanly to GrooveShuffleEngine 0.0..1.0 amount
     void setPartSwing50to75(int partIdx, float swing50to75) noexcept;
@@ -125,6 +127,7 @@ private:
     std::atomic<int> bars_ { 1 };
     std::atomic<int> ppq_ { kDefaultPpq };
     std::atomic<bool> recording_ { false };
+    std::atomic<bool> loopEnabled_ { true };
     std::atomic<bool> publishedRunning_ { false };
     std::atomic<int> publishedTick_ { 0 };
     std::atomic<int> publishedStep_ { 0 };

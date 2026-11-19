@@ -29,52 +29,43 @@ import { McxMasterPanel } from './ui/McxMasterPanel'; import { McxRackColumn } f
 import { McxAppState } from './app/McxAppState'; import { bindGlobalShortcuts, bindTelemetry, mountKeyboardDock } from './app/McxInputAndTelemetry';
 import { buildProbeDestinations, createBankDrawer, createProbeModal, createStudioModals, openSavePresetModal } from './app/McxModalsFactory';
 import { createMidiModals } from './app/McxMidiModalsFactory';
+import { hydrateSessionState, parseLibraryCatalogJson } from './app/McxSessionHydrator';
 import { mountMultiEngineUi } from './app/McxMultiEngineWiring'; import { mountSongAndScenesUi } from './app/McxSongWiring';
 
 const bridge = new McxHostBridge(), themeMgr = new ThemeManager(), state = new McxAppState(bridge);
 
 function initApp(): void {
-  applyI18n(document.body);
-  state.syncOctaveTooltips();
-
+  applyI18n(document.body); state.syncOctaveTooltips();
   const byId = (id: string) => document.getElementById(id);
   const probeModal = createProbeModal(bridge, state);
   const settingsModal = new McxSettingsModal({
-    bridge,
-    onSettingsApplied: (s) => { state.globalSettings = s; state.updateLcdLine1(0); },
+    bridge, onSettingsApplied: (s) => { state.globalSettings = s; state.updateLcdLine1(0); },
+    onGlobalTransposeChange: (st) => state.refs.globalDrawer?.setGlobalTranspose(st),
   });
-  const bankDrawer = createBankDrawer(bridge, state);
-  const modals = createStudioModals(bridge, state);
-  const midiModals = createMidiModals(bridge, state);
-  state.refs = { ...state.refs, bankDrawer, ...modals, ...midiModals };
-
-  const fileInput = byId('bank-file-input') as HTMLInputElement | null;
-  const navHost = byId('mcx-navbar-host');
+  const bankDrawer = createBankDrawer(bridge, state), modals = createStudioModals(bridge, state), midiModals = createMidiModals(bridge, state);
+  const globalDrawer = new McxGlobalDrawer({
+    hostEl: document.body, bridge, setLcdLine2: state.setLcdLine2,
+    onClose: () => byId('mcx-global-btn')?.classList.remove('is-active'), onOpenFxRack: () => modals.fxRackModal.toggle(),
+    onMasterVolumeChange: (v) => state.refs.masterPanel?.setVolume(v), onGlobalTransposeChange: (st) => settingsModal.syncGlobalTranspose(st),
+  });
+  state.refs = { ...state.refs, bankDrawer, settingsModal, globalDrawer, ...modals, ...midiModals };
+  const fileInput = byId('bank-file-input') as HTMLInputElement | null, navHost = byId('mcx-navbar-host');
   const navbar = navHost ? new McxNavbar(navHost, {
     themeMgr,
     onConfigureFolder: () => (bridge.isNative ? bridge.chooseWorkingDir() : settingsModal.open()),
     onOpenSettings: () => settingsModal.toggle(),
     onOpenBankManager: () => bankDrawer.toggle(state.focusedPart),
-    onSavePartPreset: () => openSavePresetModal(state, 'part'),
-    onSaveMultiPreset: () => openSavePresetModal(state, 'multi'),
+    onSavePartPreset: () => openSavePresetModal(bridge, state, 'part'),
+    onSaveMultiPreset: () => openSavePresetModal(bridge, state, 'multi'),
     onLoadBank: () => fileInput?.click(),
     onFactoryReset: () => { bridge.resetToFactory(); bridge.requestPartEngineState(state.focusedPart); bridge.requestPartPresets(state.focusedPart); state.setLcdLine2(t('mcx.factoryReset')); },
     onPanic: () => { bridge.allNotesOff(); state.setLcdLine2(t('mcx.allNotesOff')); },
     onEnableAudio: () => { void bridge.enableAudio(); },
-    onToggleProbe: () => probeModal?.toggle({
-      theme: document.documentElement.getAttribute('data-theme'), locale: getLocale(),
-      sampleRate: bridge.getSampleRate(), frequencyHz: state.globalSettings.masterTuneHz || 440,
-    }),
+    onToggleProbe: () => probeModal?.toggle({ theme: document.documentElement.getAttribute('data-theme'), locale: getLocale(), sampleRate: bridge.getSampleRate(), frequencyHz: state.globalSettings.masterTuneHz || 440 }),
     onOpenFxRack: () => modals.fxRackModal.toggle(), onOpenGlobalLfo: () => modals.globalLfoModal.toggle(),
     onOpenPianoRoll: () => { state.syncPianoRollForPart(state.focusedPart); modals.pianoRollModal.toggle(); },
     onOpenGroove: () => modals.grooveModal.open(-1), onOpenSong: () => state.refs.toggleSongDrawer?.(),
   }) : null;
-
-  const globalDrawer = new McxGlobalDrawer({
-    hostEl: document.body, bridge, setLcdLine2: state.setLcdLine2,
-    onClose: () => byId('mcx-global-btn')?.classList.remove('is-active'), onOpenFxRack: () => modals.fxRackModal.toggle(),
-  });
-
   const dropZone = byId('mcx-workspace') || document.body;
   if (fileInput) wireBankDropZone(dropZone, fileInput, bridge, state.setLcdLine2);
   const scopeCanvas = byId('mcx-scope-canvas') as HTMLCanvasElement | null;
@@ -93,9 +84,8 @@ function initApp(): void {
       onOpenPianoRoll: (idx) => panelCbs.onOpenPianoRollForPart?.(idx),
       onOpenGroove: (idx) => modals.grooveModal.open(idx),
       onOpenSynth: (idx) => state.refs.synthModal?.open(idx),
-      onOpenArp: (idx) => midiModals.arpModal.toggle(idx),
-      onOpenPads: (idx) => midiModals.padModal.toggle(idx),
-      onPartChanged: () => { state.refreshPartList(); state.updateLcdLine1(0); },
+      onOpenArp: (idx) => midiModals.arpModal.toggle(idx), onOpenPads: (idx) => midiModals.padModal.toggle(idx),
+      onPartChanged: () => state.notifyPartMetadataChanged(state.focusedPart),
     });
   }
 
@@ -143,10 +133,12 @@ function initApp(): void {
   if (masterHost) {
     state.refs.masterPanel = new McxMasterPanel(masterHost, {
       bridge, setLcdLine2: state.setLcdLine2, initialVolume: 0.85, initialBpm: state.globalSettings.standaloneBpm,
+      getFocusedPart: () => state.focusedPart, onVolumeChange: (v) => globalDrawer.setMasterVolume(v),
+      onLimiterChange: (en) => modals.fxRackModal.setLimiterEnabled(en),
       onOpenGlobal: () => { globalDrawer.toggle(); byId('mcx-global-btn')?.classList.toggle('is-active', globalDrawer.isOpen()); },
       onOpenFxRack: () => modals.fxRackModal.toggle(), onOpenGlobalLfo: () => modals.globalLfoModal.toggle(),
       onOpenGroove: (partIdx?: number) => modals.grooveModal.open(partIdx ?? -1), onOpenSong: () => state.refs.toggleSongDrawer?.(),
-      onBpmChange: (bpm) => { state.globalSettings.standaloneBpm = bpm; state.updateLcdLine1(0); state.refs.stepStrip?.setTransportRunning(state.refs.masterPanel?.getTransportState()?.playing ?? false, bpm); },
+      onBpmChange: (bpm) => { state.globalSettings.standaloneBpm = bpm; state.updateLcdLine1(0); modals.fxRackModal.setBpm(bpm); modals.globalLfoModal.setBpm(bpm); state.refs.stepStrip?.setTransportRunning(state.refs.masterPanel?.getTransportState()?.playing ?? false, bpm); },
       onTransportChange: (st) => { modals.pianoRollModal.setPlaying(st.playing); state.refs.stepStrip?.setTransportRunning(st.playing, st.bpm); },
     });
   }
@@ -166,11 +158,13 @@ function initApp(): void {
   }
 
   themeMgr.onChange((_f, _sc, themeId) => { probeModal?.setTheme(themeId); settingsModal.syncTheme(); scopeView?.draw(); navbar?.sync(); });
+  bridge.onSessionState((dto) => hydrateSessionState(state, dto));
+  bridge.onLibraryCatalog((json) => bankDrawer.setLibraryItems(parseLibraryCatalogJson(json)));
   bridge.onSystemSettings((s) => {
     state.globalSettings = s;
     if (s.themeFamily) themeMgr.setFamily(s.themeFamily as ThemeFamilyKey);
     settingsModal.syncFromHost(s);
-    if (s.standaloneBpm) state.refs.masterPanel?.setBpm(s.standaloneBpm);
+    if (s.standaloneBpm) { state.refs.masterPanel?.setBpm(s.standaloneBpm); modals.fxRackModal.setBpm(s.standaloneBpm); modals.globalLfoModal.setBpm(s.standaloneBpm); }
     state.updateLcdLine1(0);
   });
   bridge.onAudioStatus((status, detail) => {
@@ -188,7 +182,7 @@ function initApp(): void {
     modals.pianoRollModal.setLocale(getLocale()); modals.grooveModal.setLocale(getLocale());
     midiModals.padModal.setLocale(loc); midiModals.arpModal.setLocale(loc);
   });
-  themeMgr.apply(); bridge.updateSystemSettings(state.globalSettings); state.uploadInitialPatterns();
+  themeMgr.apply(); if (!bridge.isNative) bridge.updateSystemSettings(state.globalSettings); state.uploadInitialPatterns();
   bindGlobalShortcuts(state); mountKeyboardDock(bridge, state); bindTelemetry(bridge, state, scopeView);
   bridge.notifyReady(); document.body.classList.add('is-ready');
 }

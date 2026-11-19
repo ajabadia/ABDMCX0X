@@ -145,42 +145,26 @@ export class McxStepStrip {
     }
   }
 
-  public setPortaTime(partIdx: number, ms: number): void {
-    if (!this.partPorta[partIdx]) return;
-    this.partPorta[partIdx].timeMs = Math.max(0, Math.min(1000, ms));
-    this.bridge.setParam(partIdx, 'portaTimeMs', this.partPorta[partIdx].timeMs);
-  }
-
-  public setPortaEnabled(partIdx: number, enabled: boolean): void {
-    if (!this.partPorta[partIdx]) return;
-    this.partPorta[partIdx].enabled = enabled;
-    this.bridge.setParam(partIdx, 'portaEnabled', enabled ? 1 : 0);
-  }
-
-  public setBpm(bpm: number): void {
-    this.currentBpm = Math.max(20, Math.min(300, bpm));
-  }
-
-  public setSwing(swing: number): void {
-    this.swing = Math.max(0, Math.min(1, swing));
-  }
-
+  public setPortaTime(partIdx: number, ms: number): void { if (this.partPorta[partIdx]) { this.partPorta[partIdx].timeMs = Math.max(0, Math.min(1000, ms)); this.bridge.setParam(partIdx, 'portaTimeMs', this.partPorta[partIdx].timeMs); } }
+  public setPortaEnabled(partIdx: number, enabled: boolean): void { if (this.partPorta[partIdx]) { this.partPorta[partIdx].enabled = enabled; this.bridge.setParam(partIdx, 'portaEnabled', enabled ? 1 : 0); } }
+  public setBpm(bpm: number): void { this.currentBpm = Math.max(20, Math.min(300, bpm)); }
+  public setSwing(swing: number): void { this.swing = Math.max(0, Math.min(1, swing)); }
   public getSwing(): number { return this.swing; }
+  public setChaserStep(step: number): void { const next = step >= 0 ? (step % 16) : -1; if (next !== this.runningChaser) { this.runningChaser = next; this.strip.setChaserStep(next); } }
+  public setTransportRunning(running: boolean, bpm = this.currentBpm): void { this.isRunning = running; this.currentBpm = Math.max(20, Math.min(300, bpm)); if (!running) this.setChaserStep(-1); }
 
-  public setChaserStep(step: number): void {
-    const next = step >= 0 ? (step % 16) : -1;
-    if (next === this.runningChaser) return;
-    this.runningChaser = next;
-    this.strip.setChaserStep(next);
+  public syncFromSequence(partIdx: number, seq?: { bars?: number; ppq?: number; notes?: Array<{ startTick: number; velocity?: number; slide?: boolean }> }): void {
+    const arr = this.partSteps[partIdx]; if (!arr) return;
+    if (seq && Array.isArray(seq.notes)) {
+      const tps = Math.max(1, Math.round(((seq.ppq || 96) * 4) / 16));
+      arr.forEach((st) => { st.active = false; st.accent = false; st.slide = false; });
+      for (const n of seq.notes) {
+        const s = Math.floor((n.startTick ?? 0) / tps) % 16;
+        if (s >= 0 && s < 16) { arr[s].active = true; if ((n.velocity ?? 100) >= 112) arr[s].accent = true; if (n.slide) arr[s].slide = true; }
+      }
+    }
+    if (partIdx === this.cbs.getFocusedPart()) this.refresh();
   }
 
-  public setTransportRunning(running: boolean, bpm = this.currentBpm): void {
-    this.isRunning = running;
-    this.currentBpm = Math.max(20, Math.min(300, bpm));
-    if (!running) this.setChaserStep(-1);
-  }
-
-  public destroy(): void {
-    this.strip.destroy();
-  }
+  public destroy(): void { this.strip.destroy(); }
 }

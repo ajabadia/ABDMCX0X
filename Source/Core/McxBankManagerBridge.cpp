@@ -36,6 +36,13 @@ std::string McxBankManagerBridge::serializeToJson(const McxEngine& engine,
     ss << "  \"name\": \"" << presetName << "\",\n";
     ss << "  \"persona\": " << static_cast<int>(engine.getPersonaSpec().persona) << ",\n";
     ss << "  \"dacCharacter\": " << static_cast<int>(engine.getOutputCharacter()) << ",\n";
+    ss << "  \"masterGain\": " << floatToStr(engine.getMasterVolume()) << ",\n";
+    ss << "  \"globalTranspose\": " << engine.getTransposer().getTransposeSemitones() << ",\n";
+    ss << "  \"fxTopology\": " << engine.getOutputAndFx().getUiTopology() << ",\n";
+    ss << "  \"sendTargets\": [" << engine.getOutputAndFx().getSendSlotTarget(0) << ", "
+       << engine.getOutputAndFx().getSendSlotTarget(1) << ", "
+       << engine.getOutputAndFx().getSendSlotTarget(2) << ", "
+       << engine.getOutputAndFx().getSendSlotTarget(3) << "],\n";
     ss << "  \"hardwareProfile\": \"" << bridge.getProfile().id << "\",\n";
     ss << "  \"latencyMs\": " << floatToStr(bridge.getLatencyCompensator().getLatencyMs()) << ",\n";
     ss << "  \"parts\": [\n";
@@ -43,19 +50,26 @@ std::string McxBankManagerBridge::serializeToJson(const McxEngine& engine,
     for (int pIdx = 0; pIdx < 16; ++pIdx)
     {
         const auto& p = engine.part(static_cast<std::size_t>(pIdx));
+        const char* pName = engine.getPartDisplayPresetName(pIdx);
         ss << "    {\n";
         ss << "      \"index\": " << pIdx << ",\n";
+        ss << "      \"presetName\": \"" << (pName ? pName : "") << "\",\n";
+        ss << "      \"engineTypeIndex\": " << engine.getPartEngineTypeIndex(pIdx) << ",\n";
         ss << "      \"midiChannel\": " << static_cast<int>(p.midiChannel) << ",\n";
         ss << "      \"midiPortIndex\": " << static_cast<int>(p.midiPortIndex) << ",\n";
         ss << "      \"routeMode\": " << static_cast<int>(p.routeMode) << ",\n";
         ss << "      \"isDrumKit\": " << (p.isDrumKit ? "true" : "false") << ",\n";
+        ss << "      \"mute\": " << (p.mute ? "true" : "false") << ",\n";
+        ss << "      \"solo\": " << (p.solo ? "true" : "false") << ",\n";
+        ss << "      \"followTranspose\": " << (p.followGlobalTranspose ? "true" : "false") << ",\n";
         ss << "      \"structureMode\": " << static_cast<int>(p.structureMode) << ",\n";
-        ss << "      \"vectorX\": " << floatToStr(p.vectorX) << ",\n";
-        ss << "      \"vectorY\": " << floatToStr(p.vectorY) << ",\n";
-        ss << "      \"level\": " << floatToStr(p.level) << ",\n";
-        ss << "      \"pan\": " << floatToStr(p.pan) << ",\n";
-        ss << "      \"reverbSend\": " << floatToStr(p.reverbSend) << ",\n";
-        ss << "      \"chorusSend\": " << floatToStr(p.chorusSend) << ",\n";
+        ss << "      \"vectorX\": " << floatToStr(p.vectorX) << ", \"vectorY\": " << floatToStr(p.vectorY) << ",\n";
+        ss << "      \"level\": " << floatToStr(p.level) << ", \"pan\": " << floatToStr(p.pan) << ",\n";
+        ss << "      \"reverbSend\": " << floatToStr(p.reverbSend) << ", \"chorusSend\": " << floatToStr(p.chorusSend) << ",\n";
+        ss << "      \"delaySend\": " << floatToStr(p.delaySend) << ", \"auxSend\": " << floatToStr(p.auxSend) << ",\n";
+        ss << "      \"insertSlot\": " << p.insertSlot << ",\n";
+        ss << "      \"driveEnabled\": " << (p.driveEnabled ? "true" : "false") << ", \"driveType\": " << static_cast<int>(p.driveType) << ", \"driveAmount\": " << floatToStr(p.driveAmount) << ",\n";
+        ss << "      \"eqEnabled\": " << (p.eqEnabled ? "true" : "false") << ", \"eqLowGain\": " << floatToStr(p.eqLowGainDb) << ", \"eqMidGain\": " << floatToStr(p.eqMidGainDb) << ", \"eqHighGain\": " << floatToStr(p.eqHighGainDb) << ",\n";
         ss << "      \"partials\": [\n";
 
         for (int ptIdx = 0; ptIdx < 4; ++ptIdx)
@@ -111,6 +125,18 @@ std::string findString(const std::string& str, const std::string& key, const std
     auto endQuote = str.find('"', pos);
     return (endQuote != std::string::npos) ? str.substr(pos, endQuote - pos) : defaultVal;
 }
+
+bool findBool(const std::string& str, const std::string& key, bool defaultVal)
+{
+    const std::string needle = "\"" + key + "\":";
+    auto pos = str.find(needle);
+    if (pos == std::string::npos) return defaultVal;
+    pos += needle.length();
+    while (pos < str.length() && (str[pos] == ' ' || str[pos] == '\t')) ++pos;
+    if (pos + 4 <= str.length() && str.compare(pos, 4, "true") == 0) return true;
+    if (pos + 5 <= str.length() && str.compare(pos, 5, "false") == 0) return false;
+    return defaultVal;
+}
 } // namespace
 
 bool McxBankManagerBridge::deserializeFromJson(McxEngine& engine,
@@ -120,42 +146,73 @@ bool McxBankManagerBridge::deserializeFromJson(McxEngine& engine,
     if (jsonString.empty() || jsonString.find("abd_mcx0x_preset_v1") == std::string::npos)
         return false;
 
-    const int persona = findInt(jsonString, "persona", 0);
-    engine.setMachinePersona(static_cast<McxMachinePersona>(persona));
+    const auto partsPos = jsonString.find("\"parts\":");
+    const std::string header = (partsPos != std::string::npos) ? jsonString.substr(0, partsPos) : jsonString;
 
-    const int dac = findInt(jsonString, "dacCharacter", 0);
-    engine.setOutputCharacter(static_cast<McxOutputCharacter>(dac));
+    engine.setMachinePersona(static_cast<McxMachinePersona>(findInt(header, "persona", 0)));
+    engine.setOutputCharacter(static_cast<McxOutputCharacter>(findInt(header, "dacCharacter", 0)));
+    if (header.find("\"masterGain\":") != std::string::npos) engine.setMasterVolume(findFloat(header, "masterGain", 0.85f));
+    if (header.find("\"globalTranspose\":") != std::string::npos) engine.setGlobalTranspose(findInt(header, "globalTranspose", 0));
+    if (header.find("\"fxTopology\":") != std::string::npos) engine.getOutputAndFx().setUiTopology(findInt(header, "fxTopology", 1));
+    if (auto stPos = header.find("\"sendTargets\": ["); stPos != std::string::npos)
+    {
+        std::size_t cur = stPos + 16;
+        for (int b = 0; b < 4; ++b)
+        {
+            char* endP = nullptr;
+            const long t = std::strtol(&header[cur], &endP, 10);
+            if (endP != &header[cur]) { engine.getOutputAndFx().setSendSlotTarget(b, static_cast<int>(t)); cur = static_cast<std::size_t>(endP - header.data()); }
+            auto comma = header.find(',', cur);
+            if (comma == std::string::npos) break;
+            cur = comma + 1;
+        }
+    }
 
-    const std::string hwProfile = findString(jsonString, "hardwareProfile", "generic_midi");
-    bridge.setProfileById(hwProfile);
+    bridge.setProfileById(findString(header, "hardwareProfile", "generic_midi"));
+    bridge.getLatencyCompensator().setLatencyMs(findFloat(header, "latencyMs", 0.0f));
 
-    const float latency = findFloat(jsonString, "latencyMs", 0.0f);
-    bridge.getLatencyCompensator().setLatencyMs(latency);
-
-    // Simple per-part scanner
     std::size_t curPos = 0;
     for (int pIdx = 0; pIdx < 16; ++pIdx)
     {
         const std::string partKey = "\"index\": " + std::to_string(pIdx);
         auto pPos = jsonString.find(partKey, curPos);
-        if (pPos == std::string::npos)
-            break;
+        if (pPos == std::string::npos) break;
 
         auto nextPPos = jsonString.find("\"index\": " + std::to_string(pIdx + 1), pPos);
-        std::string partChunk = jsonString.substr(pPos, (nextPPos != std::string::npos) ? (nextPPos - pPos) : 3000);
+        std::string partChunk = jsonString.substr(pPos, (nextPPos != std::string::npos) ? (nextPPos - pPos) : (jsonString.size() - pPos));
+        auto ptStart = partChunk.find("\"partials\":");
+        std::string partHeader = (ptStart != std::string::npos) ? partChunk.substr(0, ptStart) : partChunk;
+
+        const int engIdx = findInt(partHeader, "engineTypeIndex", engine.getPartEngineTypeIndex(pIdx));
+        if (engIdx != engine.getPartEngineTypeIndex(pIdx)) (void)engine.selectPartEngineType(pIdx, engIdx);
 
         auto& p = engine.part(static_cast<std::size_t>(pIdx));
-        p.midiChannel = static_cast<std::uint8_t>(findInt(partChunk, "midiChannel", p.midiChannel));
-        p.midiPortIndex = static_cast<std::uint8_t>(std::clamp(findInt(partChunk, "midiPortIndex", p.midiPortIndex), 0, 7));
-        p.routeMode = static_cast<McxPartRouteMode>(findInt(partChunk, "routeMode", static_cast<int>(p.routeMode)));
-        p.isDrumKit = (partChunk.find("\"isDrumKit\": true") != std::string::npos);
-        p.structureMode = static_cast<McxStructureMode>(findInt(partChunk, "structureMode", 0));
-        p.vectorX = findFloat(partChunk, "vectorX", 0.0f);
-        p.vectorY = findFloat(partChunk, "vectorY", 0.0f);
-        p.level = findFloat(partChunk, "level", 0.8f);
-        p.pan = findFloat(partChunk, "pan", 0.0f);
-        p.reverbSend = findFloat(partChunk, "reverbSend", 0.0f);
-        p.chorusSend = findFloat(partChunk, "chorusSend", 0.0f);
+        const std::string pName = findString(partHeader, "presetName", "");
+        if (!pName.empty()) engine.setPartPresetName(pIdx, pName.c_str());
+        p.midiChannel = static_cast<std::uint8_t>(findInt(partHeader, "midiChannel", p.midiChannel));
+        p.midiPortIndex = static_cast<std::uint8_t>(std::clamp(findInt(partHeader, "midiPortIndex", p.midiPortIndex), 0, 7));
+        p.routeMode = static_cast<McxPartRouteMode>(findInt(partHeader, "routeMode", static_cast<int>(p.routeMode)));
+        engine.setPartKind(pIdx, findBool(partHeader, "isDrumKit", p.isDrumKit) ? McxPartKind::DrumMap : McxPartKind::Chromatic);
+        p.mute = findBool(partHeader, "mute", false);
+        p.solo = findBool(partHeader, "solo", false);
+        p.followGlobalTranspose = findBool(partHeader, "followTranspose", !p.isDrumKit) && !p.isDrumKit;
+        p.structureMode = static_cast<McxStructureMode>(findInt(partHeader, "structureMode", 0));
+        p.vectorX = findFloat(partHeader, "vectorX", 0.0f);
+        p.vectorY = findFloat(partHeader, "vectorY", 0.0f);
+        p.level = findFloat(partHeader, "level", 0.85f);
+        p.pan = findFloat(partHeader, "pan", 0.0f);
+        p.reverbSend = findFloat(partHeader, "reverbSend", 0.25f);
+        p.chorusSend = findFloat(partHeader, "chorusSend", 0.10f);
+        p.delaySend = findFloat(partHeader, "delaySend", 0.0f);
+        p.auxSend = findFloat(partHeader, "auxSend", 0.0f);
+        p.insertSlot = std::clamp(findInt(partHeader, "insertSlot", -1), -1, 7);
+        p.driveEnabled = findBool(partHeader, "driveEnabled", false);
+        p.driveType = static_cast<std::uint8_t>(std::clamp(findInt(partHeader, "driveType", 0), 0, 3));
+        p.driveAmount = std::clamp(findFloat(partHeader, "driveAmount", 0.0f), 0.0f, 1.0f);
+        p.eqEnabled = findBool(partHeader, "eqEnabled", false);
+        p.eqLowGainDb = std::clamp(findFloat(partHeader, "eqLowGain", 0.0f), -15.0f, 15.0f);
+        p.eqMidGainDb = std::clamp(findFloat(partHeader, "eqMidGain", 0.0f), -15.0f, 15.0f);
+        p.eqHighGainDb = std::clamp(findFloat(partHeader, "eqHighGain", 0.0f), -15.0f, 15.0f);
 
         // Scan partials in chunk
         std::size_t ptPos = 0;

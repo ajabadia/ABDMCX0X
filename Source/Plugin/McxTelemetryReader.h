@@ -31,6 +31,7 @@ struct McxTelemetrySnapshot
     int focusedPart{0};
     double sampleRate{48000.0};
     float lfoPhase{0.0f};
+    float lfo2Phase{0.0f};
     bool seqPlaying{false};
     int seqTick{0};
     int seqStep{0};
@@ -83,7 +84,8 @@ inline McxTelemetrySnapshot captureEngineTelemetry(
     const auto l = fx.getActiveSendLabels();
     snap.sendNameA = l.sendA; snap.sendNameB = l.sendB;
     snap.sendNameC = l.sendC; snap.sendNameD = l.sendD;
-    snap.lfoPhase = (snap.activeVoices > 0) ? 1.0f : 0.0f;
+    snap.lfoPhase = engine.getFocusedLfoValue(0);
+    snap.lfo2Phase = engine.getFocusedLfoValue(1);
     snap.seqPlaying = engine.isSequencerRunning();
     snap.seqTick = engine.getSequencerTick();
     snap.seqStep = engine.getSequencerStep();

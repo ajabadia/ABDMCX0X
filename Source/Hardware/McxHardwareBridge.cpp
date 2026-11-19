@@ -11,7 +11,14 @@ McxHardwareBridge::McxHardwareBridge(McxEngine& engine)
 {
     for (auto& idx : partProfileIdx_)
         idx.store(-1, std::memory_order_relaxed);
+    modDecimator_.prepare(44100.0);
     engine_.setOutboundMidiQueue(&outQueue_);
+}
+
+void McxHardwareBridge::prepare(double sampleRate) noexcept
+{
+    latencyComp_.prepare(sampleRate);
+    modDecimator_.prepare(sampleRate);
 }
 
 void McxHardwareBridge::sendCc(std::uint8_t ch1to16, std::uint8_t cc, std::uint8_t val, std::uint8_t portIdx) noexcept
@@ -27,7 +34,8 @@ void McxHardwareBridge::sendNrpn(std::uint8_t ch1to16, std::uint8_t msb, std::ui
     sendCc(ch1to16, 6, val, portIdx);
 }
 
-void McxHardwareBridge::dispatchBinding(std::uint8_t ch,
+void McxHardwareBridge::dispatchBinding(std::uint8_t partIdx,
+                                        std::uint8_t ch,
                                         std::uint8_t portIdx,
                                         const abd::synth::SemanticControlBinding& binding,
                                         float normalizedVal) noexcept
@@ -40,13 +48,16 @@ void McxHardwareBridge::dispatchBinding(std::uint8_t ch,
 
     const float clamped = std::clamp(normalizedVal, 0.0f, 1.0f);
     const float scaled = binding.wireMin + clamped * (binding.wireMax - binding.wireMin);
-    const std::uint8_t byteVal = static_cast<std::uint8_t>(std::clamp(static_cast<int>(std::round(scaled)), 0, 127));
+    const float wireNorm01 = std::clamp(scaled / 127.0f, 0.0f, 1.0f);
+    const std::size_t slotId = (static_cast<std::size_t>(partIdx) * 13u
+        + static_cast<std::size_t>(binding.controlNumber) * 3u
+        + static_cast<std::size_t>(binding.subNumber)) % McxMidiModDecimator::kMaxSlots;
 
     if (binding.method == abd::synth::ControlWireMethod::MidiCc)
-        sendCc(ch, binding.controlNumber, byteVal, portIdx);
+        (void)modDecimator_.submitCc(outQueue_, slotId, portIdx, ch, binding.controlNumber, wireNorm01);
     else if (binding.method == abd::synth::ControlWireMethod::Nrpn7Bit ||
              binding.method == abd::synth::ControlWireMethod::Nrpn14Bit)
-        sendNrpn(ch, binding.controlNumber, binding.subNumber, byteVal, portIdx);
+        (void)modDecimator_.submitNrpn(outQueue_, slotId, portIdx, ch, binding.controlNumber, binding.subNumber, wireNorm01);
 }
 
 void McxHardwareBridge::applyInternalSemanticParam(std::uint8_t partIdx,
@@ -163,7 +174,7 @@ void McxHardwareBridge::routeSemanticParam(std::uint8_t partIdx, std::uint64_t r
     if (HardwareMirrorRouter::routesToExternal(p.routeMode))
     {
         if (const auto* binding = getPartProfile(partIdx).findByRoleHash(roleHash))
-            dispatchBinding(p.midiChannel, p.midiPortIndex, *binding, normalizedValue);
+            dispatchBinding(partIdx, p.midiChannel, p.midiPortIndex, *binding, normalizedValue);
     }
 }
 
@@ -188,8 +199,13 @@ void McxHardwareBridge::routeDrumSemanticParam(std::uint8_t partIdx,
                 const std::uint8_t drumKey = p.drumRemapper.slotToExternal[slotIdx];
                 const float clamped = std::clamp(normalizedValue, 0.0f, 1.0f);
                 const float scaled = binding->wireMin + clamped * (binding->wireMax - binding->wireMin);
-                const std::uint8_t valByte = static_cast<std::uint8_t>(std::clamp(static_cast<int>(scaled), 0, 127));
-                sendNrpn(p.midiChannel, binding->controlNumber, drumKey, valByte, p.midiPortIndex);
+                const int byteVal = std::clamp<int>(static_cast<int>(scaled), 0, 127);
+                const float wireNorm01 = static_cast<float>(byteVal) / 127.0f;
+                const std::size_t slotId = (static_cast<std::size_t>(partIdx) * 13u
+                    + static_cast<std::size_t>(binding->controlNumber) * 3u
+                    + static_cast<std::size_t>(drumKey)) % McxMidiModDecimator::kMaxSlots;
+                (void)modDecimator_.submitNrpn(outQueue_, slotId, p.midiPortIndex, p.midiChannel,
+                                               binding->controlNumber, drumKey, wireNorm01);
             }
         }
     }

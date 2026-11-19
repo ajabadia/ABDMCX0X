@@ -15,16 +15,9 @@ import { renderCatalogGrid, renderCatalogTable } from './McxBankDrawerViews';
 import { t } from '../i18n/mcxI18n';
 
 export interface McxCatalogItem {
-  id: string;
-  name: string;
-  sublibrary?: string;
-  categoryName?: string;
-  categoryId?: number;
-  engineKind?: string;
-  itemType?: number;
-  filePath?: string;
-  thumbnailUrl?: string;
-  isFavorite?: boolean;
+  id: string; name: string; sublibrary?: string; categoryName?: string; categoryId?: number;
+  engineKind?: string; itemType?: number; filePath?: string; thumbnailUrl?: string; isFavorite?: boolean;
+  factoryPresetIndex?: number; bankId?: string; bankSlotKind?: string; bankItemIndex?: number; snapshot?: Record<string, any>;
 }
 
 export interface McxBankDrawerCallbacks {
@@ -41,16 +34,13 @@ export class McxBankDrawer {
   private shell!: ReturnType<typeof createBankShell>;
   private state = new BankCatalogState();
   private items: McxCatalogItem[] = [];
+  private factoryItems: McxCatalogItem[] = []; private libraryItems: McxCatalogItem[] = []; private userItems: McxCatalogItem[] = [];
   private cardUnbind: (() => void) | null = null;
   private chipsUnbind: (() => void) | null = null;
   private isOpen = false;
 
-  constructor(
-    private bridge: McxHostBridge,
-    private cb: McxBankDrawerCallbacks
-  ) {
-    this.initShell();
-    this.setItems(getDefaultFactoryItems());
+  constructor(private bridge: McxHostBridge, private cb: McxBankDrawerCallbacks) {
+    this.initShell(); this.factoryItems = getDefaultFactoryItems(); this.syncMergedItems();
   }
 
   private initShell(): void {
@@ -169,10 +159,10 @@ export class McxBankDrawer {
     else this.open(targetPart);
   }
 
-  public setItems(items: McxCatalogItem[]): void {
-    this.items = items;
-    this.render();
-  }
+  private syncMergedItems(): void { this.items = [...this.userItems, ...this.libraryItems, ...this.factoryItems]; this.render(); }
+  public setItems(items: McxCatalogItem[]): void { this.factoryItems = items; this.syncMergedItems(); }
+  public setLibraryItems(items: McxCatalogItem[]): void { this.libraryItems = items; this.syncMergedItems(); }
+  public setUserItems(items: McxCatalogItem[]): void { this.userItems = items; this.syncMergedItems(); }
 
   private render(): void {
     const filtered = this.state.filterItems(this.items);

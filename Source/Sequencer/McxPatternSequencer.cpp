@@ -36,6 +36,7 @@ void McxPatternSequencer::reset() noexcept
     bars_.store(1, std::memory_order_relaxed);
     ppq_.store(kDefaultPpq, std::memory_order_relaxed);
     recording_.store(false, std::memory_order_relaxed);
+    loopEnabled_.store(true, std::memory_order_relaxed);
 
     groove_.reset();
     // GrooveShuffleEngine resets amount to 0.50 (50% delay). Default straight = 0.0f.

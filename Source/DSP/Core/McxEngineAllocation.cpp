@@ -148,4 +148,81 @@ void McxEngine::releaseInternalVoice(int partIdx, int inputNote) noexcept
     eng->noteOff(inputNote);
 }
 
+void McxEngine::setPartPresetName(int partIndex, const char* name) noexcept
+{
+    const int idx = std::clamp(partIndex, 0, kNumParts - 1);
+    auto& p = parts_[static_cast<std::size_t>(idx)];
+    p.customPresetName[0] = '\0';
+    if (name != nullptr)
+    {
+        std::size_t i = 0;
+        for (; i + 1 < sizeof(p.customPresetName) && name[i] != '\0'; ++i)
+            p.customPresetName[i] = name[i];
+        p.customPresetName[i] = '\0';
+    }
+    if (engineSlots_[static_cast<std::size_t>(idx)] == &engineRegistry_.rompler(idx))
+        engineRegistry_.rompler(idx).setCurrentPresetName(name ? name : "");
+}
+
+const char* McxEngine::getPartDisplayPresetName(int partIndex) const noexcept
+{
+    const int idx = std::clamp(partIndex, 0, kNumParts - 1);
+    const char* engName = getPartCurrentPresetName(idx);
+    if (engName != nullptr && engName[0] != '\0')
+        return engName;
+    return parts_[static_cast<std::size_t>(idx)].customPresetName;
+}
+
+void McxEngine::setFxGate(int gateIdx, bool active) noexcept
+{
+    if (gateIdx < 0 || gateIdx >= 4) return;
+    fxGates_[static_cast<std::size_t>(gateIdx)] = active;
+    if (gateIdx == 0) setManualDuckGate(active);
+}
+
+bool McxEngine::getFxGate(int gateIdx) const noexcept
+{
+    return (gateIdx >= 0 && gateIdx < 4) ? fxGates_[static_cast<std::size_t>(gateIdx)] : false;
+}
+
+float McxEngine::getFocusedLfoValue(int lfoIdx01) const noexcept
+{
+    return (lfoIdx01 == 1) ? lfoValueBipolar_[1] : lfoValueBipolar_[0];
+}
+
+void McxEngine::advanceFocusedLfoTelemetry(int numSamples) noexcept
+{
+    if (numSamples <= 0 || sampleRate_ <= 100.0) return;
+    static constexpr float kSyncBeats[18] = {
+        128.0f, 64.0f, 32.0f, 16.0f, 8.0f, 4.0f, 3.0f, 2.0f, 1.5f,
+        1.0f, 0.75f, 0.5f, 1.0f / 3.0f, 0.375f, 0.25f, 1.0f / 6.0f, 0.125f, 0.0625f
+    };
+    const auto& fp = parts_[static_cast<std::size_t>(std::clamp(focusedPartIndex_, 0, kNumParts - 1))];
+    const float dt = static_cast<float>(numSamples) / static_cast<float>(sampleRate_);
+    const float bps = masterTempoBpm_ / 60.0f;
+
+    auto stepLfo = [&](int i, bool sync, std::uint8_t shape, float rate) {
+        const std::size_t u = static_cast<std::size_t>(i);
+        const float freqHz = sync
+            ? (bps / kSyncBeats[std::clamp(static_cast<int>(std::lround(rate)), 0, 17)])
+            : std::clamp(rate, 0.005f, 1280.0f);
+        float ph = lfoPhase01_[u] + freqHz * dt;
+        const bool wrapped = (ph >= 1.0f);
+        ph -= std::floor(ph);
+        lfoPhase01_[u] = ph;
+        if (shape == 0) lfoValueBipolar_[u] = std::sin(ph * 6.2831853f);
+        else if (shape == 1) lfoValueBipolar_[u] = 1.0f - 4.0f * std::abs(ph - 0.5f);
+        else if (shape == 2) lfoValueBipolar_[u] = (ph < 0.5f) ? 1.0f : -1.0f;
+        else if (shape == 3) lfoValueBipolar_[u] = ph * 2.0f - 1.0f;
+        else if (shape == 4) lfoValueBipolar_[u] = 1.0f - ph * 2.0f;
+        else if (shape == 7) lfoValueBipolar_[u] = (ph < 0.25f) ? 1.0f : -1.0f;
+        else if (wrapped || lfoValueBipolar_[u] == 0.0f) {
+            lfoRng_ = lfoRng_ * 1664525u + 1013904223u;
+            lfoValueBipolar_[u] = (static_cast<float>(lfoRng_ >> 16) / 32768.0f) - 1.0f;
+        }
+    };
+    stepLfo(0, fp.lfo1Sync, fp.lfo1Shape, fp.lfo1Rate);
+    stepLfo(1, fp.lfo2Sync, fp.lfo2Shape, fp.lfo2Rate);
+}
+
 } // namespace abdmcx

@@ -104,6 +104,8 @@ export function bindTelemetry(bridge: McxHostBridge, state: McxAppState, scopeVi
     }
     if (tel.bpm && tel.bpm >= 20 && Math.abs(tel.bpm - lastBpm) > 0.05) {
       lastBpm = tel.bpm;
+      state.refs.fxRackModal?.setBpm?.(tel.bpm);
+      state.refs.globalLfoModal?.setBpm?.(tel.bpm);
       if (Math.abs(state.globalSettings.standaloneBpm - tel.bpm) > 0.05) {
         state.globalSettings.standaloneBpm = tel.bpm;
         state.refs.masterPanel?.setBpm(tel.bpm);
@@ -127,12 +129,20 @@ export function bindTelemetry(bridge: McxHostBridge, state: McxAppState, scopeVi
       }
     }
 
+    const lfo1 = tel.lfoPhase ?? 0, lfo2 = tel.lfo2Phase ?? 0;
     if (state.refs.toneDrawer?.isOpen()) {
       state.refs.toneDrawer.updateSendLabels(tel.sendLabels);
       const sendPeaks = [tel.peakSendA ?? 0, tel.peakSendB ?? 0, tel.peakSendC ?? 0, tel.peakSendD ?? 0];
       state.refs.toneDrawer.updateSendTelemetry(sendPeaks, tel.sendBusMutes);
-      state.refs.toneDrawer.updateLfoPhase(tel.lfoPhase ?? (Date.now() % 500 < 250 ? 1 : 0));
+      state.refs.toneDrawer.updateLfoPhase(lfo1);
     }
+    state.refs.masterPanel?.updateGlobalLfoPhase(Math.abs(lfo1));
+    state.refs.globalLfoModal?.updatePhase(1, Math.abs(lfo1));
+    state.refs.globalLfoModal?.updatePhase(2, Math.abs(lfo2));
+    state.refs.fxRackModal?.updateTelemetry?.({
+      peakSendA: tel.peakSendA, peakSendB: tel.peakSendB, peakSendC: tel.peakSendC, peakSendD: tel.peakSendD,
+      peakMasterL: tel.peakL, peakMasterR: tel.peakR, limiterGainReductionDb: tel.limiterGrDb ?? 0, lfoMod: [lfo1, lfo2, 0, 0],
+    });
 
     if (tel.rackPeakIn && tel.rackPeakOut) {
       for (let i = 0; i < 8; ++i) {

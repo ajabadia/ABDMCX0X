@@ -59,7 +59,7 @@ void McxAudioProcessor::prepareToPlay(double sampleRate, int /*samplesPerBlock*/
     const double sr = sampleRate > 1000.0 ? sampleRate : 48000.0;
     currentSampleRate_.store(sr, std::memory_order_release);
     engine_.prepare(sr);
-    hardwareBridge_.getLatencyCompensator().prepare(sr);
+    hardwareBridge_.prepare(sr);
     uiCommandQueue_.clear();
     syncHostLatencyReport();
 }
@@ -113,7 +113,7 @@ void McxAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
     float* left = buffer.getWritePointer(0);
     float* right = totalOut > 1 ? buffer.getWritePointer(1) : left;
     engine_.processAudio(left, right, numSamples);
-
+    hardwareBridge_.advanceBlock(numSamples);
     hardwareBridge_.getLatencyCompensator().process(left, right, numSamples);
 
     // Update lock-free telemetry snapshot (zero locks, zero allocations)
@@ -184,10 +184,10 @@ int McxAudioProcessor::mountBankFromFile(const std::string& filePath) { return m
 bool McxAudioProcessor::loadIndexedBankTone(int bankSlot, int toneIdx, int partIdx) { const juce::ScopedLock sl(engineMutex_); const bool ok = multiBankManager_.loadToneToPart(bankSlot, toneIdx, engine_, partIdx); if (ok) markEngineStateDirty(partIdx); return ok; }
 bool McxAudioProcessor::loadIndexedBankKit(int bankSlot, int kitIdx, int partIdx) { const juce::ScopedLock sl(engineMutex_); const bool ok = multiBankManager_.loadDrumKitToPart(bankSlot, kitIdx, engine_, partIdx); if (ok) markEngineStateDirty(partIdx); return ok; }
 void McxAudioProcessor::syncHostLatencyReport() { setLatencySamples(static_cast<int>(hardwareBridge_.getLatencyCompensator().getEffectiveDelaySamples())); }
-void McxAudioProcessor::resetToFactory() { const juce::ScopedLock sl(engineMutex_); engine_.reset(); McxFactoryBank::applyFactoryDefaults(engine_); }
+void McxAudioProcessor::resetToFactory() { const juce::ScopedLock sl(engineMutex_); engine_.reset(); McxFactoryBank::applyFactoryDefaults(engine_); markSessionStateDirty(); }
 void McxAudioProcessor::enqueueResetToFactory(int partIdx) {
     uiCommandQueue_.push({ McxUiCommand::Type::ResetToFactory, static_cast<std::uint8_t>(std::clamp(partIdx, 0, McxEngine::kNumParts - 1)), 0, 0, -1, 0.0f });
-    markSongStateDirty();
+    markSongStateDirty(); markSessionStateDirty();
 }
 
 bool McxAudioProcessor::loadBankFromMemory(const std::uint8_t* data, std::size_t sizeBytes) {
@@ -201,6 +201,7 @@ bool McxAudioProcessor::loadBankFromMemory(const std::uint8_t* data, std::size_t
     for (int i = 0; i < McxEngine::kNumParts; ++i)
         if (i != 9 && i < toneCount) (void)loadIndexedBankTone(slot, i, i);
     pendingEngineStateMask_.store(0xFFFFu, std::memory_order_release);
+    markSessionStateDirty();
     return true;
 }
 
@@ -220,7 +221,7 @@ void McxAudioProcessor::updateSystemSettings(const McxSystemSettings& next) {
     settings_.maxPolyphony = std::clamp(settings_.maxPolyphony, 8, 64);
     settings_.masterTuneHz = std::clamp(settings_.masterTuneHz, 415.0f, 466.0f);
     settings_.standaloneBpm = std::clamp(settings_.standaloneBpm, 40.0f, 240.0f);
-    if (!settings_.workingDirectory.empty()) McxSystemSettings::ensureWorkingDirScaffold(settings_.workingDirectory);
+    if (!settings_.workingDirectory.empty()) { McxSystemSettings::ensureWorkingDirScaffold(settings_.workingDirectory); libraryService_.scanWorkingDir(settings_.workingDirectory); }
     {
         const juce::ScopedLock sl(engineMutex_);
         engine_.setMaxPolyphony(settings_.maxPolyphony);
@@ -260,6 +261,7 @@ void McxAudioProcessor::setStateInformation(const void* data, int sizeInBytes) {
     }
     pendingEngineStateMask_.store(0xFFFFu, std::memory_order_release);
     markSongStateDirty();
+    markSessionStateDirty();
 }
 
 void McxAudioProcessor::parameterChanged(const juce::String& parameterID, float newValue) {

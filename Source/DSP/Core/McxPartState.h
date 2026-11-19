@@ -39,6 +39,7 @@ struct McxPartState
     bool followGlobalTranspose { true };
     McxPartRouteMode routeMode { McxPartRouteMode::Internal };
     std::uint8_t midiPortIndex { 0 };
+    char customPresetName[48] {};
 
     // Mixing Console Strip State (engine-agnostic)
     float level { 0.85f };

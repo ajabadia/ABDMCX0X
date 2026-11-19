@@ -11,6 +11,13 @@
 namespace abdmcx
 {
 
+inline void setAllPartialsEngineParam(IMcxSoundEngine* se, const char* const (&keys)[4], float value) noexcept
+{
+    if (se == nullptr) return;
+    for (const char* k : keys)
+        (void)se->setParamByKey(k, value);
+}
+
 /**
  * @brief Single-source-of-truth parameter router shared identically between
  * WebAssembly (WasmBridge.cpp) and JUCE 9 Native (PluginProcessor.cpp).
@@ -22,44 +29,33 @@ inline void applyWebPartParam(McxEngine& engine, int partIdx, int paramId, float
         return;
 
     auto& p = engine.part(partIdx);
+    auto* se = engine.getPartSoundEngine(partIdx);
     switch (paramId)
     {
     case 0: // Filter Cutoff (Hz from normalized 0..1)
-    {
-        const float hz = 20.0f * std::pow(1000.0f, std::clamp(value, 0.0f, 1.0f));
-        for (auto& partial : p.partials) partial.cutoffHz = hz;
+        setAllPartialsEngineParam(se, {"p1.cutoffHz", "p2.cutoffHz", "p3.cutoffHz", "p4.cutoffHz"},
+            20.0f * std::pow(1000.0f, std::clamp(value, 0.0f, 1.0f)));
         break;
-    }
     case 1: // Filter Resonance (0..1)
-    {
-        const float res = std::clamp(value, 0.0f, 0.98f);
-        for (auto& partial : p.partials) partial.resonance = res;
+        setAllPartialsEngineParam(se, {"p1.resonance", "p2.resonance", "p3.resonance", "p4.resonance"},
+            std::clamp(value, 0.0f, 0.98f));
         break;
-    }
     case 2: // Amp Attack ms (0..1)
-    {
-        const float attackMs = 0.5f + (value * value * 2500.0f);
-        for (auto& partial : p.partials) partial.ampEnv.t1Ms = attackMs;
+        setAllPartialsEngineParam(se, {"p1.amp.t1Ms", "p2.amp.t1Ms", "p3.amp.t1Ms", "p4.amp.t1Ms"},
+            0.5f + (value * value * 2500.0f));
         break;
-    }
     case 3: // Amp Decay ms (0..1)
-    {
-        const float decayMs = 10.0f + (value * 4000.0f);
-        for (auto& partial : p.partials) partial.ampEnv.t2Ms = decayMs;
+        setAllPartialsEngineParam(se, {"p1.amp.t2Ms", "p2.amp.t2Ms", "p3.amp.t2Ms", "p4.amp.t2Ms"},
+            10.0f + (value * 4000.0f));
         break;
-    }
     case 4: // Amp Sustain Level (0..1)
-    {
-        const float sus = std::clamp(value, 0.0f, 1.0f);
-        for (auto& partial : p.partials) partial.ampEnv.l3 = sus;
+        setAllPartialsEngineParam(se, {"p1.amp.l3", "p2.amp.l3", "p3.amp.l3", "p4.amp.l3"},
+            std::clamp(value, 0.0f, 1.0f));
         break;
-    }
     case 5: // Amp Release ms (0..1)
-    {
-        const float relMs = 10.0f + (value * 5000.0f);
-        for (auto& partial : p.partials) partial.ampEnv.t4Ms = relMs;
+        setAllPartialsEngineParam(se, {"p1.amp.t4Ms", "p2.amp.t4Ms", "p3.amp.t4Ms", "p4.amp.t4Ms"},
+            10.0f + (value * 5000.0f));
         break;
-    }
     case 6: // Part Level (0..1)
         p.level = std::clamp(value, 0.0f, 1.0f);
         break;
@@ -83,19 +79,19 @@ inline void applyWebPartParam(McxEngine& engine, int partIdx, int paramId, float
         break;
     case 13: // Filter Model (0..5)
     {
-        const auto fm = static_cast<McxFilterModel>(std::clamp(static_cast<int>(value), 0, 5));
-        p.filterModel = fm;
-        for (auto& partial : p.partials) partial.filterModel = fm;
+        const float fm = static_cast<float>(std::clamp(static_cast<int>(value), 0, 5));
+        if (se != nullptr) (void)se->setParamByKey("filter.model", fm);
+        setAllPartialsEngineParam(se, {"p1.filterModel", "p2.filterModel", "p3.filterModel", "p4.filterModel"}, fm);
         break;
     }
     case 14: // Structure Mode (0..3)
-        p.structureMode = static_cast<McxStructureMode>(std::clamp(static_cast<int>(value), 0, 3));
+        if (se != nullptr) (void)se->setParamByKey("structure", static_cast<float>(std::clamp(static_cast<int>(value), 0, 3)));
         break;
     case 15: // Vector X (-1..+1)
-        p.vectorX = std::clamp(value, -1.0f, 1.0f);
+        if (se != nullptr) (void)se->setParamByKey("vector.x", std::clamp(value, -1.0f, 1.0f));
         break;
     case 16: // Vector Y (-1..+1)
-        p.vectorY = std::clamp(value, -1.0f, 1.0f);
+        if (se != nullptr) (void)se->setParamByKey("vector.y", std::clamp(value, -1.0f, 1.0f));
         break;
     case 17: // Reverb/Delay Macro (0..7)
         engine.getOutputAndFx().setReverbMacro(static_cast<int>(value));
@@ -195,20 +191,16 @@ inline void applyWebPartParam(McxEngine& engine, int partIdx, int paramId, float
     case 51: p.delaySendPre = (value >= 0.5f); break;
     case 52: p.auxSendPre = (value >= 0.5f); break;
     case 53: // Part Pitch Coarse (-24..+24 semitones)
-    {
-        const auto st = static_cast<std::int8_t>(std::clamp(static_cast<int>(value), -24, 24));
-        for (auto& pt : p.partials) pt.coarseSemitones = st;
+        setAllPartialsEngineParam(se, {"p1.coarse", "p2.coarse", "p3.coarse", "p4.coarse"},
+            static_cast<float>(std::clamp(static_cast<int>(value), -24, 24)));
         break;
-    }
     case 54: // Part Pitch Fine (-50..+50 cents)
-    {
-        const float cents = std::clamp(value, -50.0f, 50.0f);
-        for (auto& pt : p.partials) pt.fineCents = cents;
+        setAllPartialsEngineParam(se, {"p1.fine", "p2.fine", "p3.fine", "p4.fine"},
+            std::clamp(value, -50.0f, 50.0f));
         break;
-    }
-    case 55: if (auto* se = engine.getPartSoundEngine(partIdx)) se->setParamByKey("porta.enabled", value >= 0.5f ? 1.0f : 0.0f); break;
-    case 56: if (auto* se = engine.getPartSoundEngine(partIdx)) se->setParamByKey("porta.timeMs", std::clamp(value, 0.0f, 1000.0f)); break;
-    case 57: if (auto* se = engine.getPartSoundEngine(partIdx)) se->setParamByKey("porta.legato", value >= 0.5f ? 1.0f : 0.0f); break;
+    case 55: if (se != nullptr) se->setParamByKey("porta.enabled", value >= 0.5f ? 1.0f : 0.0f); break;
+    case 56: if (se != nullptr) se->setParamByKey("porta.timeMs", std::clamp(value, 0.0f, 1000.0f)); break;
+    case 57: if (se != nullptr) se->setParamByKey("porta.legato", value >= 0.5f ? 1.0f : 0.0f); break;
     case 58: // Part Arp / Sequencer Enable (0/1)
         p.arp.setEnabled(value >= 0.5f);
         p.arp.setPatternMaskEnabled(true);
@@ -241,13 +233,14 @@ inline void applyWebPartParam(McxEngine& engine, int partIdx, int paramId, float
         engine.sequencer().setStep(partIdx, sIdx, step.active, (step.velocityScale > 1.1f) ? 118 : 96, step.tie, p.isDrumKit ? 36 : 60);
         break;
     }
-    case 62: p.filter2Enabled = (value >= 0.5f); break;
-    case 63: p.filter2Model = static_cast<McxFilterModel>(std::clamp(static_cast<int>(value), 0, 5)); break;
-    case 64: p.filter2Mode = static_cast<std::uint8_t>(std::clamp(static_cast<int>(value), 0, 3)); break;
-    case 65: p.filter2CutoffHz = 20.0f * std::pow(1000.0f, std::clamp(value, 0.0f, 1.0f)); break;
-    case 66: p.filter2Resonance = std::clamp(value, 0.0f, 0.98f); break;
+    case 62: if (se != nullptr) se->setParamByKey("filter2.enabled", (value >= 0.5f) ? 1.0f : 0.0f); break;
+    case 63: if (se != nullptr) se->setParamByKey("filter2.model", static_cast<float>(std::clamp(static_cast<int>(value), 0, 5))); break;
+    case 64: if (se != nullptr) se->setParamByKey("filter2.mode", static_cast<float>(std::clamp(static_cast<int>(value), 0, 3))); break;
+    case 65: if (se != nullptr) se->setParamByKey("filter2.cutoffHz", 20.0f * std::pow(1000.0f, std::clamp(value, 0.0f, 1.0f))); break;
+    case 66: if (se != nullptr) se->setParamByKey("filter2.resonance", std::clamp(value, 0.0f, 0.98f)); break;
     case 67:
-        for (auto& partial : p.partials) partial.filterMode = static_cast<std::uint8_t>(std::clamp(static_cast<int>(value), 0, 3));
+        setAllPartialsEngineParam(se, {"p1.filterMode", "p2.filterMode", "p3.filterMode", "p4.filterMode"},
+            static_cast<float>(std::clamp(static_cast<int>(value), 0, 3)));
         break;
     default:
         applyWebPartParamExt(engine, partIdx, paramId, value);

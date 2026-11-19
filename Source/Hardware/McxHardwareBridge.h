@@ -3,6 +3,7 @@
 #include "../DSP/Core/McxEngine.h"
 #include "../DSP/Core/McxTypes.h"
 #include "../MIDI/HardwareMirrorRouter.h"
+#include "../MIDI/McxMidiModDecimator.h"
 #include "../MIDI/McxMidiOutQueue.h"
 #include "McxLatencyCompensator.h"
 #include "SynthCore/HardwareProfileHydrator.h"
@@ -46,6 +47,10 @@ public:
 
     explicit McxHardwareBridge(McxEngine& engine);
     ~McxHardwareBridge() = default;
+
+    void prepare(double sampleRate) noexcept;
+    void advanceBlock(int numSamples) noexcept { modDecimator_.advanceBlock(numSamples); }
+    [[nodiscard]] McxMidiModDecimator& getModDecimator() noexcept { return modDecimator_; }
 
     // --- Dynamic JSON Contract Registry & Auto-Detection (Non-RT) ---
     std::size_t loadContractsDirectory(const std::string& contractsDir);
@@ -110,7 +115,7 @@ private:
     int resolveRegistryIndexById(std::string_view idOrAlias) const noexcept;
     void sendCc(std::uint8_t ch1to16, std::uint8_t cc, std::uint8_t val, std::uint8_t portIdx = 0) noexcept;
     void sendNrpn(std::uint8_t ch1to16, std::uint8_t msb, std::uint8_t lsb, std::uint8_t val, std::uint8_t portIdx = 0) noexcept;
-    void dispatchBinding(std::uint8_t ch, std::uint8_t portIdx, const abd::synth::SemanticControlBinding& binding, float normalizedVal) noexcept;
+    void dispatchBinding(std::uint8_t partIdx, std::uint8_t ch, std::uint8_t portIdx, const abd::synth::SemanticControlBinding& binding, float normalizedVal) noexcept;
     void applyInternalSemanticParam(std::uint8_t partIdx, std::uint64_t roleHash, float normalizedVal) noexcept;
     void applyInternalDrumParam(std::uint8_t partIdx,
                                 std::uint8_t slotIdx,
@@ -128,6 +133,7 @@ private:
 
     McxMidiOutQueue<1024> outQueue_;
     McxLatencyCompensator latencyComp_;
+    McxMidiModDecimator modDecimator_ {};
     std::array<McxInboundNrpnState, 16> nrpnStates_ {};
 
     std::uint8_t runningStatus_ { 0 };

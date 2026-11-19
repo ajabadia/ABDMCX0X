@@ -115,6 +115,80 @@ inline bool handleRackJsEvent(McxAudioProcessor& proc, const juce::String& type,
         proc.enqueueUiCommand(cmd);
         return true;
     }
+    if (type == "setFxTopology")
+    {
+        McxUiCommand cmd {};
+        cmd.type = McxUiCommand::Type::SetFxTopology;
+        cmd.paramId = static_cast<std::int16_t>(static_cast<int>(obj.getProperty("topology")));
+        proc.enqueueUiCommand(cmd);
+        return true;
+    }
+    if (type == "setFxCascade")
+    {
+        McxUiCommand cmd {};
+        cmd.type = McxUiCommand::Type::SetFxCascade;
+        cmd.value = static_cast<float>(obj.getProperty("cho"));
+        cmd.value2 = static_cast<float>(obj.getProperty("del"));
+        proc.enqueueUiCommand(cmd);
+        return true;
+    }
+    if (type == "setFxGate")
+    {
+        McxUiCommand cmd {};
+        cmd.type = McxUiCommand::Type::SetFxGate;
+        cmd.argU8 = static_cast<std::uint8_t>(std::clamp<int>(static_cast<int>(obj.getProperty("gate")), 0, 3));
+        cmd.value = static_cast<float>(obj.getProperty("value"));
+        proc.enqueueUiCommand(cmd);
+        return true;
+    }
+    if (type == "setFxTempoSync")
+    {
+        McxUiCommand cmd {};
+        cmd.type = McxUiCommand::Type::SetFxTempoSync;
+        cmd.argU8 = static_cast<bool>(obj.getProperty("enabled")) ? 1 : 0;
+        proc.enqueueUiCommand(cmd);
+        return true;
+    }
+    if (type == "setLimiterEnabled")
+    {
+        McxUiCommand cmd {};
+        cmd.type = McxUiCommand::Type::SetLimiterEnabled;
+        cmd.argU8 = static_cast<bool>(obj.getProperty("enabled")) ? 1 : 0;
+        proc.enqueueUiCommand(cmd);
+        return true;
+    }
+    if (type == "setLimiterCeilingDb")
+    {
+        McxUiCommand cmd {};
+        cmd.type = McxUiCommand::Type::SetLimiterCeilingDb;
+        cmd.value = static_cast<float>(obj.getProperty("db"));
+        proc.enqueueUiCommand(cmd);
+        return true;
+    }
+    if (type == "setDuckMode")
+    {
+        McxUiCommand cmd {};
+        cmd.type = McxUiCommand::Type::SetDuckMode;
+        cmd.argU8 = static_cast<std::uint8_t>(std::clamp<int>(static_cast<int>(obj.getProperty("kind")), 0, 2));
+        cmd.value = static_cast<bool>(obj.getProperty("enabled")) ? 1.0f : 0.0f;
+        proc.enqueueUiCommand(cmd);
+        return true;
+    }
+    if (type == "setSeqLoop")
+    {
+        McxUiCommand cmd {};
+        cmd.type = McxUiCommand::Type::SetSeqLoop;
+        cmd.argU8 = static_cast<bool>(obj.getProperty("loop")) ? 1 : 0;
+        proc.enqueueUiCommand(cmd);
+        return true;
+    }
+    if (type == "setPartPresetName")
+    {
+        auto cmd = McxUiCommand::makeKeyed(McxUiCommand::Type::SetPartPresetName, 0, -1, 0.0f, obj.getProperty("name").toString().toStdString());
+        cmd.partIdx = static_cast<std::uint8_t>(std::clamp<int>(static_cast<int>(obj.getProperty("part")), 0, McxEngine::kNumParts - 1));
+        proc.enqueueUiCommand(cmd);
+        return true;
+    }
     return false;
 }
 

@@ -27,6 +27,7 @@ export class BridgeWasm {
   private onPartEngineStateCb: ((dto: McxPartEngineStateDto) => void) | null = null;
   private onSongScenesStateCb: ((stateJson: string) => void) | null = null;
   private onMidiOutCb: ((bytes: Uint8Array) => void) | null = null;
+  private onWorkletEventCb: ((msg: any) => void) | null = null;
 
   constructor() { this.attachFirstGestureUnlock(); }
 
@@ -38,6 +39,7 @@ export class BridgeWasm {
   public onPartEngineState(cb: (dto: McxPartEngineStateDto) => void): void { this.onPartEngineStateCb = cb; }
   public onSongScenesState(cb: (stateJson: string) => void): void { this.onSongScenesStateCb = cb; }
   public onMidiOut(cb: (bytes: Uint8Array) => void): void { this.onMidiOutCb = cb; }
+  public onWorkletEvent(cb: (msg: any) => void): void { this.onWorkletEventCb = cb; }
 
   private attachFirstGestureUnlock(): void {
     if (typeof window === 'undefined') return;
@@ -121,6 +123,8 @@ export class BridgeWasm {
             this.onSongScenesStateCb?.(String(msg.stateJson ?? ''));
           } else if (msg.type === 'MIDI_OUT' && msg.bytes) {
             this.onMidiOutCb?.(msg.bytes);
+          } else {
+            this.onWorkletEventCb?.(msg);
           }
         };
         node.port.postMessage({ type: 'INIT_WASM', binary: wasmBinary, sampleRate: ctx.sampleRate }, [wasmBinary]);

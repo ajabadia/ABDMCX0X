@@ -18,28 +18,8 @@ export function mountMultiEngineUi(
   const routeModal = new McxInstrumentRouteModal({
     bridge,
     getPartState: (idx) => state.partsState[idx],
-    onPartUpdated: (idx) => {
-      state.refreshPartList();
-      state.updateLcdLine1(0);
-      bridge.requestPartEngineState(idx);
-      if (state.refs.toneDrawer?.isOpen() && state.refs.toneDrawer.getPart() === idx) {
-        state.refs.toneDrawer.syncPart(idx, state.partsState[idx]);
-      }
-      if (state.refs.padModal?.isOpen() && state.refs.padModal.getPart() === idx) {
-        state.refs.padModal.syncPart(idx, state.partsState[idx]);
-      }
-      if (state.refs.arpModal?.isOpen() && state.refs.arpModal.getPart() === idx) {
-        state.syncArpModalForPart(idx);
-      }
-      if (state.refs.pianoRollModal?.isOpen() && state.focusedPart === idx) {
-        state.syncPianoRollForPart(idx);
-      }
-    },
-    onOpenToneDrawer: (idx) => {
-      state.focusedPart = idx;
-      state.refs.synthModal?.open(idx);
-      state.refreshPartList();
-    },
+    onPartUpdated: (idx) => state.notifyPartMetadataChanged(idx),
+    onOpenToneDrawer: (idx) => { state.focusPart(idx); state.refs.synthModal?.open(idx); },
     setLcdLine2: state.setLcdLine2,
   });
 
@@ -47,10 +27,7 @@ export function mountMultiEngineUi(
     bridge,
     getPartState: (idx) => state.partsState[idx],
     getCatalog: () => routeModal.getEngineCatalog(),
-    onPartUpdated: (idx) => {
-      state.refreshPartList();
-      state.updateLcdLine1(0);
-    },
+    onPartUpdated: (idx) => state.notifyPartMetadataChanged(idx),
     onOpenRouteModal: (idx) => routeModal.open(idx),
     onOpenBank: (idx) => state.refs.bankDrawer?.open(idx),
     setLcdLine2: state.setLcdLine2,
@@ -81,6 +58,13 @@ export function mountMultiEngineUi(
     routeModal.syncTheme();
   });
 
+  bridge.onAudioStatus((st) => {
+    if (st === 'ready') {
+      bridge.requestEngineCatalog();
+      bridge.requestPartPresets(state.focusedPart);
+      bridge.requestPartEngineState(state.focusedPart);
+    }
+  });
   bridge.requestEngineCatalog();
   bridge.requestPartPresets(state.focusedPart);
   bridge.requestPartEngineState(state.focusedPart);

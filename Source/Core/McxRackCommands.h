@@ -64,6 +64,35 @@ inline void executeRackOrSystemCommand(const Cmd& cmd,
         case Type::SetSlotChainTarget:
             chassis.setSlotChainTarget(slot, static_cast<int>(cmd.paramId));
             break;
+        case Type::SetFxTopology:
+            outFx.setUiTopology(static_cast<int>(cmd.paramId));
+            break;
+        case Type::SetFxCascade:
+            outFx.setCascadeInjections(cmd.value, cmd.value2);
+            break;
+        case Type::SetFxGate:
+            engine.setFxGate(static_cast<int>(cmd.argU8), cmd.value >= 0.5f);
+            break;
+        case Type::SetFxTempoSync:
+            engine.setFxTempoSync(cmd.argU8 != 0);
+            break;
+        case Type::SetLimiterEnabled:
+            outFx.setLimiterEnabled(cmd.argU8 != 0);
+            break;
+        case Type::SetLimiterCeilingDb:
+            outFx.setLimiterCeilingDb(cmd.value);
+            break;
+        case Type::SetDuckMode:
+            if (cmd.argU8 == 0) engine.setManualDuckGate(cmd.value >= 0.5f);
+            else if (cmd.argU8 == 1) engine.setAudioDuckEnabled(cmd.value >= 0.5f);
+            else if (cmd.argU8 == 2) engine.setMidiDuckEnabled(cmd.value >= 0.5f);
+            break;
+        case Type::SetSeqLoop:
+            engine.sequencer().setLoopEnabled(cmd.argU8 != 0);
+            break;
+        case Type::SetPartPresetName:
+            engine.setPartPresetName(static_cast<int>(cmd.partIdx), cmd.key);
+            break;
         case Type::ResetToFactory:
         {
             engine.allNotesOff();

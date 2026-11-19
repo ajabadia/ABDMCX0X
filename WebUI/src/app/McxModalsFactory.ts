@@ -11,6 +11,7 @@ import { McxBankDrawer } from '../ui/McxBankDrawer';
 import { McxSavePresetModal } from '../ui/McxSavePresetModal';
 import type { McxAppState } from './McxAppState';
 import { createGlobalLfoBridgeAdapter, GLOBAL_LFO1_DESTS, GLOBAL_LFO2_DESTS } from './McxPianoRollSync';
+import { createFxRackBridge, loadBankDrawerItem, loadUserPresetsLocal, persistAndNotifyPresetSave } from './McxSessionHydrator';
 
 export const buildProbeDestinations = () => [
   { id: 1, label: t('mcx.probePostMaster'), hint: t('mcx.probePostMasterHint') },
@@ -39,65 +40,36 @@ export function createProbeModal(bridge: McxHostBridge, state: McxAppState) {
   });
 }
 
-export function openSavePresetModal(state: McxAppState, type: 'part' | 'multi'): void {
+export function openSavePresetModal(bridge: McxHostBridge, state: McxAppState, type: 'part' | 'multi'): void {
   const idx = state.focusedPart;
   new McxSavePresetModal({
-    type,
-    partIndex: idx,
-    initialName: state.partsState[idx].name,
-    initialCategory: state.partsState[idx].categoryId,
-    onSave: (payload) => {
-      if (payload.type === 'part') {
-        state.partsState[idx].name = payload.name;
-        state.partsState[idx].categoryId = payload.categoryId;
-        state.refreshPartList();
-      }
-      state.setLcdLine2(`SAVED ${payload.name} [${payload.sublibrary}]`);
-    },
+    type, partIndex: idx, initialName: state.partsState[idx].name, initialCategory: state.partsState[idx].categoryId,
+    onSave: (payload) => persistAndNotifyPresetSave(bridge, state, payload),
   }).open();
 }
 
 export function createBankDrawer(bridge: McxHostBridge, state: McxAppState): McxBankDrawer {
-  return new McxBankDrawer(bridge, {
+  const drawer = new McxBankDrawer(bridge, {
     getTargetPart: () => state.focusedPart,
-    setTargetPart: (idx) => { state.focusedPart = idx; state.updateLcdLine1(0); state.refreshPartList(); },
-    onSelectModel: (pIdx, item) => {
-      state.partsState[pIdx].name = item.name;
-      state.partsState[pIdx].categoryId = item.categoryId;
-      state.refreshPartList();
-      state.setLcdLine2(`P${String(pIdx + 1).padStart(2, '0')} LOADED MODEL: ${item.name}`);
-    },
-    onSelectPartPreset: (pIdx, item) => {
-      state.partsState[pIdx].name = item.name;
-      state.partsState[pIdx].categoryId = item.categoryId;
-      if (item.engineKind?.includes('drum') && state.partsState[pIdx].kind !== 'drum_map') {
-        state.partsState[pIdx].kind = 'drum_map';
-        bridge.setParam(pIdx, 'partKind', 1);
-      }
-      state.refreshPartList();
-      state.setLcdLine2(`P${String(pIdx + 1).padStart(2, '0')} PRESET: ${item.name}`);
-    },
-    onSelectMultiPreset: (item) => state.setLcdLine2(`LOADED MULTI: ${item.name}`),
+    setTargetPart: (idx) => state.focusPart(idx),
+    onSelectModel: (pIdx, item) => loadBankDrawerItem(bridge, state, pIdx, item),
+    onSelectPartPreset: (pIdx, item) => loadBankDrawerItem(bridge, state, pIdx, item),
+    onSelectMultiPreset: (item) => loadBankDrawerItem(bridge, state, 0, item),
     onAudition: (pIdx, item) => {
       void bridge.enableAudio();
       const note = item.engineKind?.includes('drum') ? 36 : 60;
       bridge.noteOn(pIdx, note, 0.85);
       setTimeout(() => bridge.noteOff(pIdx, note), 350);
     },
-    onOpenSaveModal: (type) => openSavePresetModal(state, type),
+    onOpenSaveModal: (type) => openSavePresetModal(bridge, state, type),
   });
+  drawer.setUserItems(loadUserPresetsLocal());
+  return drawer;
 }
 
 export function createStudioModals(bridge: McxHostBridge, state: McxAppState) {
   const fxRackModal = new MultiBusFxRackModal({
-    bridge: {
-      setTopology: (topo: number) => state.setLcdLine2(`FX RACK TOPOLOGY: ${topo}`),
-      setMacro: (slot: number, m: number) => bridge.setParam(state.focusedPart, slot === 0 ? 'reverbMacro' : 'chorusMacro', m),
-      setCascadeInjections: (cho: number, del: number) => state.setLcdLine2(`CASCADE: CHO ${Math.round(cho * 100)}% | DEL ${Math.round(del * 100)}%`),
-      muteSendBus: (b: number, m: boolean) => state.setLcdLine2(`BUS ${['REV (A)', 'CHO (B)', 'DEL (C)', 'AUX (D)'][b]} ${m ? 'MUTED' : 'ACTIVE'}`),
-      setParam: (p: string, v: number) => { if (p === 'masterTempoBpm') state.refs.stepStrip?.setBpm(v); state.setLcdLine2(`FX ${p}: ${v}`); },
-      setGate: (g: number, v: number) => state.setLcdLine2(`FX GATE [${['DUCK', 'GATE REV', 'FREEZE', 'KILL'][g]}]: ${v ? 'ON' : 'OFF'}`),
-    },
+    bridge: createFxRackBridge(bridge, state),
     bpm: 120,
     locale: getLocale(),
     getRackSlots: () => (state.refs.rackColumn as any)?.getSlots?.() ?? [],
@@ -160,6 +132,7 @@ export function createStudioModals(bridge: McxHostBridge, state: McxAppState) {
     onPatternChange: (pat: any) => {
       state.partsState[state.focusedPart].sequence = pat;
       bridge.setPartPattern(state.focusedPart, pat);
+      state.refs.stepStrip?.syncFromSequence(state.focusedPart, pat);
       state.setLcdLine2(`PATTERN P${String(state.focusedPart + 1).padStart(2, '0')}: ${pat.notes?.length || 0} NOTES (${pat.bars} BARS)`);
     },
     onMotionPlayback: (target: string, val: number) => {

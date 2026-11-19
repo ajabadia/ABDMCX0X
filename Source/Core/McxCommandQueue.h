@@ -56,6 +56,15 @@ struct McxUiCommand
         SetPartInsertSlot,
         SetSendSlotTarget,
         SetSlotChainTarget,
+        SetFxTopology,
+        SetFxCascade,
+        SetFxGate,
+        SetFxTempoSync,
+        SetLimiterEnabled,
+        SetLimiterCeilingDb,
+        SetDuckMode,
+        SetSeqLoop,
+        SetPartPresetName,
         ResetToFactory
     };
 

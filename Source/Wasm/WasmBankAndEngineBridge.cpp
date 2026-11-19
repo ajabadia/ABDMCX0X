@@ -1,7 +1,25 @@
 #include "WasmBridge.h"
 #include "WasmInternal.h"
 
+#include <algorithm>
+#include <sstream>
 #include <string>
+
+namespace
+{
+std::string escWasmJson(const char* s)
+{
+    std::string out;
+    if (!s) return out;
+    for (const char* p = s; *p != '\0'; ++p)
+    {
+        if (*p == '\\') out += "\\\\";
+        else if (*p == '"') out += "\\\"";
+        else out += *p;
+    }
+    return out;
+}
+} // namespace
 
 extern "C"
 {
@@ -104,6 +122,51 @@ int loadIndexedKitOnDemand(int bankSlot, int kitIdx, int partIdx)
 int collectUnusedWaves()
 {
     return static_cast<int>(abdmcx::wasm_internal::engine().collectUnusedWaves());
+}
+
+const char* getRegisteredEngineCatalogJson()
+{
+    static std::string sCatalog;
+    const auto& eng = abdmcx::wasm_internal::engine();
+    const int count = eng.getRegisteredEngineTypeCount();
+    std::ostringstream ss;
+    ss << "[";
+    for (int i = 0; i < count; ++i)
+    {
+        const auto d = eng.getRegisteredEngineDescriptor(i);
+        if (i > 0) ss << ",";
+        ss << "{\"index\":" << i
+           << ",\"typeId\":\"" << escWasmJson(d.typeId) << "\""
+           << ",\"displayName\":\"" << escWasmJson(d.displayName) << "\""
+           << ",\"supportsDrumMode\":" << (d.supportsDrumMode ? "true" : "false")
+           << ",\"supportsBankArchives\":" << (d.supportsBankArchives ? "true" : "false")
+           << ",\"maxRecommendedInstances\":" << d.maxRecommendedInstances << "}";
+    }
+    ss << "]";
+    sCatalog = ss.str();
+    return sCatalog.c_str();
+}
+
+const char* getPartPresetsJson(int partIdx)
+{
+    static std::string sPresets;
+    const auto& eng = abdmcx::wasm_internal::engine();
+    const int p = std::clamp(partIdx, 0, abdmcx::McxEngine::kNumParts - 1);
+    const int count = eng.getPartFactoryPresetCount(p);
+    std::ostringstream ss;
+    ss << "{\"part\":" << p
+       << ",\"engineTypeIndex\":" << eng.getPartEngineTypeIndex(p)
+       << ",\"engineTypeId\":\"" << escWasmJson(eng.getPartEngineTypeId(p)) << "\""
+       << ",\"currentPreset\":\"" << escWasmJson(eng.getPartDisplayPresetName(p)) << "\""
+       << ",\"presets\":[";
+    for (int i = 0; i < count; ++i)
+    {
+        if (i > 0) ss << ",";
+        ss << "{\"index\":" << i << ",\"name\":\"" << escWasmJson(eng.getPartFactoryPresetName(p, i)) << "\"}";
+    }
+    ss << "]}";
+    sPresets = ss.str();
+    return sPresets.c_str();
 }
 
 } // extern "C"

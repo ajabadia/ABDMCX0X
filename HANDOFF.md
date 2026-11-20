@@ -1,6 +1,6 @@
 # HANDOFF — ABDMCX0X
 
-> **Última actualización:** 2026-11-19 · **Estado actual:** **Oleadas P0–P2 y P3-A VERIFICADAS (`tsc` 0 errores, `11/11` CTest, JUCE 9 Standalone/VST3, Vite `208` módulos, WASM y `ABDShared` Vitest `61/62` con `737 passed`). Oleada P3-B (`[ME-04]` modularización `< 300` / `< 200` en `ABDShared`) en cola.**
+> **Última actualización:** 2026-11-20 · **Estado actual:** **Oleadas P0–P3 (incl. P3-A y P3-B) VERIFICADAS (`tsc` 0 errores, `11/11` CTest, JUCE 9 Standalone/VST3, Vite `232` módulos, WASM y `ABDShared` Vitest `61/62` con `737 passed`). Oleada P4 (holgura `< 260` / `< 180` y pruebas de integración en `ABDMCX0X`) siguiente en cola.**
 
 ---
 

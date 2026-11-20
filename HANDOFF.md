@@ -1,6 +1,6 @@
 # HANDOFF — ABDMCX0X
 
-> **Última actualización:** 2026-11-20 · **Estado actual:** **Oleadas P0–P3 (incl. P3-A y P3-B) VERIFICADAS (`tsc` 0 errores, `11/11` CTest, JUCE 9 Standalone/VST3, Vite `232` módulos, WASM y `ABDShared` Vitest `61/62` con `737 passed`). Oleada P4 (holgura `< 260` / `< 180` y pruebas de integración en `ABDMCX0X`) siguiente en cola.**
+> **Última actualización:** 2026-11-20 · **Estado actual:** **Plan de Saneamiento Pre-Fase 13 (Oleadas P0–P4) COMPLETADO Y VERIFICADO (`12/12` CTest, `tsc` 0 errores, `ABDMCX0X` Vitest `3/3`, `ABDShared` `pianoRollModal` `10/10`, Vite `237` módulos, JUCE 9 Standalone/VST3 y WASM). Listo para Fase 13 (`64` pistas) tras verificación visual final a `1280x720`.**
 
 ---
 

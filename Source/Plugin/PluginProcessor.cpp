@@ -3,10 +3,9 @@
 #include "../Core/McxFactoryBank.h"
 #include "../Core/McxParamRouter.h"
 #include "../State/McxApvtsApplier.h"
-#include "../Sequencer/McxSongAndScenes.h"
-#include "../Sequencer/McxSongJsonCodec.h"
 #include "McxHostTransportSync.h"
 #include "McxPatternJsonAdapter.h"
+#include "McxProcessorStateHelpers.h"
 
 #include <algorithm>
 #include <cmath>
@@ -234,15 +233,8 @@ void McxAudioProcessor::updateSystemSettings(const McxSystemSettings& next) {
 juce::AudioProcessorEditor* McxAudioProcessor::createEditor() { return new McxAudioProcessorEditor(*this); }
 
 void McxAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
-    juce::ValueTree root("ABDMCX0XState");
-    root.addChild(apvts_.copyState(), -1, nullptr);
-    {
-        const juce::ScopedLock sl(engineMutex_);
-        root.setProperty("mcxPresetJson", juce::String(McxBankManagerBridge::serializeToJson(engine_, hardwareBridge_, "Session")), nullptr);
-        root.setProperty("mcxSongScenesJson", juce::String(serializeSongAndScenesJson(engine_.songAndScenes())), nullptr);
-        char rk[2048] {}; engine_.getOutputAndFx().getChassis().serializeJson(rk, sizeof(rk));
-        root.setProperty("mcxRackJson", juce::String(rk), nullptr);
-    }
+    const juce::ScopedLock sl(engineMutex_);
+    const auto root = serializeProcessorStateTree(apvts_, engine_, hardwareBridge_);
     if (auto xml = root.createXml()) copyXmlToBinary(*xml, destData);
 }
 
@@ -254,10 +246,8 @@ void McxAudioProcessor::setStateInformation(const void* data, int sizeInBytes) {
     if (tree.hasType(apvts_.state.getType())) { apvts_.replaceState(tree); return; }
     {
         const juce::ScopedLock sl(engineMutex_);
-        if (auto paramsTree = tree.getChildWithName(apvts_.state.getType()); paramsTree.isValid()) apvts_.replaceState(paramsTree);
-        if (tree.hasProperty("mcxPresetJson")) { McxBankManagerBridge::deserializeFromJson(engine_, hardwareBridge_, tree.getProperty("mcxPresetJson").toString().toStdString()); syncHostLatencyReport(); }
-        if (tree.hasProperty("mcxSongScenesJson")) (void)deserializeSongAndScenesJson(engine_.songAndScenes(), tree.getProperty("mcxSongScenesJson").toString().toStdString());
-        if (tree.hasProperty("mcxRackJson")) engine_.getOutputAndFx().getChassis().deserializeJson(tree.getProperty("mcxRackJson").toString().toRawUTF8());
+        if (deserializeProcessorStateTree(tree, apvts_, engine_, hardwareBridge_))
+            syncHostLatencyReport();
     }
     pendingEngineStateMask_.store(0xFFFFu, std::memory_order_release);
     markSongStateDirty();

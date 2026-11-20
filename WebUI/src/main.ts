@@ -18,18 +18,18 @@ import '@abdsynths/shared/styles/components/piano-roll.css';
 import '@abdsynths/shared/styles/components/groove-shuffle.css';
 import './styles/mcx0x.css';
 
-import { McxHostBridge } from './bridge/McxHostBridge'; import { McxRackSlotBridge } from './bridge/McxRackSlotBridge';
-import { FxFaceplateModal } from '@abdsynths/shared/components'; import { applyI18n, getLocale, onLocaleChange, t } from './i18n/mcxI18n';
+import { McxHostBridge } from './bridge/McxHostBridge';
+import { applyI18n, getLocale, onLocaleChange, t } from './i18n/mcxI18n';
 import { ThemeManager, type ThemeFamilyKey } from './ui/ThemeManager'; import { McxNavbar } from './ui/McxNavbar';
 import { McxSettingsModal } from './ui/McxSettingsModal'; import { wireBankDropZone } from './ui/McxPanels';
 import { McxScopeCanvas } from './ui/McxScopeCanvas'; import { McxStepStrip } from './ui/McxStepStrip';
 import { McxToneDrawer } from './ui/McxToneDrawer'; import { McxGlobalDrawer } from './ui/McxGlobalDrawer';
-import { McxMasterPanel } from './ui/McxMasterPanel'; import { McxRackColumn } from './ui/McxRackColumn';
 import { McxAppState } from './app/McxAppState'; import { bindGlobalShortcuts, bindTelemetry, mountKeyboardDock } from './app/McxInputAndTelemetry';
 import { buildProbeDestinations, createBankDrawer, createProbeModal, createStudioModals, openSavePresetModal } from './app/McxModalsFactory';
 import { createMidiModals } from './app/McxMidiModalsFactory';
 import { hydrateSessionState, parseLibraryCatalogJson } from './app/McxSessionHydrator';
 import { mountMultiEngineUi } from './app/McxMultiEngineWiring'; import { mountSongAndScenesUi } from './app/McxSongWiring';
+import { mountRackAndMasterUi } from './app/McxRackAndMasterWiring';
 
 const bridge = new McxHostBridge(), themeMgr = new ThemeManager(), state = new McxAppState(bridge);
 
@@ -91,59 +91,7 @@ function initApp(): void {
     });
   }
 
-  const rackHost = byId('mcx-rack-column');
-  if (rackHost) {
-    const fxModal = new FxFaceplateModal({
-      onNameChange: (slotIdx: number, newName: string) => {
-        state.refs.rackColumn?.setSlotCustomName(slotIdx, newName);
-        modals.fxRackModal?.render();
-        state.refs.toneDrawer?.updateSendLabels(modals.fxRackModal?.emitLabels?.());
-        state.refs.toneDrawer?.updateInsertOptions();
-      },
-    });
-    state.refs.fxRackModal = modals.fxRackModal;
-    state.refs.rackColumn = new McxRackColumn(rackHost, {
-      bridge, setLcdLine2: state.setLcdLine2,
-      onOpenTopology: () => modals.fxRackModal.toggle(),
-      onSlotMoved: (from, to) => {
-        state.partsState.forEach((ps) => { ps.insertSlot = ps.insertSlot === from ? to : ps.insertSlot === to ? from : ps.insertSlot; });
-        state.refs.toneDrawer?.updateInsertOptions();
-      },
-      onSlotRemoved: (slot) => {
-        state.partsState.forEach((ps) => { if (ps.insertSlot === slot) ps.insertSlot = -1; });
-        state.refs.toneDrawer?.updateInsertOptions();
-      },
-      onSlotsChanged: () => {
-        modals.fxRackModal.render();
-        state.refs.toneDrawer?.updateSendLabels(modals.fxRackModal.emitLabels());
-        state.refs.toneDrawer?.updateInsertOptions();
-        state.refreshPartList();
-      },
-      onOpenEffectDetail: (slotIdx, algoId, customName, slot) => {
-        state.setLcdLine2(`EDITANDO EFECTO BAHÍA ${slotIdx + 1}: ${customName || algoId}`);
-        const slotBridge = new McxRackSlotBridge(bridge, {
-          slotIdx, algoId, name: customName, bypass: slot?.bypass, duck: slot?.duck,
-          p1: slot?.p1, p2: slot?.p2, mix: slot?.mix, presetIdx: slot?.presetIdx, params: slot?.params,
-          onStateSync: (idx, patch) => state.refs.rackColumn?.updateSlotState(idx, patch, patch.bypass !== undefined),
-        });
-        fxModal.open(slotIdx, algoId, customName, slotBridge);
-      },
-    });
-  }
-
-  const masterHost = byId('mcx-master-panel');
-  if (masterHost) {
-    state.refs.masterPanel = new McxMasterPanel(masterHost, {
-      bridge, setLcdLine2: state.setLcdLine2, initialVolume: 0.85, initialBpm: state.globalSettings.standaloneBpm,
-      getFocusedPart: () => state.focusedPart, onVolumeChange: (v) => globalDrawer.setMasterVolume(v),
-      onLimiterChange: (en) => modals.fxRackModal.setLimiterEnabled(en),
-      onOpenGlobal: () => { globalDrawer.toggle(); byId('mcx-global-btn')?.classList.toggle('is-active', globalDrawer.isOpen()); },
-      onOpenFxRack: () => modals.fxRackModal.toggle(), onOpenGlobalLfo: () => modals.globalLfoModal.toggle(),
-      onOpenGroove: (partIdx?: number) => modals.grooveModal.open(partIdx ?? -1), onOpenSong: () => state.refs.toggleSongDrawer?.(),
-      onBpmChange: (bpm) => { state.globalSettings.standaloneBpm = bpm; state.updateLcdLine1(0); modals.fxRackModal.setBpm(bpm); modals.globalLfoModal.setBpm(bpm); state.refs.stepStrip?.setTransportRunning(state.refs.masterPanel?.getTransportState()?.playing ?? false, bpm); },
-      onTransportChange: (st) => { modals.pianoRollModal.setPlaying(st.playing); state.refs.stepStrip?.setTransportRunning(st.playing, st.bpm); },
-    });
-  }
+  mountRackAndMasterUi(bridge, state, modals, globalDrawer);
 
   mountMultiEngineUi(bridge, state, themeMgr);
   mountSongAndScenesUi(bridge, state);

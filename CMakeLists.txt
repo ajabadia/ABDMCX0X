@@ -150,6 +150,10 @@ add_executable(McxPhase10RackChassisTests Tests/McxPhase10RackChassisTests.cpp)
 target_link_libraries(McxPhase10RackChassisTests PRIVATE ABDMCX0X_Core)
 add_test(NAME McxPhase10RackChassisTests COMMAND McxPhase10RackChassisTests)
 
+add_executable(McxPhase11SanitizationTests Tests/McxPhase11SanitizationTests.cpp)
+target_link_libraries(McxPhase11SanitizationTests PRIVATE ABDMCX0X_Core)
+add_test(NAME McxPhase11SanitizationTests COMMAND McxPhase11SanitizationTests)
+
 add_executable(McxAudioRenderDemo Tests/McxAudioRenderDemo.cpp)
 target_link_libraries(McxAudioRenderDemo PRIVATE ABDMCX0X_Core)
 

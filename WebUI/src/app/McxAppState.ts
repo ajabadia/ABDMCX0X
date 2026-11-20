@@ -18,6 +18,7 @@ import type { McxSynthModal } from '../ui/McxSynthModal';
 import type { McxRackColumn } from '../ui/McxRackColumn';
 import type { McxGlobalDrawer } from '../ui/McxGlobalDrawer';
 import type { McxSettingsModal } from '../ui/McxSettingsModal';
+import { createMixerCallbacks } from './McxMixerCallbacksFactory';
 import { syncPianoRollPart } from './McxPianoRollSync';
 
 export interface McxUiRefs {
@@ -137,56 +138,7 @@ export class McxAppState {
   }
 
   public getPanelCallbacks(): McxMixerCallbacks {
-    if (this.cachedPanelCbs) return this.cachedPanelCbs;
-    this.cachedPanelCbs = {
-      getFocusedPart: () => this.focusedPart,
-      setFocusedPart: (idx) => this.focusPart(idx),
-      getPartsState: () => this.partsState,
-      getEngineCatalog: () => this.refs.routeModal?.getEngineCatalog() ?? [],
-      onOpenRouteForPart: (idx) => { this.focusPart(idx); this.refs.routeModal?.open(idx); },
-      onTogglePartKind: (idx) => {
-        const next = this.partsState[idx].kind === 'drum_map' ? 'chromatic' : 'drum_map';
-        this.partsState[idx].kind = next; this.bridge.setParam(idx, 'partKind', next === 'drum_map' ? 1 : 0);
-        this.notifyPartMetadataChanged(idx);
-        this.setLcdLine2(`P${String(idx + 1).padStart(2, '0')} -> ${next === 'drum_map' ? t('mcx.partDrumMap') : t('mcx.partChromatic')}`);
-      },
-      onChangePartChannel: (idx, ch) => {
-        this.partsState[idx].midiChannel = ch; this.bridge.setParam(idx, 'partMidiChannel', ch);
-        this.updateLcdLine1(0); this.setLcdLine2(`P${String(idx + 1).padStart(2, '0')} MIDI CH ${ch}`);
-      },
-      onToggleFollowTranspose: (idx) => {
-        const next = this.partsState[idx].followTranspose === false;
-        this.partsState[idx].followTranspose = next; this.bridge.setParam(idx, 'partFollowTranspose', next ? 1 : 0);
-        this.refreshPartList(); this.setLcdLine2(`P${String(idx + 1).padStart(2, '0')} TRANSPOSE: ${next ? 'ON' : 'OFF'}`);
-      },
-      onToggleMute: (idx) => {
-        this.partsState[idx].mute = !this.partsState[idx].mute; this.bridge.setParam(idx, 'partMute', this.partsState[idx].mute ? 1 : 0);
-        this.notifyPartMetadataChanged(idx);
-      },
-      onToggleSolo: (idx) => {
-        this.partsState[idx].solo = !this.partsState[idx].solo; this.bridge.setParam(idx, 'partSolo', this.partsState[idx].solo ? 1 : 0);
-        this.notifyPartMetadataChanged(idx);
-      },
-      onOpenSynthForPart: (idx) => { this.focusPart(idx); this.refs.synthModal?.open(idx); },
-      onOpenBankForPart: (idx) => { this.focusPart(idx); this.refs.bankDrawer?.open(idx); },
-      onOpenToneForPart: (idx, sec) => {
-        this.focusPart(idx);
-        if (this.refs.songDrawer?.isOpen()) this.refs.songDrawer.close();
-        if (sec) this.refs.toneDrawer?.open(idx, sec); else this.refs.toneDrawer?.toggle(idx);
-      },
-      onOpenPadsForPart: (idx) => {
-        this.focusPart(idx);
-        if (this.refs.padModal) { this.refs.padModal.syncPart(idx, this.partsState[idx]); this.refs.padModal.toggle(idx); }
-      },
-      onOpenArpForPart: (idx) => { this.focusPart(idx); if (this.refs.arpModal) { this.syncArpModalForPart(idx); this.refs.arpModal.toggle(idx); } },
-      onOpenPianoRollForPart: (idx) => { this.focusPart(idx); if (this.refs.pianoRollModal) { this.syncPianoRollForPart(idx); this.refs.pianoRollModal.open(); } },
-      onChangeGlide: (idx, ms) => this.refs.stepStrip?.setPortaTime(idx, ms),
-      onChangeLevel: (idx, lvl) => { this.partsState[idx].partLevel = lvl; this.bridge.setParam(idx, 'partLevel', lvl); },
-      onChangePan: (idx, pan) => { this.partsState[idx].partPan = pan; this.bridge.setParam(idx, 'partPan', pan); },
-      onChangeSendA: (idx, send) => { this.partsState[idx].reverbSend = send; this.bridge.setParam(idx, 'reverbSend', send); },
-      onChangeSendB: (idx, send) => { this.partsState[idx].chorusSend = send; this.bridge.setParam(idx, 'chorusSend', send); },
-      setLcdLine2: this.setLcdLine2,
-    };
+    if (!this.cachedPanelCbs) this.cachedPanelCbs = createMixerCallbacks(this, this.bridge);
     return this.cachedPanelCbs;
   }
 }

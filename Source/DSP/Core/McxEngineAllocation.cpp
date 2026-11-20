@@ -32,10 +32,51 @@ void McxEngine::setPartKind(int partIndex, McxPartKind kind) noexcept
     engineRegistry_.rompler(idx).setDrumMode(p.isDrumKit);
 }
 
+void McxEngine::setPartEnabled(int partIndex, bool enabled) noexcept
+{
+    const int idx = std::clamp(partIndex, 0, kNumParts - 1);
+    const auto uIdx = static_cast<std::size_t>(idx);
+    auto& p = parts_[uIdx];
+    const bool wasEnabled = p.enabled;
+    p.enabled = enabled;
+    if (wasEnabled && !enabled)
+    {
+        if (engineSlots_[uIdx] != nullptr)
+            engineSlots_[uIdx]->allNotesOff();
+        if (outboundQueue_ != nullptr && HardwareMirrorRouter::routesToExternal(p.routeMode))
+        {
+            for (std::size_t n = 0; n < 128; ++n)
+            {
+                if (p.latchedNoteMap[n] >= 0)
+                    emitExternalNoteOff(idx, p, static_cast<int>(p.latchedNoteMap[n]), 0);
+            }
+            outboundQueue_->push(HardwareMirrorRouter::makeCc(p.midiChannel, 123, 0, 0, p.midiPortIndex));
+        }
+        p.arp.reset();
+        p.latchedNoteMap.fill(-1);
+        for (auto& slot : p.drumSlots)
+            slot.activeSounding = false;
+        p.mute = false;
+        p.solo = false;
+        partPeaks_[uIdx] = 0.0f;
+        partMidiPeaks_[uIdx] = 0.0f;
+    }
+}
+
+bool McxEngine::setBankLayoutJson(std::string_view jsonText)
+{
+    if (!bankLayout_.deserializeJson(jsonText))
+        return false;
+    const std::uint64_t used = bankLayout_.usedPartsMask();
+    for (int i = 0; i < kNumParts; ++i)
+        setPartEnabled(i, (used & (1ull << i)) != 0ull);
+    return true;
+}
+
 bool McxEngine::isAnyPartSoloed() const noexcept
 {
     for (const auto& p : parts_)
-        if (p.solo) return true;
+        if (p.enabled && p.solo) return true;
     return false;
 }
 
@@ -47,31 +88,37 @@ bool McxEngine::isPartAudible(int partIndex) const noexcept
     return !p.mute;
 }
 
-void McxEngine::routeMidiChannelNoteOn(int midiChannel1to16, int midiNote, float velocity, std::int32_t sampleOffset) noexcept
+void McxEngine::routeMidiPortChannelNoteOn(int midiInPortIdx, int midiChannel1to16, int midiNote, float velocity, std::int32_t sampleOffset) noexcept
 {
     const int ch = std::clamp(midiChannel1to16, 1, 16);
     const int note = std::clamp(midiNote, 0, 127);
     for (int i = 0; i < kNumParts; ++i)
     {
         const auto& p = parts_[static_cast<std::size_t>(i)];
-        if (p.enabled && static_cast<int>(p.midiChannel) == ch && note >= p.keyLow && note <= p.keyHigh)
+        if (p.enabled && static_cast<int>(p.midiInPortIndex) == midiInPortIdx
+            && static_cast<int>(p.midiChannel) == ch && note >= p.keyLow && note <= p.keyHigh)
+        {
             triggerPartNoteOn(i, note, velocity, sampleOffset);
+        }
     }
 }
 
-void McxEngine::routeMidiChannelNoteOff(int midiChannel1to16, int midiNote, std::int32_t sampleOffset) noexcept
+void McxEngine::routeMidiPortChannelNoteOff(int midiInPortIdx, int midiChannel1to16, int midiNote, std::int32_t sampleOffset) noexcept
 {
     const int ch = std::clamp(midiChannel1to16, 1, 16);
     const int note = std::clamp(midiNote, 0, 127);
     for (int i = 0; i < kNumParts; ++i)
     {
         const auto& p = parts_[static_cast<std::size_t>(i)];
-        if (p.enabled && static_cast<int>(p.midiChannel) == ch && note >= p.keyLow && note <= p.keyHigh)
+        if (p.enabled && static_cast<int>(p.midiInPortIndex) == midiInPortIdx
+            && static_cast<int>(p.midiChannel) == ch && note >= p.keyLow && note <= p.keyHigh)
+        {
             releasePartNoteOff(i, note, sampleOffset);
+        }
     }
 }
 
-void McxEngine::routeMidiChannelCc(int midiChannel1to16, int ccNumber, int ccValue) noexcept
+void McxEngine::routeMidiPortChannelCc(int midiInPortIdx, int midiChannel1to16, int ccNumber, int ccValue) noexcept
 {
     const int ch = std::clamp(midiChannel1to16, 1, 16);
     if (ccNumber == 64)
@@ -80,10 +127,25 @@ void McxEngine::routeMidiChannelCc(int midiChannel1to16, int ccNumber, int ccVal
         for (int i = 0; i < kNumParts; ++i)
         {
             const auto& p = parts_[static_cast<std::size_t>(i)];
-            if (p.enabled && static_cast<int>(p.midiChannel) == ch)
+            if (p.enabled && static_cast<int>(p.midiInPortIndex) == midiInPortIdx && static_cast<int>(p.midiChannel) == ch)
                 setPartSustainPedal(i, down);
         }
     }
+}
+
+void McxEngine::routeMidiChannelNoteOn(int midiChannel1to16, int midiNote, float velocity, std::int32_t sampleOffset) noexcept
+{
+    routeMidiPortChannelNoteOn(0, midiChannel1to16, midiNote, velocity, sampleOffset);
+}
+
+void McxEngine::routeMidiChannelNoteOff(int midiChannel1to16, int midiNote, std::int32_t sampleOffset) noexcept
+{
+    routeMidiPortChannelNoteOff(0, midiChannel1to16, midiNote, sampleOffset);
+}
+
+void McxEngine::routeMidiChannelCc(int midiChannel1to16, int ccNumber, int ccValue) noexcept
+{
+    routeMidiPortChannelCc(0, midiChannel1to16, ccNumber, ccValue);
 }
 
 void McxEngine::setPartSustainPedal(int partIdx, bool down) noexcept

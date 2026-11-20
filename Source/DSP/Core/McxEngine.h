@@ -1,5 +1,6 @@
 #pragma once
 
+#include "McxBankLayout.h"
 #include "McxEngineRegistry.h"
 #include "McxPartState.h"
 #include "McxTypes.h"
@@ -26,14 +27,14 @@ class McxPatternSequencer;
 class McxSongAndScenes;
 
 /**
- * @brief 16-part JUCE-free C++20 Multi-Engine Groovebox Workstation core for ABDMCX0X.
+ * @brief 64-part JUCE-free C++20 Multi-Engine Groovebox Workstation core for ABDMCX0X.
  * Hosts pluggable IMcxSoundEngine instances per track (default: ABDShared StructuredRompler
  * over a shared 64-voice RomplerVoicePool) plus per-track TrackModRouter modulation.
  */
 class McxEngine
 {
 public:
-    static constexpr int kNumParts = 16;
+    static constexpr int kNumParts = 64;
     static constexpr int kMaxVoices = 64;
 
     McxEngine() noexcept;
@@ -136,6 +137,11 @@ public:
     }
 
     void setPartKind(int partIndex, McxPartKind kind) noexcept;
+    void setPartEnabled(int partIndex, bool enabled) noexcept;
+    [[nodiscard]] McxBankLayoutState& bankLayout() noexcept { return bankLayout_; }
+    [[nodiscard]] const McxBankLayoutState& bankLayout() const noexcept { return bankLayout_; }
+    bool setBankLayoutJson(std::string_view jsonText);
+    [[nodiscard]] std::string serializeBankLayoutJson() const { return bankLayout_.serializeJson(); }
     void setPartInsertSlot(int partIndex, int slotIndex) noexcept;
     [[nodiscard]] int getPartInsertSlot(int partIndex) const noexcept;
     void moveRackSlot(int fromIdx, int toIdx) noexcept;
@@ -149,6 +155,9 @@ public:
     [[nodiscard]] bool isAnyPartSoloed() const noexcept;
     [[nodiscard]] bool isPartAudible(int partIndex) const noexcept;
 
+    void routeMidiPortChannelNoteOn(int midiInPortIdx, int midiChannel1to16, int midiNote, float velocity, std::int32_t sampleOffset = 0) noexcept;
+    void routeMidiPortChannelNoteOff(int midiInPortIdx, int midiChannel1to16, int midiNote, std::int32_t sampleOffset = 0) noexcept;
+    void routeMidiPortChannelCc(int midiInPortIdx, int midiChannel1to16, int ccNumber, int ccValue) noexcept;
     void routeMidiChannelNoteOn(int midiChannel1to16, int midiNote, float velocity, std::int32_t sampleOffset = 0) noexcept;
     void routeMidiChannelNoteOff(int midiChannel1to16, int midiNote, std::int32_t sampleOffset = 0) noexcept;
     void routeMidiChannelCc(int midiChannel1to16, int ccNumber, int ccValue) noexcept;
@@ -180,8 +189,8 @@ public:
     [[nodiscard]] const McxPatternSequencer& sequencer() const noexcept;
     [[nodiscard]] McxSongAndScenes& songAndScenes() noexcept;
     [[nodiscard]] const McxSongAndScenes& songAndScenes() const noexcept;
-    void applySceneStateNow(std::uint16_t muteMask, int transposeSemitones) noexcept;
-    [[nodiscard]] std::uint16_t captureCurrentMuteMask() const noexcept;
+    void applySceneStateNow(std::uint64_t muteMask, int transposeSemitones) noexcept;
+    [[nodiscard]] std::uint64_t captureCurrentMuteMask() const noexcept;
     void triggerScene(int sceneIndex, bool immediate = false) noexcept;
     void captureCurrentToScene(int sceneIndex) noexcept;
     void setSongModeEnabled(bool enabled) noexcept;
@@ -243,6 +252,7 @@ private:
     std::array<CachedSemanticIds, kNumParts> semanticDestIds_ {};
     std::array<McxTrackSemanticOffsets, kNumParts> lastSemanticOffsets_ {};
     std::deque<McxPartState> parts_;
+    McxBankLayoutState bankLayout_ {};
     std::array<McxChannelStrip, kNumParts> channelStrips_ {};
     McxOutputAndFx outputAndFx_ {};
     HardwareMirrorRouter mirrorRouter_ {};

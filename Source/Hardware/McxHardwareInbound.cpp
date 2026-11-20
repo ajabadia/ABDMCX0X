@@ -19,10 +19,11 @@ float normalizeWireByte(int dataVal, const abd::synth::SemanticControlBinding& b
 
 } // namespace
 
-bool McxHardwareBridge::processInboundCc(std::uint8_t ch1to16, std::uint8_t cc, std::uint8_t val) noexcept
+bool McxHardwareBridge::processInboundCc(std::uint8_t ch1to16, std::uint8_t cc, std::uint8_t val, int midiInPortIdx) noexcept
 {
+    const std::size_t portSlot = static_cast<std::size_t>(std::clamp(midiInPortIdx, 0, 31));
     const std::size_t chIdx = static_cast<std::size_t>(std::clamp<int>(ch1to16, 1, 16) - 1);
-    auto& st = nrpnStates_[chIdx];
+    auto& st = nrpnStates_[portSlot][chIdx];
     if (cc == 99)
     {
         st.currentChannel = ch1to16;
@@ -39,7 +40,7 @@ bool McxHardwareBridge::processInboundCc(std::uint8_t ch1to16, std::uint8_t cc, 
     {
         if (st.nrpnMsb >= 0 && st.nrpnLsb >= 0)
         {
-            handleCompleteInboundNrpn(ch1to16, st.nrpnMsb, st.nrpnLsb, val & 0x7F);
+            handleCompleteInboundNrpn(ch1to16, st.nrpnMsb, st.nrpnLsb, val & 0x7F, midiInPortIdx);
             return true;
         }
     }
@@ -47,12 +48,13 @@ bool McxHardwareBridge::processInboundCc(std::uint8_t ch1to16, std::uint8_t cc, 
     bool handled = false;
     if (cc == 64)
     {
-        engine_.routeMidiChannelCc(ch1to16, cc, val);
+        engine_.routeMidiPortChannelCc(midiInPortIdx, ch1to16, cc, val);
         handled = true;
     }
     for (std::uint8_t i = 0; i < McxEngine::kNumParts; ++i)
     {
-        if (engine_.part(i).midiChannel != ch1to16)
+        const auto& pt = engine_.part(i);
+        if (!pt.enabled || static_cast<int>(pt.midiInPortIndex) != midiInPortIdx || pt.midiChannel != ch1to16)
             continue;
         const auto* binding = getPartProfile(i).findByCc(cc);
         if (!binding || binding->roleHash == 0)
@@ -67,7 +69,7 @@ bool McxHardwareBridge::processInboundCc(std::uint8_t ch1to16, std::uint8_t cc, 
     return handled;
 }
 
-void McxHardwareBridge::handleCompleteInboundNrpn(int channel, int msb, int lsb, int dataVal) noexcept
+void McxHardwareBridge::handleCompleteInboundNrpn(int channel, int msb, int lsb, int dataVal, int midiInPortIdx) noexcept
 {
     const auto msb7 = static_cast<std::uint8_t>(msb & 0x7F);
     const auto lsb7 = static_cast<std::uint8_t>(lsb & 0x7F);
@@ -75,7 +77,7 @@ void McxHardwareBridge::handleCompleteInboundNrpn(int channel, int msb, int lsb,
     for (std::uint8_t i = 0; i < McxEngine::kNumParts; ++i)
     {
         auto& p = engine_.part(i);
-        if (p.midiChannel != channel)
+        if (!p.enabled || static_cast<int>(p.midiInPortIndex) != midiInPortIdx || p.midiChannel != channel)
             continue;
 
         const auto& prof = getPartProfile(i);
@@ -100,7 +102,7 @@ void McxHardwareBridge::handleCompleteInboundNrpn(int channel, int msb, int lsb,
     }
 }
 
-void McxHardwareBridge::processInboundMidiByte(std::uint8_t b, bool dispatchNotes) noexcept
+void McxHardwareBridge::processInboundMidiByte(std::uint8_t b, bool dispatchNotes, int midiInPortIdx) noexcept
 {
     if (b >= 0xF8)
         return; // Real-time clock/transport messages do not disturb running status or SysEx
@@ -145,7 +147,7 @@ void McxHardwareBridge::processInboundMidiByte(std::uint8_t b, bool dispatchNote
 
     if (msgType == 0xB0 && msgPendingLen_ == 2)
     {
-        processInboundCc(ch, msgPending_[0], msgPending_[1]);
+        processInboundCc(ch, msgPending_[0], msgPending_[1], midiInPortIdx);
         msgPendingLen_ = 0;
     }
     else if ((msgType == 0x90 || msgType == 0x80) && msgPendingLen_ == 2)
@@ -153,21 +155,21 @@ void McxHardwareBridge::processInboundMidiByte(std::uint8_t b, bool dispatchNote
         if (dispatchNotes)
         {
             if (msgType == 0x90 && msgPending_[1] > 0)
-                engine_.routeMidiChannelNoteOn(ch, msgPending_[0], static_cast<float>(msgPending_[1]) / 127.0f);
+                engine_.routeMidiPortChannelNoteOn(midiInPortIdx, ch, msgPending_[0], static_cast<float>(msgPending_[1]) / 127.0f);
             else
-                engine_.routeMidiChannelNoteOff(ch, msgPending_[0]);
+                engine_.routeMidiPortChannelNoteOff(midiInPortIdx, ch, msgPending_[0]);
         }
         msgPendingLen_ = 0;
     }
 }
 
-void McxHardwareBridge::processInboundMidiBuffer(const std::uint8_t* data, std::size_t length, bool dispatchNotes) noexcept
+void McxHardwareBridge::processInboundMidiBuffer(const std::uint8_t* data, std::size_t length, bool dispatchNotes, int midiInPortIdx) noexcept
 {
     if (!data || length == 0)
         return;
 
     for (std::size_t i = 0; i < length; ++i)
-        processInboundMidiByte(data[i], dispatchNotes);
+        processInboundMidiByte(data[i], dispatchNotes, midiInPortIdx);
 }
 
 } // namespace abdmcx

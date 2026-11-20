@@ -16,6 +16,7 @@
 #include "../Core/McxSystemSettings.h"
 #include "../State/ParameterRegistry.gen.h"
 #include "../State/ParameterLayout.h"
+#include "McxNativeMidiRouter.h"
 #include "McxTelemetryReader.h"
 
 namespace abdmcx {
@@ -75,7 +76,10 @@ public:
     void markSessionStateDirty() noexcept { pendingSessionStateDirty_.store(true, std::memory_order_release); }
     [[nodiscard]] bool consumeSessionStateDirty() noexcept { return pendingSessionStateDirty_.exchange(false, std::memory_order_acq_rel); }
     void markEngineStateDirty(int partIdx) noexcept;
-    [[nodiscard]] std::uint16_t consumePendingEngineStateMask() noexcept { return pendingEngineStateMask_.exchange(0, std::memory_order_acq_rel); }
+    [[nodiscard]] std::uint64_t consumePendingEngineStateMask() noexcept { return pendingEngineStateMask_.exchange(0ull, std::memory_order_acq_rel); }
+    [[nodiscard]] bool isStandaloneApp() const noexcept { return wrapperType == wrapperType_Standalone; }
+    [[nodiscard]] McxNativeMidiRouter& nativeMidiRouter() noexcept { return nativeMidiRouter_; }
+    void setPartMidiDevice(int partIdx, bool isOutput, int portIndex, const std::string& deviceName);
     [[nodiscard]] McxLibraryService& libraryService() noexcept { return libraryService_; }
     [[nodiscard]] const juce::CriticalSection& engineLock() const noexcept { return engineMutex_; }
     std::size_t collectUnusedWaves() noexcept;
@@ -100,11 +104,12 @@ private:
     juce::AudioProcessorValueTreeState apvts_;
     McxEngine engine_;
     McxHardwareBridge hardwareBridge_;
+    McxNativeMidiRouter nativeMidiRouter_;
     McxMultiBankManager multiBankManager_;
     McxLibraryService libraryService_{};
     McxSystemSettings settings_{};
     McxCommandQueue<1024> uiCommandQueue_;
-    std::atomic<std::uint16_t> pendingEngineStateMask_{0};
+    std::atomic<std::uint64_t> pendingEngineStateMask_{0ull};
     std::atomic<bool> pendingSongStateDirty_{false};
     std::atomic<bool> pendingSessionStateDirty_{false};
     mutable juce::CriticalSection engineMutex_{};
@@ -114,8 +119,8 @@ private:
     std::atomic<float> lastPeakL_{0.0f};
     std::atomic<float> lastPeakR_{0.0f};
     std::atomic<int> lastActiveVoices_{0};
-    std::array<std::atomic<float>, 16> lastPartPeaks_{};
-    std::array<std::atomic<float>, 16> lastPartMidiPeaks_{};
+    std::array<std::atomic<float>, McxEngine::kNumParts> lastPartPeaks_{};
+    std::array<std::atomic<float>, McxEngine::kNumParts> lastPartMidiPeaks_{};
 
     std::array<std::array<float, 128>, 2> scopeBuffers_{};
     std::atomic<int> scopeReadBufferIndex_{0};

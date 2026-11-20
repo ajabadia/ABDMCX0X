@@ -30,10 +30,17 @@ export class McxSongBridge {
     );
   }
 
-  public updateScene(sceneIndex: number, muteMask: number, transpose: number, name: string): void {
+  public updateScene(
+    sceneIndex: number,
+    muteMask: number,
+    transpose: number,
+    name: string,
+    muteMask64?: [number, number, number, number],
+  ): void {
+    const mask64 = muteMask64 ?? [muteMask & 0xFFFF, 0, 0, 0];
     this.host.sendCommand(
-      { type: 'updateScene', sceneIndex, muteMask, transpose, name },
-      { type: 'UPDATE_SCENE', sceneIndex, muteMask, transpose, name },
+      { type: 'updateScene', sceneIndex, muteMask, muteMask64: mask64, transpose, name },
+      { type: 'UPDATE_SCENE', sceneIndex, muteMask, muteMask64: mask64, transpose, name },
     );
   }
 

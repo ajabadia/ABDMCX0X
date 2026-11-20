@@ -54,16 +54,16 @@ private:
 };
 
 /**
- * @brief Static RT-safe multi-engine registry and pool host for the 16-part Groovebox.
+ * @brief Static RT-safe multi-engine registry and pool host for the 64-part Groovebox.
  *
- * Pre-allocates the shared RomplerVoicePool, shared RomplerWavePool, 16 StructuredRomplerEngine
- * instances, and 16 External MIDI silent slots upfront so engine switching and audio rendering
+ * Pre-allocates the shared RomplerVoicePool, shared RomplerWavePool, 64 StructuredRomplerEngine
+ * instances, and 64 External MIDI silent slots upfront so engine switching and audio rendering
  * perform zero heap allocations or locks on the audio thread.
  */
 class McxEngineRegistry
 {
 public:
-    static constexpr int kNumParts = 16;
+    static constexpr int kNumParts = 64;
     static constexpr int kMaxEngineTypes = 8;
     static constexpr int kRomplerTypeIndex = 0;
     static constexpr int kExternalMidiTypeIndex = 1;

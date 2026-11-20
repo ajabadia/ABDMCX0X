@@ -39,7 +39,13 @@ inline juce::var buildTelemetryPayload(const McxTelemetrySnapshot& snap)
     payload->setProperty("songBarInBlock", snap.songBarInBlock);
     payload->setProperty("songBlockCount", snap.songBlockCount);
     payload->setProperty("sceneApplySeq", static_cast<int>(snap.sceneApplySeq));
-    payload->setProperty("appliedMuteMask", static_cast<int>(snap.appliedMuteMask));
+    payload->setProperty("appliedMuteMask", static_cast<int>(snap.appliedMuteMask & 0xFFFFull));
+    juce::Array<juce::var> mask64;
+    mask64.add(static_cast<int>((snap.appliedMuteMask >> 0) & 0xFFFFull));
+    mask64.add(static_cast<int>((snap.appliedMuteMask >> 16) & 0xFFFFull));
+    mask64.add(static_cast<int>((snap.appliedMuteMask >> 32) & 0xFFFFull));
+    mask64.add(static_cast<int>((snap.appliedMuteMask >> 48) & 0xFFFFull));
+    payload->setProperty("appliedMuteMask64", mask64);
     payload->setProperty("appliedTranspose", snap.appliedTranspose);
 
     juce::Array<juce::var> mutes;
@@ -59,12 +65,12 @@ inline juce::var buildTelemetryPayload(const McxTelemetrySnapshot& snap)
     payload->setProperty("samplesL", samples);
 
     juce::Array<juce::var> pPeaks;
-    pPeaks.ensureStorageAllocated(16);
+    pPeaks.ensureStorageAllocated(McxEngine::kNumParts);
     for (float p : snap.partPeaks) pPeaks.add(p);
     payload->setProperty("partPeaks", pPeaks);
 
     juce::Array<juce::var> pMidiPeaks;
-    pMidiPeaks.ensureStorageAllocated(16);
+    pMidiPeaks.ensureStorageAllocated(McxEngine::kNumParts);
     for (float mp : snap.partMidiPeaks) pMidiPeaks.add(mp);
     payload->setProperty("partMidiPeaks", pMidiPeaks);
 

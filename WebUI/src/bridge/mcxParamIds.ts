@@ -27,6 +27,7 @@ export const WASM_PARAM_ID = {
   patternSwing: 90, seqPlaying: 91, seqBars: 92, midiClockEnabled: 93, seqRecording: 94,
   partEngineType: 95, partFactoryPreset: 96,
   driveType: 97, arpMotif: 98, arpRate: 99, arpOctaves: 100, arpGate: 101, arpSwing: 102, arpLatch: 103,
+  partEnabled: 104, partMidiInPort: 105,
 } as const;
 
 export type McxParamKey = keyof typeof WASM_PARAM_ID;

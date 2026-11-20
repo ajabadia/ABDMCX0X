@@ -3,6 +3,8 @@
 #include "../DSP/Core/McxEngine.h"
 #include "SynthEngines/StructuredRompler/RomplerFactoryPatches.h"
 
+#include <algorithm>
+
 namespace abdmcx
 {
 
@@ -53,17 +55,63 @@ struct McxFactoryBank
         p.romplerEngine().patch().pan = 0.0f;
     }
 
+    static void initCleanPart(McxPartState& p, int partIndex) noexcept
+    {
+        abd::rompler::RomplerFactoryPatches::applyFactoryTone(p.romplerEngine(), 0);
+        p.isDrumKit = false;
+        p.kind = McxPartKind::Chromatic;
+        p.followGlobalTranspose = true;
+        p.enabled = false;
+        p.mute = false;
+        p.solo = false;
+        p.level = 0.85f;
+        p.pan = 0.0f;
+        p.reverbSend = 0.25f;
+        p.chorusSend = 0.10f;
+        p.delaySend = 0.0f;
+        p.auxSend = 0.0f;
+        p.insertSlot = -1;
+        p.routeMode = McxPartRouteMode::Internal;
+        p.midiChannel = static_cast<std::uint8_t>((partIndex % 16) + 1);
+        p.midiPortIndex = 0;
+        p.midiInPortIndex = -1;
+        p.setMidiOutDeviceName({});
+        p.setMidiInDeviceName({});
+        p.romplerEngine().patch().level = 1.0f;
+        p.romplerEngine().patch().pan = 0.0f;
+    }
+
     static void applyFactoryDefaults(McxEngine& engine) noexcept
     {
-        initFactoryDrumKit(engine.part(9), 0);
-        engine.part(9).midiChannel = 10;
-        for (int i = 0; i < McxEngine::kNumParts; ++i)
+        const int activeInitial = std::min(16, McxEngine::kNumParts);
+        if (activeInitial > 9)
+        {
+            initFactoryDrumKit(engine.part(9), 0);
+            engine.part(9).enabled = true;
+            engine.part(9).midiChannel = 10;
+            engine.part(9).midiPortIndex = 0;
+            engine.part(9).midiInPortIndex = 0;
+            engine.part(9).setMidiOutDeviceName({});
+            engine.part(9).setMidiInDeviceName({});
+        }
+        for (int i = 0; i < activeInitial; ++i)
         {
             if (i == 9)
                 continue;
             initFactoryTone(engine.part(i), i);
+            engine.part(i).enabled = true;
             engine.part(i).midiChannel = static_cast<std::uint8_t>(i + 1);
+            engine.part(i).midiPortIndex = 0;
+            engine.part(i).midiInPortIndex = 0;
+            engine.part(i).setMidiOutDeviceName({});
+            engine.part(i).setMidiInDeviceName({});
         }
+        for (int i = activeInitial; i < McxEngine::kNumParts; ++i)
+        {
+            initCleanPart(engine.part(i), i);
+            engine.setPartPresetName(i, "Init Tone");
+        }
+        engine.bankLayout().initDefault();
     }
 };
 

@@ -51,6 +51,7 @@ void McxPatternSequencer::reset() noexcept
         storage_->buffers[u][1] = {};
         storage_->staging[u] = {};
         storage_->activeRemainingTicks[u].fill(-1);
+        storage_->activeNoteCount[u] = 0;
     }
     updateTiming();
     publishTelemetry();
@@ -85,7 +86,7 @@ bool McxPatternSequencer::addStagingEvent(int partIdx, int startTick, int durati
 {
     if (partIdx < 0 || partIdx >= kNumParts) return false;
     auto& pat = storage_->staging[static_cast<std::size_t>(partIdx)];
-    if (pat.eventCount >= abd::synth::PatternSequencerEngine::kMaxEventsPerPart) return false;
+    if (pat.eventCount >= kMaxEventsPerPart) return false;
 
     const int maxTicks = std::max(1, getTotalTicks());
     auto& ev = pat.events[static_cast<std::size_t>(pat.eventCount++)];
@@ -103,7 +104,7 @@ bool McxPatternSequencer::addStagingMotion(int partIdx, int laneIdx, int paramId
     if (partIdx < 0 || partIdx >= kNumParts || laneIdx < 0 || laneIdx >= 4) return false;
     auto& lane = storage_->staging[static_cast<std::size_t>(partIdx)].motionLanes[static_cast<std::size_t>(laneIdx)];
     lane.paramId = paramId;
-    if (lane.count >= abd::synth::PatternSequencerEngine::kMaxMotionPoints) return false;
+    if (lane.count >= kMaxMotionPoints) return false;
 
     const int maxTicks = std::max(1, getTotalTicks());
     lane.points[static_cast<std::size_t>(lane.count++)] = { std::clamp(tick, 0, maxTicks - 1), value };

@@ -31,7 +31,10 @@ McxEngine::McxEngine() noexcept
 
         parts_.emplace_back(rompler);
         auto& p = parts_.back();
-        p.midiChannel = static_cast<std::uint8_t>(i + 1);
+        p.midiChannel = static_cast<std::uint8_t>((i % 16) + 1);
+        p.midiPortIndex = 0;
+        p.midiInPortIndex = (i < 16) ? 0 : -1;
+        p.enabled = (i < 16);
         p.partials[0].enabled = true;
         p.drumRemapper.initIdentity();
         p.latchedNoteMap.fill(-1);
@@ -39,10 +42,16 @@ McxEngine::McxEngine() noexcept
     partMidiPeaks_.fill(0.0f);
 
     McxFactoryBank::applyFactoryDefaults(*this);
-    for (int i = 0; i < kNumParts; ++i)
+    const int initialActive = std::min(16, kNumParts);
+    for (int i = 0; i < initialActive; ++i)
     {
         parts_[static_cast<std::size_t>(i)].enabled = true;
         setPartKind(i, (i == 9) ? McxPartKind::DrumMap : McxPartKind::Chromatic);
+    }
+    for (int i = initialActive; i < kNumParts; ++i)
+    {
+        parts_[static_cast<std::size_t>(i)].enabled = false;
+        setPartKind(i, McxPartKind::Chromatic);
     }
 }
 

@@ -35,7 +35,7 @@ void McxSongAndScenes::reset() noexcept
     songBarInBlock_ = 0;
 
     static constexpr std::array<const char*, kNumScenes> kNames = { "Full", "Drums+Bass", "Breakdown", "Lift +5", "Bridge +7", "Minor -3", "Solo Drums", "Drop" };
-    static constexpr std::array<std::uint16_t, kNumScenes> kMasks = { 0x0000u, 0xFDFEu, 0x0200u, 0x0000u, 0x0000u, 0x0000u, 0xFDFFu, 0x0000u };
+    static constexpr std::array<std::uint64_t, kNumScenes> kMasks = { 0ull, 0xFDFEull, 0x0200ull, 0ull, 0ull, 0ull, 0xFDFFull, 0ull };
     static constexpr std::array<std::int8_t, kNumScenes> kTrs = { 0, 0, 0, 5, 7, -3, 0, 0 };
     for (int i = 0; i < kNumScenes; ++i)
     {
@@ -64,7 +64,7 @@ const McxSceneSlot& McxSongAndScenes::scene(int idx) const noexcept
     return scenes_[static_cast<std::size_t>(std::clamp(idx, 0, kNumScenes - 1))];
 }
 
-void McxSongAndScenes::setScene(int idx, std::uint16_t muteMask, int transposeSemitones, const char* name) noexcept
+void McxSongAndScenes::setScene(int idx, std::uint64_t muteMask, int transposeSemitones, const char* name) noexcept
 {
     auto& sc = scenes_[static_cast<std::size_t>(std::clamp(idx, 0, kNumScenes - 1))];
     sc.muteMask = muteMask;
@@ -234,7 +234,7 @@ McxSceneApplyAction McxSongAndScenes::onBarBoundary() noexcept
     return makeActionForBlock(buf, songBlockIdx_);
 }
 
-void McxSongAndScenes::recordAppliedState(std::uint16_t muteMask, int transposeSemitones) noexcept
+void McxSongAndScenes::recordAppliedState(std::uint64_t muteMask, int transposeSemitones) noexcept
 {
     pubAppliedMuteMask_.store(muteMask, std::memory_order_release);
     pubAppliedTranspose_.store(std::clamp(transposeSemitones, -24, 24), std::memory_order_release);

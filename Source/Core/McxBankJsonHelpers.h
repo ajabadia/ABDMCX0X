@@ -38,13 +38,36 @@ inline int findInt(const std::string& str, const std::string& key, float default
 
 inline std::string findString(const std::string& str, const std::string& key, const std::string& defaultVal)
 {
-    const std::string needle = "\"" + key + "\": \"";
+    const std::string needle = "\"" + key + "\":";
     auto pos = str.find(needle);
     if (pos == std::string::npos)
         return defaultVal;
     pos += needle.length();
-    const auto endQuote = str.find('"', pos);
-    return (endQuote != std::string::npos) ? str.substr(pos, endQuote - pos) : defaultVal;
+    while (pos < str.length() && (str[pos] == ' ' || str[pos] == '\t')) ++pos;
+    if (pos >= str.length() || str[pos] != '"')
+        return defaultVal;
+    ++pos;
+    std::string out;
+    while (pos < str.length())
+    {
+        const char ch = str[pos++];
+        if (ch == '\\' && pos < str.length()) { out.push_back(str[pos++]); continue; }
+        if (ch == '"') return out;
+        out.push_back(ch);
+    }
+    return defaultVal;
+}
+
+inline std::string escapeStr(const char* s)
+{
+    std::string out;
+    if (!s) return out;
+    for (const char* p = s; *p != '\0'; ++p)
+    {
+        if (*p == '\\' || *p == '"') { out.push_back('\\'); out.push_back(*p); }
+        else if (static_cast<unsigned char>(*p) >= 0x20u) out.push_back(*p);
+    }
+    return out;
 }
 
 inline bool findBool(const std::string& str, const std::string& key, bool defaultVal)
@@ -65,10 +88,14 @@ inline void appendPartJson(std::ostringstream& ss, const McxEngine& engine, int 
     const char* pName = engine.getPartDisplayPresetName(pIdx);
     ss << "    {\n";
     ss << "      \"index\": " << pIdx << ",\n";
-    ss << "      \"presetName\": \"" << (pName ? pName : "") << "\",\n";
+    ss << "      \"enabled\": " << (p.enabled ? "true" : "false") << ",\n";
+    ss << "      \"presetName\": \"" << escapeStr(pName ? pName : "") << "\",\n";
     ss << "      \"engineTypeIndex\": " << engine.getPartEngineTypeIndex(pIdx) << ",\n";
     ss << "      \"midiChannel\": " << static_cast<int>(p.midiChannel) << ",\n";
     ss << "      \"midiPortIndex\": " << static_cast<int>(p.midiPortIndex) << ",\n";
+    ss << "      \"midiInPortIndex\": " << static_cast<int>(p.midiInPortIndex) << ",\n";
+    ss << "      \"midiOutDeviceName\": \"" << escapeStr(p.midiOutDeviceName) << "\",\n";
+    ss << "      \"midiInDeviceName\": \"" << escapeStr(p.midiInDeviceName) << "\",\n";
     ss << "      \"routeMode\": " << static_cast<int>(p.routeMode) << ",\n";
     ss << "      \"isDrumKit\": " << (p.isDrumKit ? "true" : "false") << ",\n";
     ss << "      \"mute\": " << (p.mute ? "true" : "false") << ",\n";
@@ -110,10 +137,14 @@ inline void parsePartJson(McxEngine& engine, int pIdx, const std::string& partCh
     if (engIdx != engine.getPartEngineTypeIndex(pIdx)) (void)engine.selectPartEngineType(pIdx, engIdx);
 
     auto& p = engine.part(static_cast<std::size_t>(pIdx));
+    p.enabled = findBool(partHeader, "enabled", pIdx < 16);
     const std::string pName = findString(partHeader, "presetName", "");
     if (!pName.empty()) engine.setPartPresetName(pIdx, pName.c_str());
-    p.midiChannel = static_cast<std::uint8_t>(findInt(partHeader, "midiChannel", p.midiChannel));
-    p.midiPortIndex = static_cast<std::uint8_t>(std::clamp(findInt(partHeader, "midiPortIndex", p.midiPortIndex), 0, 7));
+    p.midiChannel = static_cast<std::uint8_t>(std::clamp(findInt(partHeader, "midiChannel", p.midiChannel), 1, 16));
+    p.midiPortIndex = static_cast<std::uint8_t>(std::clamp(findInt(partHeader, "midiPortIndex", p.midiPortIndex), 0, 31));
+    p.midiInPortIndex = static_cast<std::int16_t>(std::clamp(findInt(partHeader, "midiInPortIndex", pIdx < 16 ? 0 : -1), -1, 31));
+    p.setMidiOutDeviceName(findString(partHeader, "midiOutDeviceName", ""));
+    p.setMidiInDeviceName(findString(partHeader, "midiInDeviceName", ""));
     p.routeMode = static_cast<McxPartRouteMode>(findInt(partHeader, "routeMode", static_cast<int>(p.routeMode)));
     engine.setPartKind(pIdx, findBool(partHeader, "isDrumKit", p.isDrumKit) ? McxPartKind::DrumMap : McxPartKind::Chromatic);
     p.mute = findBool(partHeader, "mute", false);
@@ -137,12 +168,14 @@ inline void parsePartJson(McxEngine& engine, int pIdx, const std::string& partCh
     p.eqMidGainDb = std::clamp(findFloat(partHeader, "eqMidGain", 0.0f), -15.0f, 15.0f);
     p.eqHighGainDb = std::clamp(findFloat(partHeader, "eqHighGain", 0.0f), -15.0f, 15.0f);
 
-    std::size_t ptPos = 0;
+    std::size_t ptPos = (ptStart != std::string::npos) ? ptStart : partChunk.size();
     for (int ptIdx = 0; ptIdx < 4; ++ptIdx)
     {
         ptPos = partChunk.find("\"enabled\":", ptPos);
         if (ptPos == std::string::npos) break;
-        const std::string ptBlock = partChunk.substr(ptPos, 300);
+        const auto closeBrace = partChunk.find('}', ptPos);
+        const std::size_t blockLen = (closeBrace != std::string::npos) ? (closeBrace - ptPos) : 300;
+        const std::string ptBlock = partChunk.substr(ptPos, blockLen);
         auto& pt = p.partials[static_cast<std::size_t>(ptIdx)];
         pt.enabled = (ptBlock.find("true") < ptBlock.find(','));
         pt.sourceKind = static_cast<McxOscSourceKind>(std::clamp(findInt(ptBlock, "sourceKind", static_cast<float>(pt.sourceKind)), 0, 5));
@@ -153,7 +186,7 @@ inline void parsePartJson(McxEngine& engine, int pIdx, const std::string& partCh
         pt.pan = findFloat(ptBlock, "pan", 0.0f);
         pt.cutoffHz = findFloat(ptBlock, "cutoffHz", 12000.0f);
         pt.resonance = findFloat(ptBlock, "resonance", 0.1f);
-        ptPos += 20;
+        ptPos = (closeBrace != std::string::npos) ? (closeBrace + 1) : (ptPos + 20);
     }
 }
 

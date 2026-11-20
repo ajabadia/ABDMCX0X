@@ -30,13 +30,28 @@ struct McxSequencerCallbacks
 class McxPatternSequencer
 {
 public:
-    static constexpr int kNumParts = 16;
+    static constexpr int kNumParts = 64;
+    static constexpr int kMaxEventsPerPart = 256;
+    static constexpr int kMaxMotionPoints = 256;
     static constexpr int kDefaultPpq = 96;
 
     using PatternEvent = abd::synth::PatternSequencerEngine::PatternEvent;
-    using MotionLane   = abd::synth::PatternSequencerEngine::MotionLane;
-    using PartPattern  = abd::synth::PatternSequencerEngine::PartPattern;
+    using MotionPoint  = abd::synth::PatternSequencerEngine::MotionPoint;
     using GrooveEngine = abd::synth::GrooveShuffleEngine;
+
+    struct MotionLane
+    {
+        int paramId { -1 };
+        int count { 0 };
+        std::array<MotionPoint, kMaxMotionPoints> points {};
+    };
+
+    struct PartPattern
+    {
+        int eventCount { 0 };
+        std::array<PatternEvent, kMaxEventsPerPart> events {};
+        std::array<MotionLane, 4> motionLanes {};
+    };
 
     McxPatternSequencer() noexcept;
     ~McxPatternSequencer() = default;
@@ -103,6 +118,7 @@ private:
         std::array<std::atomic<std::uint8_t>, kNumParts> activeSlot {};
         std::array<std::atomic<bool>, kNumParts> dirty {};
         std::array<std::array<std::int16_t, 128>, kNumParts> activeRemainingTicks {};
+        std::array<std::uint8_t, kNumParts> activeNoteCount {};
     };
 
     void updateTiming() noexcept;

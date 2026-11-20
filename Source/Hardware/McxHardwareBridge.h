@@ -104,9 +104,9 @@ public:
     void routeSynthEnvelope(std::uint8_t partIdx, float attackNorm, float decayNorm, float releaseNorm) noexcept;
 
     // --- Inbound MIDI Parsing (Hardware / MIDI Thread) ---
-    void processInboundMidiByte(std::uint8_t byte, bool dispatchNotes = true) noexcept;
-    void processInboundMidiBuffer(const std::uint8_t* data, std::size_t length, bool dispatchNotes = true) noexcept;
-    bool processInboundCc(std::uint8_t channel1to16, std::uint8_t cc, std::uint8_t value) noexcept;
+    void processInboundMidiByte(std::uint8_t byte, bool dispatchNotes = true, int midiInPortIdx = 0) noexcept;
+    void processInboundMidiBuffer(const std::uint8_t* data, std::size_t length, bool dispatchNotes = true, int midiInPortIdx = 0) noexcept;
+    bool processInboundCc(std::uint8_t channel1to16, std::uint8_t cc, std::uint8_t value, int midiInPortIdx = 0) noexcept;
 
     // --- Queue Drainage to Hardware Backend ---
     std::size_t drainOutboundQueue(const MidiByteSink& sink) noexcept;
@@ -122,7 +122,7 @@ private:
                                 std::uint64_t roleHash,
                                 float normalizedVal,
                                 int rawMidiByte) noexcept;
-    void handleCompleteInboundNrpn(int channel, int msb, int lsb, int dataVal) noexcept;
+    void handleCompleteInboundNrpn(int channel, int msb, int lsb, int dataVal, int midiInPortIdx = 0) noexcept;
 
     McxEngine& engine_;
     abd::synth::UniversalHardwareProfile fallbackProfile_;
@@ -134,7 +134,7 @@ private:
     McxMidiOutQueue<1024> outQueue_;
     McxLatencyCompensator latencyComp_;
     McxMidiModDecimator modDecimator_ {};
-    std::array<McxInboundNrpnState, 16> nrpnStates_ {};
+    std::array<std::array<McxInboundNrpnState, 16>, 32> nrpnStates_ {};
 
     std::uint8_t runningStatus_ { 0 };
     std::uint8_t msgPending_[3] {};

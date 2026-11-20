@@ -6,6 +6,7 @@
 
 import type {
   McxEngineDescriptorDto,
+  McxMidiDevicesDto,
   McxPartEngineStateDto,
   McxPartPresetsDto,
   McxSessionStateDto,
@@ -22,6 +23,7 @@ export interface NativeBridgeCallbacks {
   onLibraryCatalog?: ((catalogJson: string) => void) | null;
   onRackState?: ((rackJson: string) => void) | null;
   onSystemSettings?: ((s: any) => void) | null;
+  onMidiDevices?: ((dto: McxMidiDevicesDto) => void) | null;
 }
 
 export function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -51,6 +53,12 @@ export function routeNativeBridgeEvent(data: any, cbs: NativeBridgeCallbacks): v
     cbs.onSessionState?.(data as McxSessionStateDto);
   } else if (data.type === 'libraryCatalog') {
     cbs.onLibraryCatalog?.(String(data.catalogJson ?? ''));
+  } else if (data.type === 'midiDevices') {
+    cbs.onMidiDevices?.({
+      isStandalone: Boolean(data.isStandalone),
+      inputs: Array.isArray(data.inputs) ? data.inputs : [],
+      outputs: Array.isArray(data.outputs) ? data.outputs : [],
+    });
   } else if (data.type === 'systemSettings') {
     cbs.onSystemSettings?.({
       workingDirectory: String(data.workingDirectory ?? ''),

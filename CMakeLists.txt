@@ -154,6 +154,10 @@ add_executable(McxPhase11SanitizationTests Tests/McxPhase11SanitizationTests.cpp
 target_link_libraries(McxPhase11SanitizationTests PRIVATE ABDMCX0X_Core)
 add_test(NAME McxPhase11SanitizationTests COMMAND McxPhase11SanitizationTests)
 
+add_executable(McxPhase12SixtyFourPartsTests Tests/McxPhase12SixtyFourPartsTests.cpp)
+target_link_libraries(McxPhase12SixtyFourPartsTests PRIVATE ABDMCX0X_Core)
+add_test(NAME McxPhase12SixtyFourPartsTests COMMAND McxPhase12SixtyFourPartsTests)
+
 add_executable(McxAudioRenderDemo Tests/McxAudioRenderDemo.cpp)
 target_link_libraries(McxAudioRenderDemo PRIVATE ABDMCX0X_Core)
 

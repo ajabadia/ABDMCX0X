@@ -10,7 +10,7 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
     this.isReady = false; this.wasm = null; this.HEAPU8 = null; this.HEAP32 = null; this.HEAPF32 = null;
     this.outLPtr = 0; this.outRPtr = 0; this.peakLPtr = 0; this.peakRPtr = 0; this.activeVoicesPtr = 0;
     this.partPeaksPtr = 0; this.partMidiPeaksPtr = 0; this.seqStatePtr = 0; this.songStatePtr = 0;
-    this.keyBufPtr = 0; this.midiBufPtr = 0; this.rackPeaksPtr = 0; this.rackFlagsPtr = 0;
+    this.keyBufPtr = 0; this.layoutBufPtr = 0; this.midiBufPtr = 0; this.rackPeaksPtr = 0; this.rackFlagsPtr = 0;
     this.fxTelPtr = 0; this.fxMutePtr = 0; this.telemetryCounter = 0; this.gcCounter = 0;
     this.handlers = this._buildHandlers();
     this.port.onmessage = (event) => this.handleMessage(event.data);
@@ -23,13 +23,14 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
     for (let i = ptr; i < end; ++i) s += String.fromCharCode(this.HEAPU8[i]);
     return s;
   }
-  _writeKey(key) {
-    if (!this.keyBufPtr) return 0;
+  _writeText(ptr, maxBytes, txt) {
+    if (!ptr) return 0;
     if (this.HEAPU8.buffer !== this.wasm.memory.buffer) this._updateMemoryViews();
-    const s = String(key || ''), len = Math.min(63, s.length);
-    for (let i = 0; i < len; ++i) this.HEAPU8[this.keyBufPtr + i] = s.charCodeAt(i) & 0x7F;
-    this.HEAPU8[this.keyBufPtr + len] = 0; return this.keyBufPtr;
+    const s = String(txt || ''), len = Math.min(maxBytes - 1, s.length);
+    for (let i = 0; i < len; ++i) this.HEAPU8[ptr + i] = s.charCodeAt(i) & 0x7F;
+    this.HEAPU8[ptr + len] = 0; return ptr;
   }
+  _writeKey(key) { return this._writeText(this.keyBufPtr, 64, key); }
   _emitPartEngineState(part) {
     const w = this.wasm; if (!w || typeof w.getPartEngineStateJson !== 'function') return;
     const p = part | 0, engineTypeId = w.getPartEngineTypeId ? this._readCStr(w.getPartEngineTypeId(p)) : '';
@@ -37,9 +38,9 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
     this.port.postMessage({ type: 'PART_ENGINE_STATE', part: p, engineTypeId, presetName, stateJson: this._readCStr(w.getPartEngineStateJson(p)) });
   }
   _emitSongState() { if (this.wasm?.getSongScenesStateJson) this.port.postMessage({ type: 'SONG_SCENES_STATE', stateJson: this._readCStr(this.wasm.getSongScenesStateJson()) }); }
-  _readPeaks16(fnName, ptr) {
+  _readPeaks64(fnName, ptr) {
     if (!ptr || typeof this.wasm[fnName] !== 'function') return undefined;
-    this.wasm[fnName](ptr); return Array.from(this.HEAPF32.subarray(ptr >> 2, (ptr >> 2) + 16));
+    this.wasm[fnName](ptr); return Array.from(this.HEAPF32.subarray(ptr >> 2, (ptr >> 2) + 64));
   }
   _applyPattern(d) {
     const w = this.wasm; if (!w?.clearPartPattern) return;
@@ -79,7 +80,13 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
       GET_PART_PRESETS: (w, d) => { if (w.getPartPresetsJson) this.port.postMessage({ type: 'PART_PRESETS', presetsJson: this._readCStr(w.getPartPresetsJson(d.part | 0)) }); },
       GET_RACK_STATE: (w) => { if (w.getRackSlotsStateJson) this.port.postMessage({ type: 'RACK_STATE', rackJson: this._readCStr(w.getRackSlotsStateJson()) }); },
       TRIGGER_SCENE: (w, d) => w.triggerScene?.(d.sceneIndex | 0, d.immediate ? 1 : 0), CAPTURE_SCENE: (w, d) => { w.captureScene?.(d.sceneIndex | 0); this._emitSongState(); },
-      UPDATE_SCENE: (w, d) => { w.updateSceneSlot?.(d.sceneIndex | 0, d.muteMask | 0, d.transpose | 0, this._writeKey(d.name || '')); this._emitSongState(); },
+      UPDATE_SCENE: (w, d) => {
+        if (Array.isArray(d.muteMask64) && typeof w.updateSceneSlot64 === 'function') w.updateSceneSlot64(d.sceneIndex | 0, d.muteMask64[0] | 0, d.muteMask64[1] | 0, d.muteMask64[2] | 0, d.muteMask64[3] | 0, d.transpose | 0, this._writeKey(d.name || ''));
+        else w.updateSceneSlot?.(d.sceneIndex | 0, d.muteMask | 0, d.transpose | 0, this._writeKey(d.name || ''));
+        this._emitSongState();
+      },
+      SET_BANK_LAYOUT: (w, d) => w.setBankLayoutJson?.(this._writeText(this.layoutBufPtr, 2048, d.layoutJson || '')),
+      MIDI_IN: (w, d) => w.routeMidiInBytes?.(d.portIndex | 0, d.status | 0, d.data1 | 0, d.data2 | 0),
       SET_SONG_MODE: (w, d) => { w.setSongModeEnabled?.(d.enabled ? 1 : 0); this._emitSongState(); }, SET_SONG_LOOP: (w, d) => w.setSongLoopEnabled?.(d.loop ? 1 : 0),
       JUMP_SONG_BLOCK: (w, d) => w.jumpSongBlock?.(d.blockIndex | 0, d.immediate ? 1 : 0), SET_SONG_ARRANGEMENT: (_w, d) => this._applySong(d), GET_SONG_STATE: () => this._emitSongState(),
       SET_RACK_SLOT: (w, d) => w.setRackSlotEngine?.(d.slot | 0, d.engine | 0, this._writeKey(d.name || '')), SET_RACK_NAME: (w, d) => w.setRackSlotName?.(d.slot | 0, this._writeKey(d.name || '')),
@@ -138,8 +145,8 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
       this._updateMemoryViews(); this.wasm.initEngine(sr); this.wasm.resetToFactory();
       const alloc = (sz) => this.wasm.malloc(sz);
       this.outLPtr = alloc(2048); this.outRPtr = alloc(2048); this.peakLPtr = alloc(4); this.peakRPtr = alloc(4); this.activeVoicesPtr = alloc(4);
-      this.partPeaksPtr = alloc(64); this.partMidiPeaksPtr = alloc(64); this.seqStatePtr = alloc(16); this.songStatePtr = alloc(40);
-      this.keyBufPtr = alloc(64); this.midiBufPtr = alloc(512); this.rackPeaksPtr = alloc(64); this.rackFlagsPtr = alloc(64);
+      this.partPeaksPtr = alloc(256); this.partMidiPeaksPtr = alloc(256); this.seqStatePtr = alloc(16); this.songStatePtr = alloc(56);
+      this.keyBufPtr = alloc(64); this.layoutBufPtr = alloc(2048); this.midiBufPtr = alloc(512); this.rackPeaksPtr = alloc(64); this.rackFlagsPtr = alloc(64);
       this.fxTelPtr = alloc(28); this.fxMutePtr = alloc(16);
       if (this.HEAPF32.buffer !== this.wasm.memory.buffer) this._updateMemoryViews();
       this.isReady = true; this.port.postMessage({ type: 'WASM_READY', sampleRate: sr }); this._emitSongState();
@@ -161,7 +168,7 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
       this.telemetryCounter = 0; this.wasm.getAudioSnapshot(this.peakLPtr, this.peakRPtr, this.activeVoicesPtr);
       const activeVoices = this.HEAP32[this.activeVoicesPtr >> 2];
       if (activeVoices === 0 && ++this.gcCounter >= 25) { this.gcCounter = 0; this.wasm.collectUnusedWaves?.(); }
-      const partPeaks = this._readPeaks16('getPartPeaks', this.partPeaksPtr), partMidiPeaks = this._readPeaks16('getPartMidiPeaks', this.partMidiPeaksPtr);
+      const partPeaks = this._readPeaks64('getPartPeaks', this.partPeaksPtr), partMidiPeaks = this._readPeaks64('getPartMidiPeaks', this.partMidiPeaksPtr);
       let rPkIn = [], rPkOut = [], rClIn = [], rClOut = [], seqTel = {}, songTel = {}, fxTel = {};
       if (this.rackPeaksPtr && this.wasm.getAllRackSlotsTelemetry) {
         this.wasm.getAllRackSlotsTelemetry(this.rackPeaksPtr, this.rackFlagsPtr);
@@ -176,7 +183,7 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
       if (this.songStatePtr && this.wasm.getSongSceneTelemetry) {
         this.wasm.getSongSceneTelemetry(this.songStatePtr);
         const g = this.songStatePtr >> 2, h = this.HEAP32;
-        songTel = { activeScene: h[g], queuedScene: h[g + 1], songMode: h[g + 2] !== 0, songLoop: h[g + 3] !== 0, songBlockIdx: h[g + 4], songBarInBlock: h[g + 5], songBlockCount: h[g + 6], sceneApplySeq: h[g + 7] >>> 0, appliedMuteMask: h[g + 8] & 0xFFFF, appliedTranspose: h[g + 9] };
+        songTel = { activeScene: h[g], queuedScene: h[g + 1], songMode: h[g + 2] !== 0, songLoop: h[g + 3] !== 0, songBlockIdx: h[g + 4], songBarInBlock: h[g + 5], songBlockCount: h[g + 6], sceneApplySeq: h[g + 7] >>> 0, appliedMuteMask: h[g + 8] & 0xFFFF, appliedMuteMask64: [h[g + 10] & 0xFFFF, h[g + 11] & 0xFFFF, h[g + 12] & 0xFFFF, h[g + 13] & 0xFFFF], appliedTranspose: h[g + 9] };
       }
       if (this.fxTelPtr && this.wasm.getMasterFxTelemetry) {
         this.wasm.getMasterFxTelemetry(this.fxTelPtr, this.fxMutePtr);

@@ -45,11 +45,11 @@ struct McxTelemetrySnapshot
     int songBarInBlock{0};
     int songBlockCount{0};
     std::uint32_t sceneApplySeq{0};
-    std::uint16_t appliedMuteMask{0};
+    std::uint64_t appliedMuteMask{0ull};
     int appliedTranspose{0};
     std::array<float, 128> samplesL{};
-    std::array<float, 16> partPeaks{};
-    std::array<float, 16> partMidiPeaks{};
+    std::array<float, McxEngine::kNumParts> partPeaks{};
+    std::array<float, McxEngine::kNumParts> partMidiPeaks{};
     std::array<float, 8> rackPeakIn{};
     std::array<float, 8> rackPeakOut{};
     std::array<bool, 8> rackClipIn{};
@@ -64,8 +64,8 @@ inline McxTelemetrySnapshot captureEngineTelemetry(
     float peakR,
     int activeVoices,
     const std::array<float, 128>& scopeBuf,
-    const std::array<std::atomic<float>, 16>& lastPartPeaks,
-    const std::array<std::atomic<float>, 16>& lastPartMidiPeaks) noexcept
+    const std::array<std::atomic<float>, McxEngine::kNumParts>& lastPartPeaks,
+    const std::array<std::atomic<float>, McxEngine::kNumParts>& lastPartMidiPeaks) noexcept
 {
     McxTelemetrySnapshot snap;
     snap.peakL = peakL;
@@ -96,7 +96,7 @@ inline McxTelemetrySnapshot captureEngineTelemetry(
     snap.songLoop = song.songLoop; snap.songBlockIdx = song.songBlockIdx; snap.songBarInBlock = song.songBarInBlock;
     snap.songBlockCount = song.songBlockCount; snap.sceneApplySeq = song.sceneApplySeq;
     snap.appliedMuteMask = song.appliedMuteMask; snap.appliedTranspose = song.appliedTranspose;
-    for (std::size_t p = 0; p < 16; ++p)
+    for (std::size_t p = 0; p < static_cast<std::size_t>(McxEngine::kNumParts); ++p)
     {
         snap.partPeaks[p] = lastPartPeaks[p].load(std::memory_order_relaxed);
         snap.partMidiPeaks[p] = lastPartMidiPeaks[p].load(std::memory_order_relaxed);

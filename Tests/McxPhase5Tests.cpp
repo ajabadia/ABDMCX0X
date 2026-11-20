@@ -136,7 +136,7 @@ int main()
 
     const std::string jsonState = abdmcx::McxBankManagerBridge::serializeToJson(engine, bridge, "Phase5Preset");
     assert(!jsonState.empty());
-    assert(jsonState.find("\"schema\": \"abd_mcx0x_preset_v1\"") != std::string::npos);
+    assert(jsonState.find(std::string("\"schema\": \"") + abdmcx::McxBankManagerBridge::kCurrentSchema + "\"") != std::string::npos);
 
     abdmcx::McxEngine restoredEngine;
     abdmcx::McxHardwareBridge restoredBridge(restoredEngine);

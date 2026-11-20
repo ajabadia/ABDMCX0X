@@ -8,6 +8,7 @@ import { webMidiService } from '../midi/McxWebMidiService';
 import {
   parseTelemetryPayload,
   type McxEngineDescriptorDto,
+  type McxMidiDevicesDto,
   type McxPartEngineStateDto,
   type McxPartPresetsDto,
   type McxSessionPartDto,
@@ -18,7 +19,7 @@ import { arrayBufferToBase64, readLocalSettingsJson, routeNativeBridgeEvent, rou
 import { WASM_PARAM_ID, type McxParamKey } from './mcxParamIds';
 
 export { WASM_PARAM_ID, type McxParamKey };
-export type { McxTelemetry, McxEngineDescriptorDto, McxPartPresetsDto, McxPartEngineStateDto, McxSessionStateDto, McxSessionPartDto };
+export type { McxTelemetry, McxEngineDescriptorDto, McxMidiDevicesDto, McxPartPresetsDto, McxPartEngineStateDto, McxSessionStateDto, McxSessionPartDto };
 
 export interface McxSystemSettingsDto {
   workingDirectory: string; maxPolyphony: number; masterTuneHz: number; standaloneBpm: number;
@@ -44,6 +45,7 @@ export class McxHostBridge {
   private sessionStateCb: ((dto: McxSessionStateDto) => void) | null = null;
   private libraryCatalogCb: ((catalogJson: string) => void) | null = null;
   private rackStateCb: ((rackJson: string) => void) | null = null;
+  private midiDevicesCb: ((dto: McxMidiDevicesDto) => void) | null = null;
 
   constructor() {
     const juceBackend = (window as any).__JUCE__?.backend;
@@ -59,6 +61,7 @@ export class McxHostBridge {
       onLibraryCatalog: (json) => this.libraryCatalogCb?.(json),
       onRackState: (json) => this.rackStateCb?.(json),
       onSystemSettings: (s) => this.settingsCb?.(s),
+      onMidiDevices: (dto) => this.midiDevicesCb?.(dto),
     };
     if (this.isNative) {
       this.lastStatus = ['ready', `JUCE ${this.nativeSampleRate} Hz`];
@@ -73,6 +76,8 @@ export class McxHostBridge {
       this.wasm.onSongScenesState((json) => this.songScenesStateCb?.(json));
       this.wasm.onWorkletEvent((msg) => routeWasmWorkletEvent(msg, cbs));
       this.wasm.onMidiOut((bytes) => webMidiService.sendRawBytes(bytes));
+      webMidiService.onMidiInput((portIdx, bytes) => this.sendMidiIn(portIdx, bytes));
+      webMidiService.onDeviceChange(() => this.emitWebMidiDevices());
     }
   }
 
@@ -97,6 +102,22 @@ export class McxHostBridge {
   public onSessionState(cb: (dto: McxSessionStateDto) => void): void { this.sessionStateCb = cb; }
   public onLibraryCatalog(cb: (catalogJson: string) => void): void { this.libraryCatalogCb = cb; }
   public onRackState(cb: (rackJson: string) => void): void { this.rackStateCb = cb; }
+  public onMidiDevices(cb: (dto: McxMidiDevicesDto) => void): void { this.midiDevicesCb = cb; }
+  public refreshMidiDevices(): void { if (this.isNative) this.postNative({ type: 'refreshMidiDevices' }); else void webMidiService.init().then(() => this.emitWebMidiDevices()); }
+  public setMidiDeviceEnabled(direction: 'input' | 'output', id: string, enabled: boolean): void { if (this.isNative) this.postNative({ type: 'setMidiDeviceEnabled', direction, id, enabled }); }
+  public setPartMidiDevice(part: number, direction: 'input' | 'output', portIndex: number, deviceName = ''): void {
+    if (this.isNative) this.postNative({ type: 'setPartMidiDevice', part, direction, portIndex, deviceName });
+    else this.setParam(part, direction === 'output' ? 'partMidiPort' : 'partMidiInPort', portIndex);
+  }
+  public setBankLayout(layoutJson: string): void { this.sendCommand({ type: 'setBankLayout', layoutJson }, { type: 'SET_BANK_LAYOUT', layoutJson }); }
+  public sendMidiIn(portIndex: number, bytes: Uint8Array): void { if (!this.isNative && bytes.length >= 2) this.wasm?.post({ type: 'MIDI_IN', portIndex, status: bytes[0] ?? 0, data1: bytes[1] ?? 0, data2: bytes[2] ?? 0 }); }
+  private emitWebMidiDevices(): void {
+    this.midiDevicesCb?.({
+      isStandalone: true,
+      inputs: webMidiService.getInputs().map((d) => ({ portIndex: d.portIndex, id: d.id, name: d.name, enabled: d.state === 'connected' })),
+      outputs: webMidiService.getOutputs().map((d) => ({ portIndex: d.portIndex, id: d.id, name: d.name, enabled: d.state === 'connected' })),
+    });
+  }
   public onAudioStatus(cb: AudioStatusCb): void { this.statusCbs.add(cb); if (this.lastStatus) cb(this.lastStatus[0], this.lastStatus[1]); }
   public onBankLoaded(cb: (ok: boolean, sizeBytes: number) => void): void { this.bankLoadedCb = cb; if (!this.isNative) this.wasm?.onBankLoaded(cb); }
   public async enableAudio(): Promise<boolean> { void webMidiService.init(); return this.isNative ? true : ((await this.wasm?.initAudio()) ?? false); }

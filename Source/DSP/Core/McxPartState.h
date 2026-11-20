@@ -3,8 +3,11 @@
 #include "McxTypes.h"
 #include "SynthCore/GrooveArpeggiator.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstring>
+#include <string_view>
 
 namespace abdmcx
 {
@@ -38,8 +41,25 @@ struct McxPartState
     bool solo { false };
     bool followGlobalTranspose { true };
     McxPartRouteMode routeMode { McxPartRouteMode::Internal };
-    std::uint8_t midiPortIndex { 0 };
+    std::uint8_t midiPortIndex { 0 };    // 0 = DAW/Host Out, 1..31 = Real OS MIDI Output
+    std::int16_t midiInPortIndex { 0 };  // 0 = DAW/Host In, 1..31 = Real OS MIDI Input, -1 = Sequencer/Focused only
+    char midiOutDeviceName[64] {};
+    char midiInDeviceName[64] {};
     char customPresetName[48] {};
+
+    void setMidiOutDeviceName(std::string_view name) noexcept
+    {
+        std::memset(midiOutDeviceName, 0, sizeof(midiOutDeviceName));
+        const std::size_t n = std::min(name.size(), sizeof(midiOutDeviceName) - 1);
+        if (n > 0) std::memcpy(midiOutDeviceName, name.data(), n);
+    }
+
+    void setMidiInDeviceName(std::string_view name) noexcept
+    {
+        std::memset(midiInDeviceName, 0, sizeof(midiInDeviceName));
+        const std::size_t n = std::min(name.size(), sizeof(midiInDeviceName) - 1);
+        if (n > 0) std::memcpy(midiInDeviceName, name.data(), n);
+    }
 
     // Mixing Console Strip State (engine-agnostic)
     float level { 0.85f };

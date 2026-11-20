@@ -37,7 +37,7 @@ inline void applyWebPartParamExt(McxEngine& engine, int partIdx, int paramId, fl
     case 86: p.semanticOffsets.envSustain = std::clamp(value, -1.0f, 1.0f); break;
     case 87: p.semanticOffsets.envRelease = std::clamp(value, -1.0f, 1.0f); break;
     case 88: p.semanticOffsets.vibratoDepth = std::clamp(value, -1.0f, 1.0f); break;
-    case 89: p.midiPortIndex = static_cast<std::uint8_t>(std::clamp(static_cast<int>(value), 0, 7)); break;
+    case 89: p.midiPortIndex = static_cast<std::uint8_t>(std::clamp(static_cast<int>(value), 0, 31)); break;
     case 90: engine.sequencer().setPartSwing50to75(partIdx, value); break;
     case 91: engine.setSequencerPlaying(value >= 0.5f, true); break;
     case 92: engine.sequencer().setBars(static_cast<int>(value)); break;
@@ -52,6 +52,8 @@ inline void applyWebPartParamExt(McxEngine& engine, int partIdx, int paramId, fl
     case 101: p.arp.setGateTime(std::clamp(value, 0.05f, 1.0f)); break;
     case 102: p.arp.setSwingPercent(std::clamp((value - 0.5f) / 0.25f, -1.0f, 1.0f) * 100.0f); break;
     case 103: p.arp.setLatchMode(static_cast<abd::synth::GrooveLatchMode>(std::clamp(static_cast<int>(value), 0, 2))); break;
+    case 104: engine.setPartEnabled(partIdx, value >= 0.5f); break;
+    case 105: p.midiInPortIndex = static_cast<std::int16_t>(std::clamp(static_cast<int>(value), -1, 31)); break;
     default: break;
     }
 }

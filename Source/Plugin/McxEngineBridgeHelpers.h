@@ -168,6 +168,43 @@ inline bool handleEngineAndBankJsEvent(McxAudioProcessor& proc,
         if (ok && web != nullptr) web->emitEventIfBrowserIsVisible("onNativeTelemetry", buildPartEngineStatePayload(proc.engine(), part));
         return true;
     }
+    if (type == "refreshMidiDevices")
+    {
+        proc.nativeMidiRouter().refreshDevices();
+        if (web != nullptr) web->emitEventIfBrowserIsVisible("onNativeTelemetry", proc.nativeMidiRouter().buildDevicesPayload(proc.isStandaloneApp()));
+        return true;
+    }
+    if (type == "setMidiDeviceEnabled")
+    {
+        const auto id = obj.getProperty("id").toString();
+        const bool isOut = obj.getProperty("direction").toString() != "input";
+        const bool en = static_cast<bool>(obj.getProperty("enabled"));
+        if (isOut) (void)proc.nativeMidiRouter().setOutputEnabled(id, en);
+        else (void)proc.nativeMidiRouter().setInputEnabled(id, en);
+        if (web != nullptr) web->emitEventIfBrowserIsVisible("onNativeTelemetry", proc.nativeMidiRouter().buildDevicesPayload(proc.isStandaloneApp()));
+        return true;
+    }
+    if (type == "setPartMidiDevice")
+    {
+        const int part = static_cast<int>(obj.getProperty("part"));
+        const bool isOut = obj.getProperty("direction").toString() != "input";
+        const int portIdx = static_cast<int>(obj.getProperty("portIndex"));
+        const auto devName = obj.getProperty("deviceName").toString().toStdString();
+        proc.setPartMidiDevice(part, isOut, portIdx, devName);
+        if (web != nullptr) web->emitEventIfBrowserIsVisible("onNativeTelemetry", proc.nativeMidiRouter().buildDevicesPayload(proc.isStandaloneApp()));
+        return true;
+    }
+    if (type == "setBankLayout")
+    {
+        const auto layoutJson = obj.getProperty("layoutJson").toString().toStdString();
+        bool ok = false;
+        {
+            const juce::ScopedLock sl(proc.engineLock());
+            ok = proc.engine().setBankLayoutJson(layoutJson);
+        }
+        if (ok) proc.markSessionStateDirty();
+        return true;
+    }
     return false;
 }
 

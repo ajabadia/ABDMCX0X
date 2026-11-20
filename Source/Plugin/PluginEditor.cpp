@@ -51,9 +51,9 @@ void McxAudioProcessorEditor::resized() {
 
 void McxAudioProcessorEditor::timerCallback() {
     if (!isUiReady_ || webComponent_ == nullptr) return;
-    if (const auto dirtyMask = processor_.consumePendingEngineStateMask(); dirtyMask != 0) {
+    if (const auto dirtyMask = processor_.consumePendingEngineStateMask(); dirtyMask != 0ull) {
         for (int p = 0; p < McxEngine::kNumParts; ++p) {
-            if ((dirtyMask & static_cast<std::uint16_t>(1u << p)) != 0) {
+            if ((dirtyMask & (1ull << p)) != 0ull) {
                 webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildPartPresetsPayload(processor_.engine(), p));
                 webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildPartEngineStatePayload(processor_.engine(), p));
             }
@@ -95,6 +95,8 @@ void McxAudioProcessorEditor::handleJsEvent(const juce::var& msg) {
 
     if (type == "uiReady") {
         isUiReady_ = true; emitSystemSettings();
+        processor_.nativeMidiRouter().refreshDevices();
+        webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", processor_.nativeMidiRouter().buildDevicesPayload(processor_.isStandaloneApp()));
         const juce::ScopedLock sl(processor_.engineLock());
         webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildEngineCatalogPayload(processor_.engine()));
         webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildPartPresetsPayload(processor_.engine(), 0));

@@ -30,6 +30,7 @@ inline juce::var buildSessionStatePayload(const McxEngine& engine)
     char rk[2048] {};
     fx.getChassis().serializeJson(rk, sizeof(rk));
     obj->setProperty("rackJson", juce::String(rk));
+    obj->setProperty("bankLayoutJson", juce::String(engine.serializeBankLayoutJson()));
 
     juce::Array<juce::var> parts;
     for (int i = 0; i < McxEngine::kNumParts; ++i)
@@ -37,10 +38,14 @@ inline juce::var buildSessionStatePayload(const McxEngine& engine)
         const auto& p = engine.part(i);
         juce::DynamicObject::Ptr po = new juce::DynamicObject();
         po->setProperty("index", i);
+        po->setProperty("enabled", p.enabled);
         po->setProperty("name", juce::String(engine.getPartDisplayPresetName(i)));
         po->setProperty("kind", p.isDrumKit ? "drum_map" : "chromatic");
         po->setProperty("midiChannel", static_cast<int>(p.midiChannel));
         po->setProperty("midiPortIndex", static_cast<int>(p.midiPortIndex));
+        po->setProperty("midiInPortIndex", static_cast<int>(p.midiInPortIndex));
+        po->setProperty("midiOutDeviceName", juce::String(static_cast<const char*>(p.midiOutDeviceName)));
+        po->setProperty("midiInDeviceName", juce::String(static_cast<const char*>(p.midiInDeviceName)));
         po->setProperty("routeMode", static_cast<int>(p.routeMode));
         po->setProperty("mute", p.mute);
         po->setProperty("solo", p.solo);

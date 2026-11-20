@@ -10,12 +10,12 @@ namespace abdmcx
 {
 
 /**
- * @brief Live performance scene (1 of 8) storing 16-part mute mask & global transpose.
+ * @brief Live performance scene (1 of 8) storing 64-part mute mask & global transpose.
  * Trivially copyable for lock-free audio/UI exchange.
  */
 struct McxSceneSlot
 {
-    std::uint16_t muteMask { 0u };
+    std::uint64_t muteMask { 0ull };
     std::int8_t transposeSemitones { 0 };
     std::uint8_t barsOverride { 0 };
     char name[20] {};
@@ -44,7 +44,7 @@ struct McxSongTelemetry
     int songBarInBlock { 0 };
     int songBlockCount { 0 };
     std::uint32_t sceneApplySeq { 0 };
-    std::uint16_t appliedMuteMask { 0 };
+    std::uint64_t appliedMuteMask { 0 };
     int appliedTranspose { 0 };
 };
 
@@ -52,7 +52,7 @@ struct McxSceneApplyAction
 {
     bool applied { false };
     bool stopTransport { false };
-    std::uint16_t muteMask { 0 };
+    std::uint64_t muteMask { 0 };
     int transposeSemitones { 0 };
 };
 
@@ -71,7 +71,7 @@ public:
     void reset() noexcept;
 
     [[nodiscard]] const McxSceneSlot& scene(int idx) const noexcept;
-    void setScene(int idx, std::uint16_t muteMask, int transposeSemitones, const char* name = nullptr) noexcept;
+    void setScene(int idx, std::uint64_t muteMask, int transposeSemitones, const char* name = nullptr) noexcept;
     void setSceneName(int idx, std::string_view name) noexcept;
 
     /** Launches or queues a live scene switch (cancels Song Mode when triggered live). */
@@ -90,7 +90,7 @@ public:
     [[nodiscard]] McxSceneApplyAction onTransportStart(int startBar = 0) noexcept;
     [[nodiscard]] McxSceneApplyAction onBarBoundary() noexcept;
 
-    void recordAppliedState(std::uint16_t muteMask, int transposeSemitones) noexcept;
+    void recordAppliedState(std::uint64_t muteMask, int transposeSemitones) noexcept;
     [[nodiscard]] McxSongTelemetry readTelemetry() const noexcept;
 
     [[nodiscard]] int getActiveSongBlockCount() const noexcept;
@@ -131,7 +131,7 @@ private:
     std::atomic<int> pubSongBarInBlock_ { 0 };
     std::atomic<int> pubSongBlockCount_ { 0 };
     std::atomic<std::uint32_t> pubSceneApplySeq_ { 0 };
-    std::atomic<std::uint16_t> pubAppliedMuteMask_ { 0 };
+    std::atomic<std::uint64_t> pubAppliedMuteMask_ { 0 };
     std::atomic<int> pubAppliedTranspose_ { 0 };
 };
 

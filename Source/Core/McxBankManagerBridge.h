@@ -24,7 +24,7 @@ namespace abdmcx
 class McxBankManagerBridge
 {
 public:
-    static constexpr const char* kCurrentSchema = "abd_mcx0x_preset_v1";
+    static constexpr const char* kCurrentSchema = "abd_mcx0x_preset_v2";
 
     McxBankManagerBridge() = default;
     ~McxBankManagerBridge() = default;

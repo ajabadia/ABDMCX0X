@@ -56,7 +56,7 @@ int main()
         engine.setFocusedPart(9);
         check(engine.getFocusedPart() == 9, "Focused-Part proxy switches cleanly to Part 9");
         engine.setFocusedPart(99);
-        check(engine.getFocusedPart() == 15, "Focused-Part proxy clamps to [0..15]");
+        check(engine.getFocusedPart() == McxEngine::kNumParts - 1, "Focused-Part proxy clamps to [0..63]");
 
         float left[256] {}, right[256] {};
         engine.processAudio(left, right, 256);

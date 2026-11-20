@@ -33,6 +33,7 @@ export interface McxTelemetry {
   songBlockCount?: number;
   sceneApplySeq?: number;
   appliedMuteMask?: number;
+  appliedMuteMask64?: number[];
   appliedTranspose?: number;
   rackPeakIn?: number[];
   rackPeakOut?: number[];
@@ -66,10 +67,24 @@ export interface McxPartEngineStateDto {
   coverDataUrl?: string;
 }
 
+export interface McxMidiDeviceInfoDto {
+  portIndex: number;
+  id: string;
+  name: string;
+  enabled: boolean;
+}
+
+export interface McxMidiDevicesDto {
+  isStandalone: boolean;
+  inputs: McxMidiDeviceInfoDto[];
+  outputs: McxMidiDeviceInfoDto[];
+}
+
 export interface McxSceneSlotDto {
   index: number;
   name: string;
   muteMask: number;
+  muteMask64?: [number, number, number, number];
   transpose: number;
 }
 
@@ -116,6 +131,7 @@ export function parseTelemetryPayload(raw: any): McxTelemetry {
     songBlockCount: raw.songBlockCount !== undefined ? Number(raw.songBlockCount) : undefined,
     sceneApplySeq: raw.sceneApplySeq !== undefined ? Number(raw.sceneApplySeq) : undefined,
     appliedMuteMask: raw.appliedMuteMask !== undefined ? Number(raw.appliedMuteMask) : undefined,
+    appliedMuteMask64: Array.isArray(raw.appliedMuteMask64) ? raw.appliedMuteMask64.map((v: any) => Number(v) & 0xFFFF) : undefined,
     appliedTranspose: raw.appliedTranspose !== undefined ? Number(raw.appliedTranspose) : undefined,
     rackPeakIn: Array.isArray(raw.rackPeakIn) ? raw.rackPeakIn.map(Number) : undefined,
     rackPeakOut: Array.isArray(raw.rackPeakOut) ? raw.rackPeakOut.map(Number) : undefined,
@@ -125,8 +141,10 @@ export function parseTelemetryPayload(raw: any): McxTelemetry {
 }
 
 export interface McxSessionPartDto {
-  index: number; name: string; kind: 'chromatic' | 'drum_map';
-  midiChannel: number; midiPortIndex: number; routeMode: number; mute: boolean; solo: boolean; followTranspose: boolean;
+  index: number; enabled?: boolean; name: string; kind: 'chromatic' | 'drum_map';
+  midiChannel: number; midiPortIndex: number; midiInPortIndex?: number;
+  midiOutDeviceName?: string; midiInDeviceName?: string;
+  routeMode: number; mute: boolean; solo: boolean; followTranspose: boolean;
   engineTypeIndex: number; engineTypeId: string; partLevel: number; partPan: number;
   reverbSend: number; chorusSend: number; delaySend: number; auxSend: number;
   sendAPre: boolean; sendBPre: boolean; sendCPre: boolean; sendDPre: boolean; insertSlot: number;
@@ -140,7 +158,7 @@ export interface McxSessionPartDto {
 export interface McxSessionStateDto {
   masterGain: number; globalTranspose: number; dacCharacter: number;
   reverbMacro: number; chorusMacro: number; limiterEnabled: boolean; limiterCeilingDb: number;
-  fxTopology: number; sendTargets: number[]; rackJson: string; parts: McxSessionPartDto[];
+  fxTopology: number; sendTargets: number[]; rackJson: string; bankLayoutJson?: string; parts: McxSessionPartDto[];
 }
 
 export function parseSongScenesStateJson(json: string): McxSongScenesStateDto | null {
@@ -148,10 +166,17 @@ export function parseSongScenesStateJson(json: string): McxSongScenesStateDto | 
   try {
     const d = JSON.parse(json);
     if (!d || typeof d !== 'object') return null;
-    const scenes: McxSceneSlotDto[] = Array.isArray(d.scenes) ? d.scenes.map((s: any, idx: number) => ({
-      index: Number(s?.index ?? idx), name: String(s?.name ?? `Scene ${idx + 1}`),
-      muteMask: Number(s?.muteMask ?? 0) & 0xFFFF, transpose: Math.max(-24, Math.min(24, Number(s?.transpose ?? 0))),
-    })) : [];
+    const scenes: McxSceneSlotDto[] = Array.isArray(d.scenes) ? d.scenes.map((s: any, idx: number) => {
+      const m16 = Number(s?.muteMask ?? 0) & 0xFFFF;
+      const m64: [number, number, number, number] = Array.isArray(s?.muteMask64)
+        ? [Number(s.muteMask64[0] ?? 0) & 0xFFFF, Number(s.muteMask64[1] ?? 0) & 0xFFFF,
+           Number(s.muteMask64[2] ?? 0) & 0xFFFF, Number(s.muteMask64[3] ?? 0) & 0xFFFF]
+        : [m16, 0, 0, 0];
+      return {
+        index: Number(s?.index ?? idx), name: String(s?.name ?? `Scene ${idx + 1}`),
+        muteMask: m64[0], muteMask64: m64, transpose: Math.max(-24, Math.min(24, Number(s?.transpose ?? 0))),
+      };
+    }) : [];
     const blocks: McxSongBlockDto[] = Array.isArray(d.blocks) ? d.blocks.map((b: any) => ({
       sceneIndex: Math.max(0, Math.min(7, Number(b?.sceneIndex ?? 0))),
       bars: Math.max(1, Math.min(32, Number(b?.bars ?? 4))),

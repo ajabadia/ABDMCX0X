@@ -65,7 +65,7 @@ void McxHardwareBridge::applyInternalSemanticParam(std::uint8_t partIdx,
                                                    float normalizedVal) noexcept
 {
     using namespace abd::synth::role;
-    if (partIdx >= 16) return;
+    if (partIdx >= McxEngine::kNumParts) return;
 
     auto& p = engine_.part(partIdx);
     const float n = std::clamp(normalizedVal, 0.0f, 1.0f);
@@ -115,7 +115,7 @@ void McxHardwareBridge::applyInternalDrumParam(std::uint8_t partIdx,
                                                int rawMidiByte) noexcept
 {
     using namespace abd::synth::role;
-    if (partIdx >= 16 || slotIdx >= 128) return;
+    if (partIdx >= McxEngine::kNumParts || slotIdx >= 128) return;
 
     auto& slot = engine_.part(partIdx).drumSlots[slotIdx];
     const float n = std::clamp(normalizedVal, 0.0f, 1.0f);

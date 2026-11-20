@@ -15,7 +15,7 @@ namespace abdmcx
 template <typename Cmd>
 inline void executeRackOrSystemCommand(const Cmd& cmd,
                                        McxEngine& engine,
-                                       std::atomic<std::uint16_t>* dirtyPartStateMask) noexcept
+                                       std::atomic<std::uint64_t>* dirtyPartStateMask) noexcept
 {
     using Type = typename Cmd::Type;
     auto& outFx = engine.getOutputAndFx();
@@ -101,7 +101,7 @@ inline void executeRackOrSystemCommand(const Cmd& cmd,
             if (dirtyPartStateMask != nullptr)
             {
                 const int p = std::clamp<int>(static_cast<int>(cmd.partIdx), 0, McxEngine::kNumParts - 1);
-                dirtyPartStateMask->fetch_or(static_cast<std::uint16_t>(1u << p), std::memory_order_release);
+                dirtyPartStateMask->fetch_or(1ull << p, std::memory_order_release);
             }
             break;
         }

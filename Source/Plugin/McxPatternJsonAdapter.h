@@ -62,7 +62,7 @@ inline void applyPatternDtoToEngine(McxEngine& engine, int partIdx, const juce::
         {
             for (const auto& item : *arr)
             {
-                if (!item.isObject() || pat.eventCount >= abd::synth::PatternSequencerEngine::kMaxEventsPerPart)
+                if (!item.isObject() || pat.eventCount >= McxPatternSequencer::kMaxEventsPerPart)
                     continue;
                 const auto* nObj = item.getDynamicObject();
                 if (!nObj) continue;
@@ -95,7 +95,7 @@ inline void applyPatternDtoToEngine(McxEngine& engine, int partIdx, const juce::
                 lane.paramId = paramId;
                 for (const auto& ptVar : *pts)
                 {
-                    if (!ptVar.isObject() || lane.count >= abd::synth::PatternSequencerEngine::kMaxMotionPoints)
+                    if (!ptVar.isObject() || lane.count >= McxPatternSequencer::kMaxMotionPoints)
                         continue;
                     const auto* ptObj = ptVar.getDynamicObject();
                     if (!ptObj) continue;

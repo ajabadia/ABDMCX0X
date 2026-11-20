@@ -75,7 +75,7 @@ struct McxUiCommand
     std::int16_t paramId { -1 };
     float value { 0.0f };
     std::uint8_t argU8c { 0 };
-    std::uint16_t argU16 { 0 };
+    std::uint64_t argU64 { 0ull };
     float value2 { 0.0f };
     float value3 { 1.0f };
     char key[40] {};
@@ -105,12 +105,12 @@ struct McxUiCommand
         return cmd;
     }
 
-    static McxUiCommand makeUpdateScene(int sceneIdx, std::uint16_t muteMask, int transpose, std::string_view name) noexcept
+    static McxUiCommand makeUpdateScene(int sceneIdx, std::uint64_t muteMask, int transpose, std::string_view name) noexcept
     {
         McxUiCommand cmd {};
         cmd.type = Type::UpdateScene;
         cmd.argU8 = static_cast<std::uint8_t>(std::clamp(sceneIdx, 0, McxSongAndScenes::kNumScenes - 1));
-        cmd.argU16 = muteMask;
+        cmd.argU64 = muteMask;
         cmd.paramId = static_cast<std::int16_t>(std::clamp(transpose, -24, 24));
         const std::size_t len = std::min(name.size(), sizeof(cmd.key) - 1);
         if (len > 0) std::memcpy(cmd.key, name.data(), len);
@@ -197,7 +197,7 @@ template <std::size_t Capacity, typename ApvtsHandler>
 inline void drainCommandQueue(McxCommandQueue<Capacity>& queue,
                               McxEngine& engine,
                               ApvtsHandler&& onApvtsParam,
-                              std::atomic<std::uint16_t>* dirtyPartStateMask = nullptr) noexcept
+                              std::atomic<std::uint64_t>* dirtyPartStateMask = nullptr) noexcept
 {
     McxUiCommand cmd {};
     while (queue.pop(cmd))
@@ -237,11 +237,11 @@ inline void drainCommandQueue(McxCommandQueue<Capacity>& queue,
             case McxUiCommand::Type::SetMidiClockEnabled: engine.midiClock().setEnabled(cmd.argU8 != 0); break;
             case McxUiCommand::Type::SetPartEngineType:
                 (void)engine.selectPartEngineType(partIdx, static_cast<int>(cmd.paramId));
-                if (dirtyPartStateMask != nullptr) dirtyPartStateMask->fetch_or(static_cast<std::uint16_t>(1u << partIdx), std::memory_order_release);
+                if (dirtyPartStateMask != nullptr) dirtyPartStateMask->fetch_or(1ull << partIdx, std::memory_order_release);
                 break;
             case McxUiCommand::Type::LoadPartFactoryPreset:
                 (void)engine.loadPartFactoryPreset(partIdx, static_cast<int>(cmd.paramId));
-                if (dirtyPartStateMask != nullptr) dirtyPartStateMask->fetch_or(static_cast<std::uint16_t>(1u << partIdx), std::memory_order_release);
+                if (dirtyPartStateMask != nullptr) dirtyPartStateMask->fetch_or(1ull << partIdx, std::memory_order_release);
                 break;
             case McxUiCommand::Type::SetPartEngineParamByKey:
             {
@@ -253,7 +253,7 @@ inline void drainCommandQueue(McxCommandQueue<Capacity>& queue,
             case McxUiCommand::Type::TriggerScene: engine.triggerScene(static_cast<int>(cmd.argU8), cmd.argU8b != 0); break;
             case McxUiCommand::Type::CaptureScene: engine.captureCurrentToScene(static_cast<int>(cmd.argU8)); break;
             case McxUiCommand::Type::UpdateScene:
-                engine.songAndScenes().setScene(static_cast<int>(cmd.argU8), cmd.argU16, static_cast<int>(cmd.paramId), cmd.key[0] != '\0' ? cmd.key : nullptr);
+                engine.songAndScenes().setScene(static_cast<int>(cmd.argU8), cmd.argU64, static_cast<int>(cmd.paramId), cmd.key[0] != '\0' ? cmd.key : nullptr);
                 break;
             case McxUiCommand::Type::SetSongMode: engine.setSongModeEnabled(cmd.argU8 != 0); break;
             case McxUiCommand::Type::SetSongLoop: engine.setSongLoopEnabled(cmd.argU8 != 0); break;

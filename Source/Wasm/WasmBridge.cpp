@@ -92,7 +92,8 @@ public:
             (void)bankManager_.loadDrumKitToPart(slot, 0, engine_, 9);
 
         const int toneCount = bank->getToneCount();
-        for (int i = 0; i < abdmcx::McxEngine::kNumParts; ++i)
+        const int activeInitial = std::min(16, abdmcx::McxEngine::kNumParts);
+        for (int i = 0; i < activeInitial; ++i)
         {
             if (i == 9) continue;
             if (i < toneCount)
@@ -229,14 +230,14 @@ void getAudioSnapshot(float* peakL, float* peakR, int* activeVoices)
     getEngine().getAudioSnapshot(peakL, peakR, activeVoices);
 }
 
-void getPartPeaks(float* outPeaks16)
+void getPartPeaks(float* outPeaks64)
 {
-    getEngine().getPartPeaks(outPeaks16);
+    getEngine().getPartPeaks(outPeaks64);
 }
 
-void getPartMidiPeaks(float* outPeaks16)
+void getPartMidiPeaks(float* outPeaks64)
 {
-    getEngine().getPartMidiPeaks(outPeaks16);
+    getEngine().getPartMidiPeaks(outPeaks64);
 }
 
 void resetToFactory()
@@ -247,6 +248,39 @@ void resetToFactory()
 int drainMidiOut(uint8_t* outBytes, int maxBytes)
 {
     return getEngine().drainMidi(outBytes, maxBytes);
+}
+
+int setBankLayoutJson(const char* jsonText)
+{
+    if (jsonText == nullptr) return 0;
+    return abdmcx::wasm_internal::engine().setBankLayoutJson(jsonText) ? 1 : 0;
+}
+
+const char* getBankLayoutJson()
+{
+    static std::string sLayout;
+    sLayout = abdmcx::wasm_internal::engine().serializeBankLayoutJson();
+    return sLayout.c_str();
+}
+
+void routeMidiInBytes(int portIdx, int status, int data1, int data2)
+{
+    const std::uint8_t st = static_cast<std::uint8_t>(status & 0xFF);
+    const std::uint8_t d1 = static_cast<std::uint8_t>(data1 & 0x7F);
+    const std::uint8_t d2 = static_cast<std::uint8_t>(data2 & 0x7F);
+    auto& eng = abdmcx::wasm_internal::engine();
+    if (st >= 0x80u && st < 0xF0u)
+    {
+        const int ch = static_cast<int>((st & 0x0Fu) + 1u);
+        const std::uint8_t kind = st & 0xF0u;
+        if (kind == 0x90u && d2 > 0) eng.routeMidiPortChannelNoteOn(portIdx, ch, d1, static_cast<float>(d2) / 127.0f, 0);
+        else if (kind == 0x80u || (kind == 0x90u && d2 == 0)) eng.routeMidiPortChannelNoteOff(portIdx, ch, d1, 0);
+        else if (kind == 0xB0u)
+        {
+            if (d1 == 120 || d1 == 123) eng.allNotesOff();
+            else eng.routeMidiPortChannelCc(portIdx, ch, d1, d2);
+        }
+    }
 }
 
 } // extern "C"

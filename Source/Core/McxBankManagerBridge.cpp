@@ -1,8 +1,10 @@
 #include "McxBankManagerBridge.h"
 #include "McxBankJsonHelpers.h"
+#include "McxFactoryBank.h"
 
 #include <algorithm>
 #include <sstream>
+#include <vector>
 
 namespace abdmcx
 {
@@ -37,19 +39,54 @@ std::string McxBankManagerBridge::serializeToJson(const McxEngine& engine,
        << engine.getOutputAndFx().getSendSlotTarget(3) << "],\n";
     ss << "  \"hardwareProfile\": \"" << bridge.getProfile().id << "\",\n";
     ss << "  \"latencyMs\": " << bank_json::floatToStr(bridge.getLatencyCompensator().getLatencyMs()) << ",\n";
+    ss << "  \"bankLayout\": " << engine.serializeBankLayoutJson() << ",\n";
     ss << "  \"parts\": [\n";
-    for (int pIdx = 0; pIdx < 16; ++pIdx)
-        bank_json::appendPartJson(ss, engine, pIdx, pIdx < 15);
+    std::vector<int> indices;
+    indices.reserve(McxEngine::kNumParts);
+    for (int i = 0; i < McxEngine::kNumParts; ++i)
+    {
+        if (i < 16 || engine.part(i).enabled)
+            indices.push_back(i);
+    }
+    for (std::size_t k = 0; k < indices.size(); ++k)
+        bank_json::appendPartJson(ss, engine, indices[k], (k + 1) < indices.size());
     ss << "  ]\n";
     ss << "}\n";
     return ss.str();
 }
 
+namespace
+{
+std::string extractJsonObjectField(const std::string& str, const std::string& key)
+{
+    const auto kPos = str.find("\"" + key + "\":");
+    if (kPos == std::string::npos) return {};
+    const auto braceStart = str.find('{', kPos);
+    if (braceStart == std::string::npos) return {};
+    int depth = 0;
+    bool inStr = false;
+    bool esc = false;
+    for (std::size_t i = braceStart; i < str.size(); ++i)
+    {
+        const char c = str[i];
+        if (esc) { esc = false; continue; }
+        if (inStr) { if (c == '\\') esc = true; else if (c == '"') inStr = false; continue; }
+        if (c == '"') inStr = true;
+        else if (c == '{') ++depth;
+        else if (c == '}' && --depth == 0)
+            return str.substr(braceStart, i - braceStart + 1);
+    }
+    return {};
+}
+} // namespace
+
 bool McxBankManagerBridge::deserializeFromJson(McxEngine& engine,
                                                McxHardwareBridge& bridge,
                                                const std::string& jsonString)
 {
-    if (jsonString.empty() || jsonString.find("abd_mcx0x_preset_v1") == std::string::npos)
+    const bool isV1 = jsonString.find("abd_mcx0x_preset_v1") != std::string::npos;
+    const bool isV2 = jsonString.find("abd_mcx0x_preset_v2") != std::string::npos;
+    if (jsonString.empty() || (!isV1 && !isV2))
         return false;
 
     const auto partsPos = jsonString.find("\"parts\":");
@@ -77,15 +114,34 @@ bool McxBankManagerBridge::deserializeFromJson(McxEngine& engine,
     bridge.setProfileById(bank_json::findString(header, "hardwareProfile", "generic_midi"));
     bridge.getLatencyCompensator().setLatencyMs(bank_json::findFloat(header, "latencyMs", 0.0f));
 
-    std::size_t curPos = 0;
-    for (int pIdx = 0; pIdx < 16; ++pIdx)
+    for (int i = 0; i < McxEngine::kNumParts; ++i)
     {
-        const auto pPos = jsonString.find("\"index\": " + std::to_string(pIdx), curPos);
-        if (pPos == std::string::npos) break;
-        const auto nextPPos = jsonString.find("\"index\": " + std::to_string(pIdx + 1), pPos);
+        if (i < 16)
+        {
+            engine.part(i).enabled = true;
+            engine.part(i).midiInPortIndex = 0;
+        }
+        else
+        {
+            McxFactoryBank::initCleanPart(engine.part(i), i);
+            engine.setPartPresetName(i, "Init Tone");
+        }
+    }
+    engine.bankLayout().initDefault();
+
+    const std::string layoutJson = extractJsonObjectField(header, "bankLayout");
+    if (!layoutJson.empty())
+        (void)engine.bankLayout().deserializeJson(layoutJson);
+
+    const std::size_t searchBase = (partsPos != std::string::npos) ? partsPos : 0;
+    for (int pIdx = 0; pIdx < McxEngine::kNumParts; ++pIdx)
+    {
+        const std::string needle = "\"index\": " + std::to_string(pIdx) + ",";
+        const auto pPos = jsonString.find(needle, searchBase);
+        if (pPos == std::string::npos) continue;
+        const auto nextPPos = jsonString.find("\"index\": ", pPos + needle.size());
         const std::string partChunk = jsonString.substr(pPos, (nextPPos != std::string::npos) ? (nextPPos - pPos) : (jsonString.size() - pPos));
         bank_json::parsePartJson(engine, pIdx, partChunk);
-        curPos = pPos + 50;
     }
     return true;
 }

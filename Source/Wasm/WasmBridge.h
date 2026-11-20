@@ -22,18 +22,18 @@ extern "C"
     WASM_EXPORT void processAudio(float* outL, float* outR, int numSamples);
 
     /**
-     * Note On event directed to a specific Groove-Part (0..15).
+     * Note On event directed to a specific Groove-Part (0..63).
      * Part 9 is canonical Drum Part (MIDI Channel 10).
      */
     WASM_EXPORT void noteOn(int partIdx, int noteNumber, float velocity);
 
     /**
-     * Note Off event directed to a specific Groove-Part (0..15).
+     * Note Off event directed to a specific Groove-Part (0..63).
      */
     WASM_EXPORT void noteOff(int partIdx, int noteNumber);
 
     /**
-     * All Notes Off (Panic) across all 16 parts.
+     * All Notes Off (Panic) across all 64 parts.
      */
     WASM_EXPORT void allNotesOff();
 
@@ -64,14 +64,14 @@ extern "C"
     WASM_EXPORT void getAudioSnapshot(float* peakL, float* peakR, int* activeVoices);
 
     /**
-     * Retrieves 16 channel peak levels for the mixer console VU meter towers.
+     * Retrieves 64 channel peak levels for the mixer console VU meter towers.
      */
-    WASM_EXPORT void getPartPeaks(float* outPeaks16);
+    WASM_EXPORT void getPartPeaks(float* outPeaks64);
 
     /**
-     * Retrieves 16 channel MIDI activity peak levels for external MIDI VU meter towers.
+     * Retrieves 64 channel MIDI activity peak levels for external MIDI VU meter towers.
      */
-    WASM_EXPORT void getPartMidiPeaks(float* outPeaks16);
+    WASM_EXPORT void getPartMidiPeaks(float* outPeaks64);
 
     /**
      * Resets engine to internal factory default presets & patches.
@@ -127,14 +127,20 @@ extern "C"
     WASM_EXPORT void triggerScene(int sceneIdx, int immediate);
     WASM_EXPORT void captureScene(int sceneIdx);
     WASM_EXPORT void updateSceneSlot(int sceneIdx, int muteMask, int transposeSemitones, const char* name);
+    WASM_EXPORT void updateSceneSlot64(int sceneIdx, int m0, int m1, int m2, int m3, int transposeSemitones, const char* name);
     WASM_EXPORT void setSongModeEnabled(int enabled);
     WASM_EXPORT void setSongLoopEnabled(int loop);
     WASM_EXPORT void jumpSongBlock(int blockIdx, int immediate);
     WASM_EXPORT void clearSongBlocks();
     WASM_EXPORT void addSongBlock(int sceneIdx, int bars, int transposeOffset);
     WASM_EXPORT void commitSongBlocks(int loopEnabled);
-    WASM_EXPORT void getSongSceneTelemetry(int* out10Ints);
+    WASM_EXPORT void getSongSceneTelemetry(int* out14Ints);
     WASM_EXPORT const char* getSongScenesStateJson();
+
+    /** Visual 8x8 Bank Layout persistence & WebMIDI port-scoped inbound routing */
+    WASM_EXPORT int setBankLayoutJson(const char* jsonText);
+    WASM_EXPORT const char* getBankLayoutJson();
+    WASM_EXPORT void routeMidiInBytes(int portIdx, int status, int data1, int data2);
 
     /** 8-Slot Modular 19'' Studio Rack & Patchbay Controls */
     WASM_EXPORT int setRackSlotEngine(int slotIdx, int engineType, const char* customName);

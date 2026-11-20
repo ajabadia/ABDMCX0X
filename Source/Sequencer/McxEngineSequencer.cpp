@@ -120,19 +120,19 @@ const McxPatternSequencer& McxEngine::sequencer() const noexcept { return *seque
 McxSongAndScenes& McxEngine::songAndScenes() noexcept { return *songAndScenes_; }
 const McxSongAndScenes& McxEngine::songAndScenes() const noexcept { return *songAndScenes_; }
 
-std::uint16_t McxEngine::captureCurrentMuteMask() const noexcept
+std::uint64_t McxEngine::captureCurrentMuteMask() const noexcept
 {
-    std::uint16_t mask = 0u;
+    std::uint64_t mask = 0ull;
     for (int i = 0; i < kNumParts; ++i)
         if (parts_[static_cast<std::size_t>(i)].mute)
-            mask |= static_cast<std::uint16_t>(1u << i);
+            mask |= (1ull << i);
     return mask;
 }
 
-void McxEngine::applySceneStateNow(std::uint16_t muteMask, int transposeSemitones) noexcept
+void McxEngine::applySceneStateNow(std::uint64_t muteMask, int transposeSemitones) noexcept
 {
     for (int i = 0; i < kNumParts; ++i)
-        parts_[static_cast<std::size_t>(i)].mute = ((muteMask & static_cast<std::uint16_t>(1u << i)) != 0u);
+        parts_[static_cast<std::size_t>(i)].mute = ((muteMask & (1ull << i)) != 0ull);
     const int clampedTr = std::clamp(transposeSemitones, -24, 24);
     setGlobalTranspose(clampedTr);
     if (songAndScenes_) songAndScenes_->recordAppliedState(muteMask, clampedTr);

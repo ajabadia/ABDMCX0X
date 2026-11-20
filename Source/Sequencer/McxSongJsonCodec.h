@@ -37,7 +37,7 @@ namespace detail
     const auto tel = ss.readTelemetry();
     const int blkCount = ss.getActiveSongBlockCount();
     std::ostringstream os;
-    os << "{\"formatId\":\"abd_mcx_song_scenes_v1\""
+    os << "{\"formatId\":\"abd_mcx_song_scenes_v2\""
        << ",\"songMode\":" << (tel.songMode ? "true" : "false")
        << ",\"songLoop\":" << (tel.songLoop ? "true" : "false")
        << ",\"activeScene\":" << tel.activeScene
@@ -52,7 +52,12 @@ namespace detail
         const auto& sc = ss.scene(i);
         os << "{\"index\":" << i
            << ",\"name\":\"" << detail::escapeJsonText(static_cast<const char*>(sc.name)) << "\""
-           << ",\"muteMask\":" << static_cast<unsigned int>(sc.muteMask)
+           << ",\"muteMask\":" << static_cast<unsigned int>(sc.muteMask & 0xFFFFull)
+           << ",\"muteMask64\":["
+           << static_cast<unsigned int>((sc.muteMask >> 0) & 0xFFFFull) << ','
+           << static_cast<unsigned int>((sc.muteMask >> 16) & 0xFFFFull) << ','
+           << static_cast<unsigned int>((sc.muteMask >> 32) & 0xFFFFull) << ','
+           << static_cast<unsigned int>((sc.muteMask >> 48) & 0xFFFFull) << ']'
            << ",\"transpose\":" << static_cast<int>(sc.transposeSemitones) << '}';
     }
 
@@ -82,7 +87,7 @@ inline bool deserializeSongAndScenesJson(McxSongAndScenes& ss, std::string_view 
         return false;
 
     const auto fmt = root.getString("formatId");
-    if (!fmt.empty() && fmt != "abd_mcx_song_scenes_v1")
+    if (!fmt.empty() && fmt != "abd_mcx_song_scenes_v1" && fmt != "abd_mcx_song_scenes_v2")
         return false;
 
     if (const auto* scenesVal = root.find("scenes"); scenesVal && scenesVal->isArray())
@@ -92,7 +97,19 @@ inline bool deserializeSongAndScenesJson(McxSongAndScenes& ss, std::string_view 
             const auto& item = scenesVal->arrVal[static_cast<std::size_t>(idx)];
             if (!item.isObject()) continue;
             const int slot = std::clamp(item.getInt("index", idx), 0, McxSongAndScenes::kNumScenes - 1);
-            const auto mask = static_cast<std::uint16_t>(std::clamp(item.getInt("muteMask", 0), 0, 65535));
+            std::uint64_t mask = static_cast<std::uint64_t>(std::clamp(item.getInt("muteMask", 0), 0, 65535));
+            if (const auto* maskArr = item.find("muteMask64"); maskArr && maskArr->isArray())
+            {
+                mask = 0ull;
+                const int words = std::min(4, static_cast<int>(maskArr->arrVal.size()));
+                for (int w = 0; w < words; ++w)
+                {
+                    const auto& cell = maskArr->arrVal[static_cast<std::size_t>(w)];
+                    if (!cell.isNumber()) continue;
+                    const std::uint64_t word = static_cast<std::uint64_t>(std::clamp(static_cast<int>(cell.numVal), 0, 65535));
+                    mask |= (word << (w * 16));
+                }
+            }
             const int tr = std::clamp(item.getInt("transpose", 0), -24, 24);
             const std::string name = item.getString("name");
             ss.setScene(slot, mask, tr, name.empty() ? nullptr : name.c_str());

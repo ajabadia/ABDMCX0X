@@ -89,24 +89,27 @@ void McxAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
     // Sync DAW host transport (BPM, playing, PPQ seek) when available
     syncHostPlayHeadToEngine(getPlayHead(), engine_);
 
-    // Process incoming DAW MIDI (notes -> engine, CCs/NRPNs/SysEx -> hardwareBridge without double-trigger)
+    // Process incoming DAW MIDI on Port 0 (notes -> engine, CCs/NRPNs/SysEx -> hardwareBridge without double-trigger)
     for (const auto metadata : midiMessages) {
         const auto msg = metadata.getMessage();
         const int ch1to16 = std::clamp(msg.getChannel(), 1, 16);
         if (msg.isNoteOn()) {
-            engine_.routeMidiChannelNoteOn(ch1to16, msg.getNoteNumber(), msg.getFloatVelocity(), metadata.samplePosition);
+            engine_.routeMidiPortChannelNoteOn(0, ch1to16, msg.getNoteNumber(), msg.getFloatVelocity(), metadata.samplePosition);
         } else if (msg.isNoteOff()) {
-            engine_.routeMidiChannelNoteOff(ch1to16, msg.getNoteNumber(), metadata.samplePosition);
+            engine_.routeMidiPortChannelNoteOff(0, ch1to16, msg.getNoteNumber(), metadata.samplePosition);
         } else if (msg.isController()) {
-            engine_.routeMidiChannelCc(ch1to16, msg.getControllerNumber(), msg.getControllerValue());
+            engine_.routeMidiPortChannelCc(0, ch1to16, msg.getControllerNumber(), msg.getControllerValue());
         } else if (msg.isAllNotesOff() || msg.isAllSoundOff()) {
             engine_.allNotesOff();
         }
         hardwareBridge_.processInboundMidiBuffer(
-            msg.getRawData(), static_cast<std::size_t>(msg.getRawDataSize()), false);
+            msg.getRawData(), static_cast<std::size_t>(msg.getRawDataSize()), false, 0);
     }
     // Clear inbound buffer before emitting outbound MIDI to prevent VST3 host echo/feedback loops
     midiMessages.clear();
+
+    // Drain any explicitly enabled real physical MIDI input devices (Ports 1..31)
+    nativeMidiRouter_.drainInboundToEngine(engine_, hardwareBridge_);
 
     // Render internal DSP audio
     float* left = buffer.getWritePointer(0);
@@ -127,7 +130,7 @@ void McxAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
 
     const auto pPeaks = engine_.getPartPeaks();
     const auto pMidiPeaks = engine_.getPartMidiPeaks();
-    for (std::size_t p = 0; p < 16; ++p) {
+    for (std::size_t p = 0; p < static_cast<std::size_t>(McxEngine::kNumParts); ++p) {
         lastPartPeaks_[p].store(pPeaks[p], std::memory_order_relaxed);
         lastPartMidiPeaks_[p].store(pMidiPeaks[p], std::memory_order_relaxed);
     }
@@ -139,12 +142,16 @@ void McxAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
     for (int i = copyN; i < 128; ++i) dst[static_cast<std::size_t>(i)] = 0.0f;
     scopeReadBufferIndex_.store(writeIdx, std::memory_order_release);
 
-    // Drain queued hardware mirror MIDI/NRPN/SysEx into host MIDI output
+    // Route outbound MIDI strictly by target port (0 = DAW Host, 1..31 = real OS MIDI output; realtime clock broadcasts to active outs)
     McxMidiOutMessage outMsg{};
     while (hardwareBridge_.getOutboundQueue().pop(outMsg)) {
         if (outMsg.length > 0 && outMsg.length <= sizeof(outMsg.bytes)) {
             const int samplePos = std::clamp(outMsg.sampleOffset, 0, std::max(0, numSamples - 1));
-            midiMessages.addEvent(juce::MidiMessage(outMsg.bytes, static_cast<int>(outMsg.length)), samplePos);
+            const bool isRealtime = (outMsg.length == 1 && outMsg.bytes[0] >= 0xF8u);
+            if (outMsg.portIndex == 0 || isRealtime)
+                midiMessages.addEvent(juce::MidiMessage(outMsg.bytes, static_cast<int>(outMsg.length)), samplePos);
+            if (outMsg.portIndex >= 1 || isRealtime)
+                nativeMidiRouter_.enqueueOutbound(outMsg);
         }
     }
 }
@@ -176,7 +183,24 @@ void McxAudioProcessor::uploadPartPattern(int partIdx, const juce::DynamicObject
 void McxAudioProcessor::enqueuePartEngineType(int partIdx, int typeIndex) { uiCommandQueue_.push({ McxUiCommand::Type::SetPartEngineType, static_cast<std::uint8_t>(std::clamp(partIdx, 0, McxEngine::kNumParts - 1)), 0, 0, static_cast<std::int16_t>(typeIndex), 0.0f }); }
 void McxAudioProcessor::enqueueLoadFactoryPreset(int partIdx, int presetIndex) { uiCommandQueue_.push({ McxUiCommand::Type::LoadPartFactoryPreset, static_cast<std::uint8_t>(std::clamp(partIdx, 0, McxEngine::kNumParts - 1)), 0, 0, static_cast<std::int16_t>(presetIndex), 0.0f }); }
 void McxAudioProcessor::enqueuePartEngineParam(int partIdx, std::string_view key, float value) { uiCommandQueue_.push(McxUiCommand::makeEngineParamByKey(partIdx, key, value)); }
-void McxAudioProcessor::markEngineStateDirty(int partIdx) noexcept { pendingEngineStateMask_.fetch_or(static_cast<std::uint16_t>(1u << std::clamp(partIdx, 0, McxEngine::kNumParts - 1)), std::memory_order_release); }
+void McxAudioProcessor::markEngineStateDirty(int partIdx) noexcept { pendingEngineStateMask_.fetch_or(1ull << std::clamp(partIdx, 0, McxEngine::kNumParts - 1), std::memory_order_release); }
+void McxAudioProcessor::setPartMidiDevice(int partIdx, bool isOutput, int portIndex, const std::string& deviceName) {
+    const int clampedPart = std::clamp(partIdx, 0, McxEngine::kNumParts - 1);
+    {
+        const juce::ScopedLock sl(engineMutex_);
+        auto& p = engine_.part(clampedPart);
+        if (isOutput) {
+            p.midiPortIndex = static_cast<std::uint8_t>(std::clamp(portIndex, 0, 31));
+            p.setMidiOutDeviceName(deviceName);
+        } else {
+            p.midiInPortIndex = static_cast<std::int16_t>(std::clamp(portIndex, -1, 31));
+            p.setMidiInDeviceName(deviceName);
+        }
+    }
+    if (isOutput && portIndex >= 1) (void)nativeMidiRouter_.ensureOutputOpenByPortIndex(portIndex);
+    else if (!isOutput && portIndex >= 1) (void)nativeMidiRouter_.ensureInputOpenByPortIndex(portIndex);
+    markSessionStateDirty();
+}
 std::size_t McxAudioProcessor::collectUnusedWaves() noexcept { const juce::ScopedLock sl(engineMutex_); return engine_.collectUnusedWaves(); }
 int McxAudioProcessor::mountBankFromMemory(const std::uint8_t* data, std::size_t sizeBytes, const std::string& bankId) { return multiBankManager_.mountBankFromMemory(data, sizeBytes, bankId, true); }
 int McxAudioProcessor::mountBankFromFile(const std::string& filePath) { return multiBankManager_.mountBankFromFile(filePath); }
@@ -197,9 +221,10 @@ bool McxAudioProcessor::loadBankFromMemory(const std::uint8_t* data, std::size_t
     engine_.allNotesOff();
     if (bank->getDrumKitCount() > 0) (void)loadIndexedBankKit(slot, 0, 9);
     const int toneCount = bank->getToneCount();
-    for (int i = 0; i < McxEngine::kNumParts; ++i)
+    const int activeInitial = std::min(16, McxEngine::kNumParts);
+    for (int i = 0; i < activeInitial; ++i)
         if (i != 9 && i < toneCount) (void)loadIndexedBankTone(slot, i, i);
-    pendingEngineStateMask_.store(0xFFFFu, std::memory_order_release);
+    pendingEngineStateMask_.store(0xFFFFull, std::memory_order_release);
     markSessionStateDirty();
     return true;
 }
@@ -248,8 +273,9 @@ void McxAudioProcessor::setStateInformation(const void* data, int sizeInBytes) {
         const juce::ScopedLock sl(engineMutex_);
         if (deserializeProcessorStateTree(tree, apvts_, engine_, hardwareBridge_))
             syncHostLatencyReport();
+        nativeMidiRouter_.reconcileEngineDeviceNames(engine_);
     }
-    pendingEngineStateMask_.store(0xFFFFu, std::memory_order_release);
+    pendingEngineStateMask_.store(~0ull, std::memory_order_release);
     markSongStateDirty();
     markSessionStateDirty();
 }

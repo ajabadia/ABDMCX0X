@@ -72,7 +72,19 @@ inline bool handleSongAndScenesJsEvent(McxAudioProcessor& proc,
     if (type == "updateScene")
     {
         const int idx = static_cast<int>(obj.getProperty("sceneIndex"));
-        const auto mask = static_cast<std::uint16_t>(std::clamp<int>(static_cast<int>(obj.getProperty("muteMask")), 0, 65535));
+        std::uint64_t mask = static_cast<std::uint64_t>(std::clamp<int>(static_cast<int>(obj.getProperty("muteMask")), 0, 65535));
+        if (const auto m64 = obj.getProperty("muteMask64"); m64.isArray())
+        {
+            if (const auto* arr = m64.getArray())
+            {
+                mask = 0ull;
+                for (int w = 0; w < 4 && w < arr->size(); ++w)
+                {
+                    const std::uint64_t word = static_cast<std::uint64_t>(std::clamp<int>(static_cast<int>((*arr)[w]), 0, 65535));
+                    mask |= (word << (w * 16));
+                }
+            }
+        }
         const int tr = static_cast<int>(obj.getProperty("transpose"));
         const auto nameStr = obj.getProperty("name").toString().toStdString();
         proc.enqueueUiCommand(McxUiCommand::makeUpdateScene(idx, mask, tr, nameStr));

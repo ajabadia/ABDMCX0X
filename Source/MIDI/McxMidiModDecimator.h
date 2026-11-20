@@ -21,9 +21,9 @@ namespace abdmcx
 class McxMidiModDecimator
 {
 public:
-    static constexpr std::size_t kMaxPorts = 8;
+    static constexpr std::size_t kMaxPorts = 32;
     static constexpr std::size_t kMaxChannels = 16;
-    static constexpr std::size_t kMaxSlots = 32;
+    static constexpr std::size_t kMaxSlots = 64;
     static constexpr double kCcRateHz = 35.0;
     static constexpr double kNrpnRateHz = 18.0;
     static constexpr double kNrpnRefreshSec = 0.50;

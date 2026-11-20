@@ -22,7 +22,16 @@ void captureScene(int sceneIdx)
 
 void updateSceneSlot(int sceneIdx, int muteMask, int transposeSemitones, const char* name)
 {
-    const auto mask = static_cast<std::uint16_t>(std::clamp(muteMask, 0, 65535));
+    const auto mask = static_cast<std::uint64_t>(std::clamp(muteMask, 0, 65535));
+    abdmcx::wasm_internal::engine().songAndScenes().setScene(sceneIdx, mask, transposeSemitones, name);
+}
+
+void updateSceneSlot64(int sceneIdx, int m0, int m1, int m2, int m3, int transposeSemitones, const char* name)
+{
+    const std::uint64_t mask = static_cast<std::uint64_t>(std::clamp(m0, 0, 65535))
+                             | (static_cast<std::uint64_t>(std::clamp(m1, 0, 65535)) << 16)
+                             | (static_cast<std::uint64_t>(std::clamp(m2, 0, 65535)) << 32)
+                             | (static_cast<std::uint64_t>(std::clamp(m3, 0, 65535)) << 48);
     abdmcx::wasm_internal::engine().songAndScenes().setScene(sceneIdx, mask, transposeSemitones, name);
 }
 
@@ -56,20 +65,24 @@ void commitSongBlocks(int loopEnabled)
     abdmcx::wasm_internal::engine().songAndScenes().commitStagingBlocks(loopEnabled != 0);
 }
 
-void getSongSceneTelemetry(int* out10Ints)
+void getSongSceneTelemetry(int* out14Ints)
 {
-    if (out10Ints == nullptr) return;
+    if (out14Ints == nullptr) return;
     const auto st = abdmcx::wasm_internal::engine().songAndScenes().readTelemetry();
-    out10Ints[0] = st.activeScene;
-    out10Ints[1] = st.queuedScene;
-    out10Ints[2] = st.songMode ? 1 : 0;
-    out10Ints[3] = st.songLoop ? 1 : 0;
-    out10Ints[4] = st.songBlockIdx;
-    out10Ints[5] = st.songBarInBlock;
-    out10Ints[6] = st.songBlockCount;
-    out10Ints[7] = static_cast<int>(st.sceneApplySeq);
-    out10Ints[8] = static_cast<int>(st.appliedMuteMask);
-    out10Ints[9] = st.appliedTranspose;
+    out14Ints[0] = st.activeScene;
+    out14Ints[1] = st.queuedScene;
+    out14Ints[2] = st.songMode ? 1 : 0;
+    out14Ints[3] = st.songLoop ? 1 : 0;
+    out14Ints[4] = st.songBlockIdx;
+    out14Ints[5] = st.songBarInBlock;
+    out14Ints[6] = st.songBlockCount;
+    out14Ints[7] = static_cast<int>(st.sceneApplySeq);
+    out14Ints[8] = static_cast<int>(st.appliedMuteMask & 0xFFFFull);
+    out14Ints[9] = st.appliedTranspose;
+    out14Ints[10] = static_cast<int>((st.appliedMuteMask >> 0) & 0xFFFFull);
+    out14Ints[11] = static_cast<int>((st.appliedMuteMask >> 16) & 0xFFFFull);
+    out14Ints[12] = static_cast<int>((st.appliedMuteMask >> 32) & 0xFFFFull);
+    out14Ints[13] = static_cast<int>((st.appliedMuteMask >> 48) & 0xFFFFull);
 }
 
 const char* getSongScenesStateJson()

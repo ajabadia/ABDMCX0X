@@ -51,7 +51,10 @@ void McxPatternSequencer::publishTelemetry() noexcept
 
 void McxPatternSequencer::releasePartActiveNotes(int partIdx, const McxSequencerCallbacks& cbs, std::int32_t sampleOffset) noexcept
 {
-    auto& rem = storage_->activeRemainingTicks[static_cast<std::size_t>(partIdx)];
+    const auto u = static_cast<std::size_t>(partIdx);
+    if (storage_->activeNoteCount[u] == 0)
+        return;
+    auto& rem = storage_->activeRemainingTicks[u];
     for (int n = 0; n < 128; ++n)
     {
         if (rem[static_cast<std::size_t>(n)] >= 0)
@@ -60,6 +63,7 @@ void McxPatternSequencer::releasePartActiveNotes(int partIdx, const McxSequencer
             rem[static_cast<std::size_t>(n)] = -1;
         }
     }
+    storage_->activeNoteCount[u] = 0;
 }
 
 void McxPatternSequencer::releaseAllActiveNotes(const McxSequencerCallbacks& cbs, std::int32_t sampleOffset) noexcept
@@ -91,6 +95,8 @@ void McxPatternSequencer::stepSingleTick(const McxSequencerCallbacks& cbs, std::
     for (int p = 0; p < kNumParts; ++p)
     {
         const auto u = static_cast<std::size_t>(p);
+        if (storage_->activeNoteCount[u] == 0)
+            continue;
         auto& rem = storage_->activeRemainingTicks[u];
         for (int n = 0; n < 128; ++n)
         {
@@ -98,6 +104,7 @@ void McxPatternSequencer::stepSingleTick(const McxSequencerCallbacks& cbs, std::
             {
                 if (cbs.onNoteOff) cbs.onNoteOff(cbs.ctx, p, static_cast<std::uint8_t>(n), sampleOffset);
                 rem[static_cast<std::size_t>(n)] = -1;
+                if (storage_->activeNoteCount[u] > 0) --storage_->activeNoteCount[u];
             }
         }
     }
@@ -116,9 +123,16 @@ void McxPatternSequencer::stepSingleTick(const McxSequencerCallbacks& cbs, std::
     for (int p = 0; p < kNumParts; ++p)
     {
         const auto u = static_cast<std::size_t>(p);
-        auto& rem = storage_->activeRemainingTicks[u];
         const auto slot = static_cast<std::size_t>(storage_->activeSlot[u].load(std::memory_order_acquire) & 1u);
         const auto& pat = storage_->buffers[u][slot];
+        const bool hasMotion = (pat.motionLanes[0].paramId >= 0 && pat.motionLanes[0].count > 0)
+                            || (pat.motionLanes[1].paramId >= 0 && pat.motionLanes[1].count > 0)
+                            || (pat.motionLanes[2].paramId >= 0 && pat.motionLanes[2].count > 0)
+                            || (pat.motionLanes[3].paramId >= 0 && pat.motionLanes[3].count > 0);
+        if (pat.eventCount <= 0 && !hasMotion)
+            continue;
+
+        auto& rem = storage_->activeRemainingTicks[u];
         for (int i = 0; i < pat.eventCount; ++i)
         {
             const auto& ev = pat.events[static_cast<std::size_t>(i)];
@@ -126,11 +140,14 @@ void McxPatternSequencer::stepSingleTick(const McxSequencerCallbacks& cbs, std::
             const int swung = groove_.applyGroove(ev.startTick, ppq, p) % totalTicks;
             if (swung == tick)
             {
-                if (rem[ev.midiNote] >= 0 && cbs.onNoteOff)
+                const bool wasActive = (rem[ev.midiNote] >= 0);
+                if (wasActive && cbs.onNoteOff)
                     cbs.onNoteOff(cbs.ctx, p, ev.midiNote, sampleOffset);
                 if (cbs.onNoteOn)
                     cbs.onNoteOn(cbs.ctx, p, ev.midiNote, ev.velocity, ev.slide, sampleOffset);
                 rem[ev.midiNote] = static_cast<std::int16_t>(std::clamp(ev.durationTicks, 1, 32767));
+                if (!wasActive && storage_->activeNoteCount[u] < 128)
+                    ++storage_->activeNoteCount[u];
             }
         }
 

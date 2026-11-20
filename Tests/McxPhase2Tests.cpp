@@ -234,8 +234,8 @@ int main()
         p0.partials[0].cutoffHz = 5500.0f;
 
         const std::string json = McxBankManagerBridge::serializeToJson(engA, brA, "Boss DR-5 Test Patch");
-        check(!json.empty() && json.find("abd_mcx0x_preset_v1") != std::string::npos,
-              "BankManagerBridge serializes full state to valid abd_mcx0x_preset_v1 JSON");
+        check(!json.empty() && json.find(McxBankManagerBridge::kCurrentSchema) != std::string::npos,
+              "BankManagerBridge serializes full state to valid abd_mcx0x_preset_v2 JSON");
 
         // Deserialize into clean engine B
         McxEngine engB;

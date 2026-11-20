@@ -5,6 +5,7 @@
  */
 
 export interface McxMidiDeviceDto {
+  portIndex: number;
   id: string;
   name: string;
   manufacturer: string;
@@ -18,6 +19,7 @@ export class McxWebMidiService {
   private isSupported = false;
   private isInitialized = false;
   private listeners = new Set<() => void>();
+  private inputListeners = new Set<(portIdx: number, bytes: Uint8Array) => void>();
 
   constructor() {
     this.isSupported = typeof navigator !== 'undefined' && 'requestMIDIAccess' in navigator;
@@ -50,14 +52,21 @@ export class McxWebMidiService {
       }
     }
     if (this.midiAccess.inputs) {
+      let idx = 1;
       for (const inp of this.midiAccess.inputs.values()) {
+        const portIdx = idx++;
+        inp.onmidimessage = (ev: any) => {
+          const data: Uint8Array | undefined = ev?.data;
+          if (data && data.length > 0) this.inputListeners.forEach((fn) => fn(portIdx, data));
+        };
         this.inputs.push(inp);
       }
     }
   }
 
   public getOutputs(): McxMidiDeviceDto[] {
-    return this.outputs.map((o) => ({
+    return this.outputs.map((o, idx) => ({
+      portIndex: idx + 1,
       id: String(o.id ?? ''),
       name: String(o.name ?? 'MIDI Output'),
       manufacturer: String(o.manufacturer ?? ''),
@@ -66,7 +75,8 @@ export class McxWebMidiService {
   }
 
   public getInputs(): McxMidiDeviceDto[] {
-    return this.inputs.map((i) => ({
+    return this.inputs.map((i, idx) => ({
+      portIndex: idx + 1,
       id: String(i.id ?? ''),
       name: String(i.name ?? 'MIDI Input'),
       manufacturer: String(i.manufacturer ?? ''),
@@ -79,14 +89,18 @@ export class McxWebMidiService {
     return () => { this.listeners.delete(listener); };
   }
 
+  public onMidiInput(listener: (portIdx: number, bytes: Uint8Array) => void): () => void {
+    this.inputListeners.add(listener);
+    return () => { this.inputListeners.delete(listener); };
+  }
+
   private notifyListeners(): void {
     this.listeners.forEach((fn) => fn());
   }
 
   private getOutputForPort(portIdx: number): any | null {
-    if (this.outputs.length === 0) return null;
-    const clamped = Math.max(0, Math.min(portIdx, this.outputs.length - 1));
-    return this.outputs[clamped] ?? null;
+    if (portIdx < 1 || portIdx > this.outputs.length) return null;
+    return this.outputs[portIdx - 1] ?? null;
   }
 
   public sendNoteOn(portIdx: number, channel1to16: number, note: number, velocity01: number): void {

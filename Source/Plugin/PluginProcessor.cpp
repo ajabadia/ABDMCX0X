@@ -199,8 +199,13 @@ void McxAudioProcessor::setPartMidiDevice(int partIdx, bool isOutput, int portIn
     }
     if (isOutput && portIndex >= 1) (void)nativeMidiRouter_.ensureOutputOpenByPortIndex(portIndex);
     else if (!isOutput && portIndex >= 1) (void)nativeMidiRouter_.ensureInputOpenByPortIndex(portIndex);
-    markSessionStateDirty();
 }
+void McxAudioProcessor::flushPendingUiCommandsLocked() noexcept {
+    drainCommandQueue(uiCommandQueue_, engine_, [this](std::uint32_t idx, float v) noexcept {
+        applyApvtsIndexToEngine(idx, v);
+    }, &pendingEngineStateMask_);
+}
+
 std::size_t McxAudioProcessor::collectUnusedWaves() noexcept { const juce::ScopedLock sl(engineMutex_); return engine_.collectUnusedWaves(); }
 int McxAudioProcessor::mountBankFromMemory(const std::uint8_t* data, std::size_t sizeBytes, const std::string& bankId) { return multiBankManager_.mountBankFromMemory(data, sizeBytes, bankId, true); }
 int McxAudioProcessor::mountBankFromFile(const std::string& filePath) { return multiBankManager_.mountBankFromFile(filePath); }
@@ -259,6 +264,7 @@ juce::AudioProcessorEditor* McxAudioProcessor::createEditor() { return new McxAu
 
 void McxAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
     const juce::ScopedLock sl(engineMutex_);
+    flushPendingUiCommandsLocked();
     const auto root = serializeProcessorStateTree(apvts_, engine_, hardwareBridge_);
     if (auto xml = root.createXml()) copyXmlToBinary(*xml, destData);
 }

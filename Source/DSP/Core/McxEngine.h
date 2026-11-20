@@ -153,6 +153,7 @@ public:
     void setMidiDuckEnabled(bool enabled) noexcept { midiDuckEnabled_ = enabled; }
     [[nodiscard]] bool isMidiDuckEnabled() const noexcept { return midiDuckEnabled_; }
     [[nodiscard]] bool isAnyPartSoloed() const noexcept;
+    [[nodiscard]] bool isAnyBankSoloed() const noexcept;
     [[nodiscard]] bool isPartAudible(int partIndex) const noexcept;
 
     void routeMidiPortChannelNoteOn(int midiInPortIdx, int midiChannel1to16, int midiNote, float velocity, std::int32_t sampleOffset = 0) noexcept;

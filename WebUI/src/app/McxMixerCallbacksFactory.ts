@@ -25,6 +25,7 @@ export function createMixerCallbacks(state: McxAppState, bridge: McxHostBridge):
       const next = state.partsState[idx].kind === 'drum_map' ? 'chromatic' : 'drum_map';
       state.partsState[idx].kind = next;
       bridge.setParam(idx, 'partKind', next === 'drum_map' ? 1 : 0);
+      bridge.requestPartEngineState(idx);
       state.notifyPartMetadataChanged(idx);
       state.setLcdLine2(`P${String(idx + 1).padStart(2, '0')} -> ${next === 'drum_map' ? t('mcx.partDrumMap') : t('mcx.partChromatic')}`);
     },
@@ -41,16 +42,8 @@ export function createMixerCallbacks(state: McxAppState, bridge: McxHostBridge):
       state.refreshPartList();
       state.setLcdLine2(`P${String(idx + 1).padStart(2, '0')} TRANSPOSE: ${next ? 'ON' : 'OFF'}`);
     },
-    onToggleMute: (idx) => {
-      state.partsState[idx].mute = !state.partsState[idx].mute;
-      bridge.setParam(idx, 'partMute', state.partsState[idx].mute ? 1 : 0);
-      state.notifyPartMetadataChanged(idx);
-    },
-    onToggleSolo: (idx) => {
-      state.partsState[idx].solo = !state.partsState[idx].solo;
-      bridge.setParam(idx, 'partSolo', state.partsState[idx].solo ? 1 : 0);
-      state.notifyPartMetadataChanged(idx);
-    },
+    onToggleMute: (idx) => state.togglePartMute(idx),
+    onToggleSolo: (idx) => state.togglePartSolo(idx),
     onOpenSynthForPart: (idx) => { state.focusPart(idx); state.refs.synthModal?.open(idx); },
     onOpenBankForPart: (idx) => { state.focusPart(idx); state.refs.bankDrawer?.open(idx); },
     onOpenToneForPart: (idx, sec) => {

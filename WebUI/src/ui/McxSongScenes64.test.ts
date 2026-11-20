@@ -103,16 +103,57 @@ describe('Phase 13C: 64-Part Song/Scenes Matrix & Live Bank Mute', () => {
     host.querySelector<HTMLButtonElement>('[data-sc-bank-mute="2"]')?.click();
     expect(updateScene).toHaveBeenLastCalledWith(0, 0, 0, 'S1', [0, 255, 0, 0]);
 
-    // Live Bank Rail Mute triggers onToggleMuteBank without switching active bank or nesting buttons
+    // 3-Mode Bank Rail (EDIT / M / S) triggers mute/solo without per-bank M button or switching active bank
     const railHost = document.createElement('div');
     const onSelectBank = vi.fn();
     const onToggleMuteBank = vi.fn();
-    const rail = new McxBankRail(railHost, { onSelectBank, onAddBank: vi.fn(), onDropPartOnBank: vi.fn(), onToggleMuteBank });
+    const onToggleSoloBank = vi.fn();
+    const onClearAllSolos = vi.fn();
+    const onClearAllBankMutes = vi.fn();
+    const onRequestRenameBank = vi.fn();
+    const rail = new McxBankRail(railHost, {
+      onSelectBank,
+      onAddBank: vi.fn(),
+      onDropPartOnBank: vi.fn(),
+      onToggleMuteBank,
+      onToggleSoloBank,
+      onClearAllSolos,
+      onClearAllBankMutes,
+      onRequestRenameBank,
+    });
     rail.render(layout, parts);
     expect(railHost.querySelectorAll('button button')).toHaveLength(0);
-    railHost.querySelector<HTMLButtonElement>('[data-bank-mute="0"]')?.click();
+    expect(railHost.querySelectorAll('[data-bank-mute]')).toHaveLength(0);
+    expect(railHost.querySelector('[role="toolbar"]')?.getAttribute('focusgroup')).toBe('toolbar wrap');
+    expect(Array.from(railHost.querySelectorAll('[data-bank-mode]')).map((b) => b.textContent?.trim())).toEqual([
+      'EDIT', 'MUTE', 'SOLO',
+    ]);
+    expect(railHost.querySelector('[data-bank-mode="edit"]')?.getAttribute('aria-pressed')).toBe('true');
+
+    railHost.querySelector<HTMLButtonElement>('[data-bank-mode="mute"]')?.click();
+    expect(railHost.querySelector('[data-bank-mode="mute"]')?.getAttribute('aria-pressed')).toBe('true');
+    expect(railHost.querySelector('[data-bank-add]')).toBeNull();
+    railHost.querySelector<HTMLButtonElement>('[data-bank-idx="0"]')?.click();
     expect(onToggleMuteBank).toHaveBeenCalledWith(0);
     expect(onSelectBank).not.toHaveBeenCalled();
+    // 2nd click on MUTE clears group mutes and returns to EDIT
+    railHost.querySelector<HTMLButtonElement>('[data-bank-mode="mute"]')?.click();
+    expect(onClearAllBankMutes).toHaveBeenCalledTimes(1);
+    expect(rail.getMode()).toBe('edit');
+
+    railHost.querySelector<HTMLButtonElement>('[data-bank-mode="solo"]')?.click();
+    railHost.querySelector<HTMLButtonElement>('[data-bank-idx="1"]')?.click();
+    expect(onToggleSoloBank).toHaveBeenCalledWith(1);
+    expect(onSelectBank).not.toHaveBeenCalled();
+    // 2nd click on SOLO clears all solos and returns to EDIT
+    railHost.querySelector<HTMLButtonElement>('[data-bank-mode="solo"]')?.click();
+    expect(onClearAllSolos).toHaveBeenCalledTimes(1);
+    expect(rail.getMode()).toBe('edit');
+
+    // Double-click in EDIT mode requests rename modal for that bank without nested interactive controls
+    railHost.querySelector<HTMLButtonElement>('[data-bank-idx="0"]')?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    expect(railHost.querySelectorAll('button input, button button')).toHaveLength(0);
+    expect(onRequestRenameBank).toHaveBeenCalledWith(0);
 
     const { total, muted } = countLayoutMutes(songState.scenes[0], layout);
     expect(total).toBe(24);

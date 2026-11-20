@@ -140,22 +140,25 @@ export class McxPartEngineBridge implements EnginePanelBridge {
 
   public applyRemoteState(engineTypeId: string, stateJson: string, presetName?: string, coverUrl?: string): void {
     const ps = this.opts.getPartState();
-    if (engineTypeId) ps.engineTypeId = engineTypeId;
+    let metadataChanged = false;
+    if (engineTypeId && engineTypeId !== ps.engineTypeId) { ps.engineTypeId = engineTypeId; metadataChanged = true; }
     if (presetName) {
-      ps.name = presetName;
+      if (presetName !== ps.name) { ps.name = presetName; metadataChanged = true; }
       this.remotePresetName = presetName;
     }
-    if (coverUrl) ps.coverUrl = coverUrl;
+    if (coverUrl && coverUrl !== ps.coverUrl) { ps.coverUrl = coverUrl; metadataChanged = true; }
     if (stateJson) {
       this.flatState = flattenEngineStateJson(engineTypeId || this.getDescriptor().typeId, stateJson);
       this.hasRemoteState = true;
       if (Object.prototype.hasOwnProperty.call(this.flatState, 'mode.drum')) {
         const isDrum = this.flatState['mode.drum'] >= 0.5;
-        ps.kind = isDrum ? 'drum_map' : 'chromatic';
+        const nextKind = isDrum ? 'drum_map' : 'chromatic';
+        if (ps.kind !== nextKind) metadataChanged = true;
+        ps.kind = nextKind;
         ps.followTranspose = !isDrum;
       }
     }
-    this.opts.onHostStateChanged?.();
+    if (metadataChanged) this.opts.onHostStateChanged?.();
     this.emitState();
   }
 

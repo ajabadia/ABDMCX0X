@@ -24,6 +24,7 @@ import { ThemeManager, type ThemeFamilyKey } from './ui/ThemeManager'; import { 
 import { McxSettingsModal } from './ui/McxSettingsModal'; import { wireBankDropZone } from './ui/McxPanels';
 import { McxScopeCanvas } from './ui/McxScopeCanvas'; import { McxStepStrip } from './ui/McxStepStrip';
 import { McxBankRail } from './ui/McxBankRail';
+import { defaultChannelForSlot, deserializeBankLayoutJson, findPartLocation, SLOTS_PER_BANK } from './ui/McxBankLayout';
 import { McxToneDrawer } from './ui/McxToneDrawer'; import { McxGlobalDrawer } from './ui/McxGlobalDrawer';
 import { McxAppState } from './app/McxAppState'; import { bindGlobalShortcuts, bindTelemetry, mountKeyboardDock } from './app/McxInputAndTelemetry';
 import { buildProbeDestinations, createBankDrawer, createProbeModal, createStudioModals, openSavePresetModal } from './app/McxModalsFactory';
@@ -53,7 +54,8 @@ function initApp(): void {
   const onToggleProbe = () => probeModal?.toggle({ theme: document.documentElement.getAttribute('data-theme'), locale: getLocale(), sampleRate: bridge.getSampleRate(), frequencyHz: state.globalSettings.masterTuneHz || 440 });
   state.refs = { ...state.refs, bankDrawer, settingsModal, globalDrawer, ...modals, ...midiModals, onPanic, onToggleProbe, onSavePreset: (multi) => openSavePresetModal(bridge, state, multi ? 'multi' : 'part'), onOpenBankFile: () => fileInput?.click() };
   byId('mcx-solo-clear-btn')?.addEventListener('click', () => state.clearAllSolos());
-  byId('mcx-unpin-bank-btn')?.addEventListener('click', () => state.unpinActiveBank());
+  byId('mcx-unpin-bank-btn')?.addEventListener('click', () => state.togglePinActiveBank());
+  byId('mcx-rename-bank-btn')?.addEventListener('click', () => state.openRenameBankDialog(state.bankLayout.activeBank));
   const navbar = navHost ? new McxNavbar(navHost, {
     themeMgr,
     onConfigureFolder: () => (bridge.isNative ? bridge.chooseWorkingDir() : settingsModal.open()),
@@ -97,6 +99,23 @@ function initApp(): void {
 
   mountMultiEngineUi(bridge, state, themeMgr);
   mountSongAndScenesUi(bridge, state);
+  if (!bridge.isNative) {
+    const savedLayout = bridge.loadLocalBankLayoutFallback();
+    if (savedLayout) {
+      state.bankLayout = deserializeBankLayoutJson(savedLayout);
+      for (let b = 0; b < state.bankLayout.bankCount; ++b) {
+        for (let s = 0; s < SLOTS_PER_BANK; ++s) {
+          const pid = state.bankLayout.banks[b][s];
+          if (pid === null || !state.partsState[pid]) continue;
+          state.partsState[pid].enabled = true;
+          if (pid >= 16) state.partsState[pid].midiChannel = defaultChannelForSlot(b, s);
+        }
+      }
+      if (!findPartLocation(state.bankLayout, state.focusedPart)) {
+        state.focusedPart = state.findFirstPlacedPart(state.bankLayout.activeBank);
+      }
+    }
+  }
   const railHost = byId('mcx-bank-rail');
   if (railHost) {
     state.refs.bankRail = new McxBankRail(railHost, {
@@ -104,6 +123,10 @@ function initApp(): void {
       onAddBank: () => state.addNewBank(),
       onDropPartOnBank: (fromBank, fromSlot, targetBank) => state.movePartSlot(fromBank, fromSlot, targetBank, -1),
       onToggleMuteBank: (bankIdx) => state.toggleLiveMuteBank(bankIdx),
+      onToggleSoloBank: (bankIdx) => state.toggleLiveSoloBank(bankIdx),
+      onClearAllSolos: () => state.clearAllSolos(),
+      onClearAllBankMutes: () => state.clearAllBankMutes(),
+      onRequestRenameBank: (bankIdx) => state.openRenameBankDialog(bankIdx),
     });
   }
   state.refreshPartList();
@@ -115,6 +138,7 @@ function initApp(): void {
       getPartsState: () => state.partsState,
       getBankLayout: () => state.bankLayout,
       onToggleMute: (partIdx) => { panelCbs.onToggleMute(partIdx); state.refs.stepStrip?.refresh(); },
+      onToggleSolo: (partIdx) => { panelCbs.onToggleSolo(partIdx); state.refs.stepStrip?.refresh(); },
       setLcdNotice: state.setLcdLine2,
     });
   }
@@ -129,15 +153,24 @@ function initApp(): void {
     if (s.standaloneBpm) { state.refs.masterPanel?.setBpm(s.standaloneBpm); modals.fxRackModal.setBpm(s.standaloneBpm); modals.globalLfoModal.setBpm(s.standaloneBpm); }
     state.updateLcdLine1(0);
   });
+  let lastMidiDevicesKey = '';
   bridge.onMidiDevices((dto) => {
     state.midiDevices = dto;
     settingsModal.setMidiDevices(dto);
     state.refs.routeModal?.setMidiDevices(dto);
-    state.refreshPartList();
+    const nextKey = JSON.stringify(dto);
+    if (nextKey !== lastMidiDevicesKey) {
+      lastMidiDevicesKey = nextKey;
+      state.refreshPartList();
+    }
   });
   bridge.onAudioStatus((status, detail) => {
     navbar?.setAudioStatus(status, detail);
-    if (status === 'ready') { probeModal?.setSampleRate(bridge.getSampleRate()); bridge.refreshMidiDevices(); }
+    if (status === 'ready') {
+      probeModal?.setSampleRate(bridge.getSampleRate());
+      bridge.refreshMidiDevices();
+      if (!bridge.isNative) state.syncBankLayoutToHost();
+    }
     if (status === 'error' && detail) state.setLcdLine2(`WASM ERR: ${detail}`);
   });
   onLocaleChange(() => {

@@ -9,18 +9,22 @@ import { getCategoryIconSvg } from '@abdsynths/shared/components/bank/bankIcons.
 import { t } from '../i18n/mcxI18n';
 import {
   BANK_COLOR_VARS,
-  BANK_LETTERS,
+  countOccupiedInBank,
   createDefaultBankLayout,
+  formatBankDisplayName,
   formatSlotLabel,
   getFirstFreeSlot,
+  hasAnyBankSoloed,
   hasPinnedInBank,
+  isBankMuted,
+  isBankSoloed,
   type McxBankLayoutData,
   SLOTS_PER_BANK,
 } from './McxBankLayout';
 import { hasActivePartDrag, readPartDragPayload, setActivePartDrag } from './McxBankRail';
 import { getShortEngineBadge } from './McxEngineCatalogDefaults';
-import { ICON_MOVE, ICON_PIN, ICON_PIN_FILLED, ICON_PLUS, ICON_TRASH } from './mcxIcons';
-import { openMovePartPopover, openPinnedDeletePopover } from './McxMixerPopovers';
+import { ICON_MOVE, ICON_PENCIL, ICON_PIN, ICON_PIN_FILLED, ICON_PLUS, ICON_TRASH } from './mcxIcons';
+import { openMovePartPopover } from './McxMixerPopovers';
 import type { McxPartUiState } from './McxPartState';
 
 export { createDefaultPartState, type McxPartUiState } from './McxPartState';
@@ -99,11 +103,28 @@ export function renderMixerConsole(container: HTMLElement, cb: McxMixerCallbacks
 
   const bankPill = document.getElementById('mcx-active-bank-pill');
   if (bankPill) {
-    bankPill.textContent = `${t('mcx.bankLabel')} ${BANK_LETTERS[activeBank]}`;
+    bankPill.textContent = formatBankDisplayName(layout, activeBank, t('mcx.bankLabel'));
     bankPill.style.setProperty('--bank-color', bankColor);
   }
+  const renameBtn = document.getElementById('mcx-rename-bank-btn') as HTMLButtonElement | null;
+  if (renameBtn) {
+    renameBtn.innerHTML = `${ICON_PENCIL}<span>${esc(t('mcx.bankRenameBtn'))}</span>`;
+    renameBtn.title = t('mcx.bankRenameTitle');
+    renameBtn.setAttribute('aria-label', t('mcx.bankRenameTitle'));
+  }
+  const anySoloGlobal = hasAnyBankSoloed(layout) || parts.some((pt) => pt.enabled !== false && pt.solo);
+  const bankMuted = isBankMuted(layout, activeBank);
+  const bankSoloed = isBankSoloed(layout, activeBank);
   const unpinBtn = document.getElementById('mcx-unpin-bank-btn') as HTMLButtonElement | null;
-  if (unpinBtn) { unpinBtn.hidden = !hasPinnedInBank(layout, activeBank); unpinBtn.textContent = t('mcx.bankUnpinAll'); }
+  if (unpinBtn) {
+    const hasAnyParts = countOccupiedInBank(layout, activeBank) > 0;
+    const anyPinned = hasPinnedInBank(layout, activeBank);
+    unpinBtn.hidden = !hasAnyParts;
+    unpinBtn.classList.toggle('is-pinned', anyPinned);
+    unpinBtn.setAttribute('aria-pressed', anyPinned ? 'true' : 'false');
+    unpinBtn.innerHTML = `${anyPinned ? ICON_PIN_FILLED : ICON_PIN}<span>${esc(anyPinned ? t('mcx.bankUnpinAll') : t('mcx.bankPinAll'))}</span>`;
+    unpinBtn.title = anyPinned ? t('mcx.bankUnpinAllHint') : t('mcx.bankPinAllHint');
+  }
 
   const firstFreeSlot = getFirstFreeSlot(layout, activeBank);
   const bankRow = layout.banks[activeBank] ?? [];
@@ -126,9 +147,10 @@ export function renderMixerConsole(container: HTMLElement, cb: McxMixerCallbacks
     const ps = parts[partId], isDrum = ps.kind === 'drum_map', catId = ps.categoryId ?? (isDrum ? 9 : 3);
     const soundName = ps.name || (isDrum ? 'TR-909 Kit' : 'Init Tone'), level = ps.partLevel ?? 0.85;
     const isPinned = layout.pinnedParts.has(partId), badge = getShortEngineBadge(ps, catalog), midiInfo = formatMidiPortSummary(ps, devices);
+    const silencedByGroup = !ps.mute && ((!anySoloGlobal && bankMuted) || (anySoloGlobal && !ps.solo && !bankSoloed));
 
     const strip = document.createElement('div');
-    strip.className = `mcx-strip cat-${catId}${partId === focused ? ' is-active' : ''}${isDrum ? ' is-drum' : ''}${ps.mute ? ' is-muted' : ''}${ps.routeMode === 1 ? ' is-midi-ext' : ''}${isPinned ? ' is-pinned' : ''}`;
+    strip.className = `mcx-strip cat-${catId}${partId === focused ? ' is-active' : ''}${isDrum ? ' is-drum' : ''}${ps.mute ? ' is-muted' : ''}${silencedByGroup ? ' is-bank-silenced' : ''}${ps.routeMode === 1 ? ' is-midi-ext' : ''}${isPinned ? ' is-pinned' : ''}`;
     strip.dataset.part = String(partId);
     strip.dataset.bank = String(activeBank);
     strip.dataset.slot = String(slotIdx);
@@ -140,7 +162,7 @@ export function renderMixerConsole(container: HTMLElement, cb: McxMixerCallbacks
         <div class="mcx-strip-actions">
           <button type="button" class="mcx-strip-act-btn${isPinned ? ' is-pinned' : ''}" data-act="pin" aria-pressed="${isPinned ? 'true' : 'false'}" title="${esc(isPinned ? t('mcx.bankPinnedLocked') : t('mcx.bankPinPart'))}">${isPinned ? ICON_PIN_FILLED : ICON_PIN}</button>
           <button type="button" class="mcx-strip-act-btn" data-act="move" ${isPinned ? 'disabled' : ''} title="${esc(isPinned ? t('mcx.bankPinnedLocked') : t('mcx.bankMovePart'))}">${ICON_MOVE}</button>
-          <button type="button" class="mcx-strip-act-btn is-del" data-act="delete" title="${esc(t('mcx.bankDeletePart'))}">${ICON_TRASH}</button>
+          <button type="button" class="mcx-strip-act-btn is-del" data-act="delete" ${isPinned ? 'disabled' : ''} title="${esc(isPinned ? t('mcx.bankDeletePinnedDisabled') : t('mcx.bankDeletePart'))}">${ICON_TRASH}</button>
         </div>
       </div>
       <button type="button" class="mcx-strip-route-badge is-${badge.variant}" data-act="route" title="${esc(`${badge.tooltip} · ${midiInfo.fullLabel}`)}">
@@ -159,7 +181,7 @@ export function renderMixerConsole(container: HTMLElement, cb: McxMixerCallbacks
       </div>
       <div class="mcx-strip-fader-section">
         <div class="mcx-strip-fader-row">
-          <input type="range" class="mcx-strip-fader" orient="vertical" min="0" max="1" step="0.01" value="${level}" title="${esc(t('mcx.partVolumeHint'))}" />
+          <input type="range" class="mcx-strip-fader" min="0" max="1" step="0.01" value="${level}" aria-label="${esc(slotLabel)} ${esc(soundName)} ${esc(t('mcx.partVolumeHint'))}" aria-valuetext="${Math.round(level * 100)}%" style="--control-value:${level};--attr-min:0;--attr-max:1" title="${esc(t('mcx.partVolumeHint'))}" />
           <div class="mcx-strip-vumeter" data-vu-part="${partId}" aria-hidden="true">
             <span class="mcx-vu-seg is-low"></span><span class="mcx-vu-seg is-low"></span><span class="mcx-vu-seg is-low"></span><span class="mcx-vu-seg is-low"></span>
             <span class="mcx-vu-seg is-mid"></span><span class="mcx-vu-seg is-mid"></span><span class="mcx-vu-seg is-hot"></span><span class="mcx-vu-seg is-peak"></span>
@@ -174,6 +196,10 @@ export function renderMixerConsole(container: HTMLElement, cb: McxMixerCallbacks
 
     if (!isPinned) {
       strip.addEventListener('dragstart', (ev) => {
+        if ((ev.target as HTMLElement | null)?.closest('input, button, select')) {
+          ev.preventDefault();
+          return;
+        }
         setActivePartDrag({ fromBank: activeBank, fromSlot: slotIdx });
         ev.dataTransfer?.setData('application/x-mcx-part', JSON.stringify({ fromBank: activeBank, fromSlot: slotIdx }));
         ev.dataTransfer?.setData('text/plain', slotLabel);
@@ -199,11 +225,9 @@ export function renderMixerConsole(container: HTMLElement, cb: McxMixerCallbacks
       }
       ev.stopPropagation();
       if (act === 'pin') cb.onTogglePin?.(partId);
-      else if (act === 'move' && tgt) openMovePartPopover(tgt, layout, activeBank, slotIdx, soundName, (toB, toS) => cb.onMovePart?.(activeBank, slotIdx, toB, toS));
-      else if (act === 'delete' && tgt) {
-        if (isPinned) openPinnedDeletePopover(tgt, slotLabel, soundName, () => cb.onDeletePart?.(activeBank, slotIdx, true));
-        else cb.onDeletePart?.(activeBank, slotIdx, false);
-      } else if (act === 'route') { cb.setFocusedPart(partId); cb.onOpenRouteForPart?.(partId); }
+      else if (act === 'move' && tgt && !isPinned) openMovePartPopover(tgt, layout, activeBank, slotIdx, soundName, (toB, toS) => cb.onMovePart?.(activeBank, slotIdx, toB, toS));
+      else if (act === 'delete' && !isPinned) cb.onDeletePart?.(activeBank, slotIdx, false);
+      else if (act === 'route') { cb.setFocusedPart(partId); cb.onOpenRouteForPart?.(partId); }
       else if (act === 'sound') { cb.setFocusedPart(partId); (cb.onOpenSynthForPart ?? cb.onOpenBankForPart)?.(partId); }
       else if (act === 'open-part') { cb.setFocusedPart(partId); cb.onOpenToneForPart?.(partId); }
       else if (act === 'pads') { cb.setFocusedPart(partId); cb.onOpenPadsForPart?.(partId); }
@@ -216,8 +240,14 @@ export function renderMixerConsole(container: HTMLElement, cb: McxMixerCallbacks
     const lvlVal = strip.querySelector('.mcx-strip-lvl-val');
     const fader = strip.querySelector<HTMLInputElement>('.mcx-strip-fader');
     fader?.addEventListener('click', (e) => e.stopPropagation());
+    if (fader) {
+      fader.draggable = true;
+      fader.addEventListener('dragstart', (e) => { e.preventDefault(); e.stopPropagation(); });
+    }
     fader?.addEventListener('input', () => {
       const v = parseFloat(fader.value);
+      fader.style.setProperty('--control-value', String(v));
+      fader.setAttribute('aria-valuetext', `${Math.round(v * 100)}%`);
       if (lvlVal) lvlVal.textContent = `${Math.round(v * 100)}%`;
       ps.partLevel = v; if (cb.onChangeLevel) cb.onChangeLevel(partId, v); else bridge?.setParam(partId, 'partLevel', v);
       cb.setLcdLine2(`${slotLabel} · P${String(partId + 1).padStart(2, '0')} LEVEL: ${Math.round(v * 100)}%`);
@@ -230,6 +260,10 @@ export function updatePartFaderDom(container: HTMLElement, partIdx: number, lvl:
   const strip = container.querySelector(`.mcx-strip[data-part="${partIdx}"]`);
   if (!strip) return;
   const fader = strip.querySelector<HTMLInputElement>('.mcx-strip-fader'), val = strip.querySelector('.mcx-strip-lvl-val');
-  if (fader) fader.value = String(lvl);
+  if (fader) {
+    fader.value = String(lvl);
+    fader.style.setProperty('--control-value', String(lvl));
+    fader.setAttribute('aria-valuetext', `${Math.round(lvl * 100)}%`);
+  }
   if (val) val.textContent = `${Math.round(lvl * 100)}%`;
 }

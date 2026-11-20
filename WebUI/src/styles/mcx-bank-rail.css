@@ -1,8 +1,8 @@
 /* ABDMCX0X -- Left Bank Rail (A..H), Strip Actions, Popovers & Real MIDI Device Lists */
 
 .mcx-bank-rail {
-  width: 70px;
-  min-width: 70px;
+  width: 88px;
+  min-width: 88px;
   flex-shrink: 0;
   padding: var(--space-2) 5px;
   gap: 5px;
@@ -29,6 +29,56 @@
   font-weight: 800;
   color: var(--color-text-dim);
 }
+.mcx-bank-mode-bar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(24px, 1fr));
+  gap: 3px;
+  align-items: stretch;
+}
+.mcx-bank-mode-btn[data-bank-mode="edit"] {
+  grid-column: 1 / -1;
+}
+.mcx-bank-mode-btn {
+  appearance: none;
+  min-inline-size: 24px;
+  min-block-size: 24px;
+  padding: 0 2px;
+  white-space: nowrap;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-panel-border);
+  background: color-mix(in oklab, var(--color-panel-surface) 82%, transparent);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.mcx-bank-mode-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+.mcx-bank-mode-btn[data-bank-mode="edit"][aria-pressed="true"] {
+  border-color: var(--color-accent);
+  background: color-mix(in oklab, var(--color-accent) 26%, var(--color-panel-surface));
+  color: var(--color-text-main);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+.mcx-bank-mode-btn[data-bank-mode="mute"][aria-pressed="true"] {
+  border-color: var(--color-danger);
+  background: color-mix(in oklab, var(--color-danger) 28%, var(--color-panel-surface));
+  color: color-mix(in oklab, var(--color-danger) 75%, var(--color-text-main));
+  box-shadow: inset 0 0 0 1px var(--color-danger);
+}
+.mcx-bank-mode-btn[data-bank-mode="solo"][aria-pressed="true"] {
+  border-color: var(--color-warning);
+  background: color-mix(in oklab, var(--color-warning) 28%, var(--color-panel-surface));
+  color: color-mix(in oklab, var(--color-warning) 70%, var(--color-text-main));
+  box-shadow: inset 0 0 0 1px var(--color-warning);
+}
 .mcx-bank-rail-list {
   display: flex;
   flex-direction: column;
@@ -40,39 +90,14 @@
 }
 .mcx-bank-item {
   display: grid;
-  grid-template-columns: 1fr 18px;
-  gap: 2px;
+  grid-template-columns: 1fr;
   align-items: stretch;
 }
-.mcx-bank-mute-btn {
-  appearance: none;
-  padding: 0;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-panel-border-dim);
-  background: color-mix(in oklab, var(--color-panel-surface) 75%, transparent);
-  color: var(--color-text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  font-weight: 900;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.mcx-bank-mute-btn:hover:not(:disabled) { border-color: var(--color-danger); color: var(--color-danger); }
-.mcx-bank-mute-btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
-.mcx-bank-mute-btn.is-partial { border-style: dashed; border-color: var(--color-warning); color: var(--color-warning); }
-.mcx-bank-mute-btn.is-muted {
-  border-color: var(--color-danger);
-  background: color-mix(in oklab, var(--color-danger) 24%, var(--color-panel-surface));
-  color: var(--color-danger);
-}
-.mcx-bank-mute-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
 .mcx-bank-btn {
   appearance: none;
   width: 100%;
-  padding: 4px 3px 3px;
+  padding: 5px 5px 4px;
   border-radius: var(--radius-md);
   border: 1px solid color-mix(in oklab, var(--bank-color) 42%, var(--color-panel-border));
   background: color-mix(in oklab, var(--bank-color) 9%, var(--color-panel-surface));
@@ -82,17 +107,39 @@
   flex-direction: column;
   align-items: stretch;
   gap: 3px;
-  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
-.mcx-bank-btn:hover {
-  border-color: var(--bank-color);
-  background: color-mix(in oklab, var(--bank-color) 18%, var(--color-panel-surface));
+.mcx-bank-btn:focus-visible,
+.mcx-bank-add-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+.mcx-bank-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 .mcx-bank-btn.is-active {
   border-color: var(--bank-color);
   border-width: 1.5px;
   background: color-mix(in oklab, var(--bank-color) 28%, var(--color-panel-surface));
   box-shadow: 0 0 10px color-mix(in oklab, var(--bank-color) 40%, transparent);
+}
+.mcx-bank-btn.is-muted {
+  opacity: 0.56;
+  border-color: color-mix(in oklab, var(--color-danger) 75%, var(--bank-color));
+  background: color-mix(in oklab, var(--color-danger) 14%, var(--color-panel-surface));
+}
+.mcx-bank-btn.is-muted-partial:not(.is-muted) {
+  border-style: dashed;
+}
+.mcx-bank-btn.is-solo {
+  border-color: var(--color-warning);
+  box-shadow: inset 0 0 0 1px var(--color-warning), 0 0 10px color-mix(in oklab, var(--color-warning) 35%, transparent);
+}
+.mcx-bank-btn.is-solo-partial:not(.is-solo) {
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-warning) 60%, transparent);
+}
+.mcx-bank-btn.is-solo-silenced:not(.is-solo):not(.is-solo-partial) {
+  opacity: 0.48;
 }
 .mcx-bank-btn.is-drop-target,
 .mcx-bank-add-btn.is-drop-target,
@@ -115,8 +162,28 @@
   box-shadow: 0 0 7px var(--bank-color);
 }
 @media (prefers-reduced-motion: no-preference) {
+  .mcx-bank-mode-btn,
+  .mcx-bank-btn {
+    transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast), opacity var(--transition-fast);
+  }
   .mcx-bank-btn.is-active .mcx-bank-led {
     animation: mcx-bank-led-pulse 2.2s ease-in-out infinite;
+  }
+}
+@media (hover: hover) {
+  .mcx-bank-mode-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-text-main);
+  }
+  .mcx-bank-btn:hover:not(:disabled) {
+    border-color: var(--bank-color);
+    background: color-mix(in oklab, var(--bank-color) 18%, var(--color-panel-surface));
+  }
+  [data-rail-mode="mute"] .mcx-bank-btn:hover:not(:disabled) {
+    border-color: var(--color-danger);
+  }
+  [data-rail-mode="solo"] .mcx-bank-btn:hover:not(:disabled) {
+    border-color: var(--color-warning);
   }
 }
 @keyframes mcx-bank-led-pulse {
@@ -124,7 +191,19 @@
   50% { opacity: 0.42; }
 }
 @media (forced-colors: active) {
-  .mcx-bank-btn.is-active { outline: 2px solid Highlight; }
+  .mcx-bank-mode-btn {
+    border-color: ButtonText;
+    color: ButtonText;
+  }
+  .mcx-bank-mode-btn[aria-pressed="true"] {
+    border-color: Highlight;
+    outline: 2px solid Highlight;
+    color: Highlight;
+  }
+  .mcx-bank-btn.is-active,
+  .mcx-bank-btn.is-solo {
+    outline: 2px solid Highlight;
+  }
 }
 
 .mcx-bank-letter {
@@ -139,7 +218,53 @@
   font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.mcx-bank-flags {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.mcx-bank-flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 2px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-2xs);
+  font-weight: 900;
+  line-height: 1;
+}
+.mcx-bank-flag.is-muted {
+  background: color-mix(in oklab, var(--color-danger) 28%, var(--color-panel-surface));
+  color: color-mix(in oklab, var(--color-danger) 75%, var(--color-text-main));
+  border: 1px solid var(--color-danger);
+}
+.mcx-bank-flag.is-solo {
+  background: color-mix(in oklab, var(--color-warning) 28%, var(--color-panel-surface));
+  color: color-mix(in oklab, var(--color-warning) 70%, var(--color-text-main));
+  border: 1px solid var(--color-warning);
+}
+.mcx-bank-flag.is-partial {
+  border-style: dashed;
+}
+.mcx-bank-name {
+  display: block;
+  width: 100%;
+  font-family: var(--font-ui, sans-serif);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  color: var(--color-text-main);
   text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.15;
 }
 .mcx-bank-activity {
   height: 3px;
@@ -172,9 +297,11 @@
   justify-content: center;
   gap: 3px;
 }
-.mcx-bank-add-btn:hover {
-  border-style: solid;
-  background: color-mix(in oklab, var(--bank-color) 16%, transparent);
+@media (hover: hover) {
+  .mcx-bank-add-btn:hover {
+    border-style: solid;
+    background: color-mix(in oklab, var(--bank-color) 16%, transparent);
+  }
 }
 
 .mcx-panel-head-left, .mcx-panel-head-right { display: flex; align-items: center; gap: var(--space-2); }
@@ -188,8 +315,276 @@
   background: color-mix(in oklab, var(--bank-color, var(--color-accent)) 16%, var(--color-panel-surface));
   border: 1px solid color-mix(in oklab, var(--bank-color, var(--color-accent)) 55%, transparent);
 }
+.mcx-bank-rename-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-panel-border-strong);
+  background: var(--color-panel-surface);
+  color: var(--color-text-main);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .mcx-bank-rename-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+}
+.mcx-bank-rename-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+.mcx-bank-mode-btn > *,
+.mcx-bank-btn > *,
+.mcx-bank-add-btn > *,
+.mcx-bank-rename-btn > *,
+.mcx-strip-act-btn > *,
+.mcx-strip-add-btn > *,
+.mcx-unpin-bank-btn > * {
+  pointer-events: none;
+}
+
+/* Native <dialog> Modal for Renaming Group Banks (A..H) */
+dialog.mcx-rename-bank-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  padding: 0;
+  width: min(400px, 92vw);
+  max-height: 88vh;
+  overflow: hidden;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in oklab, var(--bank-color, var(--color-accent)) 60%, var(--color-panel-border-strong));
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-base);
+  color: var(--color-text-main);
+  box-shadow: 0 18px 48px color-mix(in oklab, var(--color-bg-base) 78%, transparent);
+}
+dialog.mcx-rename-bank-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+dialog.mcx-rename-bank-dialog:modal {
+  overscroll-behavior: contain;
+}
+dialog.mcx-rename-bank-dialog::backdrop {
+  background: color-mix(in oklab, var(--color-bg-base) 68%, transparent);
+  backdrop-filter: blur(3px);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+.mcx-rename-modal-form {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin: 0;
+}
+.mcx-rename-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-panel-surface);
+  border-bottom: 1px solid var(--color-panel-border-dim);
+}
+.mcx-rename-modal-head-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.mcx-rename-modal-badge {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 900;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--bank-color, var(--color-accent));
+  background: color-mix(in oklab, var(--bank-color, var(--color-accent)) 18%, var(--color-panel-surface));
+  border: 1px solid color-mix(in oklab, var(--bank-color, var(--color-accent)) 65%, transparent);
+}
+.mcx-rename-modal-title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 800;
+  color: var(--color-text-main);
+}
+.mcx-rename-modal-close {
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-panel-border);
+  background: var(--color-panel-bg);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.mcx-rename-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+.mcx-rename-modal-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.mcx-rename-modal-input-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.mcx-rename-modal-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in oklab, var(--bank-color, var(--color-accent)) 55%, var(--color-panel-border));
+  background: var(--color-panel-surface);
+  color: var(--color-text-main);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+.mcx-rename-modal-counter {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-text-dim);
+  min-width: 38px;
+  text-align: right;
+}
+.mcx-rename-modal-tags-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mcx-rename-modal-tags-lbl {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-text-dim);
+}
+.mcx-rename-modal-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.mcx-rename-chip {
+  appearance: none;
+  padding: 4px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-panel-border);
+  background: var(--color-panel-surface);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  cursor: pointer;
+}
+.mcx-rename-modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-panel-surface);
+  border-top: 1px solid var(--color-panel-border-dim);
+}
+.mcx-rename-modal-foot-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.mcx-rename-modal-btn {
+  appearance: none;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-panel-border-strong);
+  background: var(--color-panel-bg);
+  color: var(--color-text-main);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  cursor: pointer;
+}
+.mcx-rename-modal-btn.is-primary {
+  border-color: var(--bank-color, var(--color-accent));
+  background: color-mix(in oklab, var(--bank-color, var(--color-accent)) 28%, var(--color-panel-surface));
+  color: var(--color-text-main);
+  box-shadow: inset 0 0 0 1px var(--bank-color, var(--color-accent));
+}
+.mcx-rename-modal-btn.is-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+}
+.mcx-rename-modal-close:focus-visible,
+.mcx-rename-modal-input:focus-visible,
+.mcx-rename-chip:focus-visible,
+.mcx-rename-modal-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mcx-rename-modal-close,
+  .mcx-rename-chip,
+  .mcx-rename-modal-btn,
+  .mcx-bank-rename-btn {
+    transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+  }
+}
+@media (hover: hover) {
+  .mcx-rename-modal-close:hover,
+  .mcx-rename-chip:hover,
+  .mcx-rename-modal-btn:hover {
+    border-color: var(--bank-color, var(--color-accent));
+    color: var(--color-text-main);
+  }
+  .mcx-rename-modal-btn.is-ghost:hover {
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+  }
+}
+@media (forced-colors: active) {
+  dialog.mcx-rename-bank-dialog {
+    background: Canvas;
+    color: CanvasText;
+    border: 2px solid CanvasText;
+  }
+  .mcx-rename-modal-btn,
+  .mcx-rename-chip,
+  .mcx-rename-modal-close {
+    border-color: ButtonText;
+    color: ButtonText;
+  }
+  .mcx-rename-modal-btn.is-primary {
+    border-color: Highlight;
+    outline: 2px solid Highlight;
+  }
+}
+
 .mcx-unpin-bank-btn {
   appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   border: 1px solid var(--color-panel-border-strong);
   border-radius: var(--radius-sm);
   background: var(--color-panel-surface);
@@ -200,13 +595,18 @@
   padding: 2px 8px;
   cursor: pointer;
 }
+.mcx-unpin-bank-btn.is-pinned {
+  border-color: color-mix(in oklab, var(--color-warning) 60%, var(--color-panel-border));
+  color: var(--color-warning);
+}
 .mcx-unpin-bank-btn:hover { border-color: var(--color-accent); color: var(--color-accent); }
 
 .mcx-strip-actions { display: inline-flex; align-items: center; gap: 2px; }
 .mcx-strip-act-btn {
   appearance: none;
-  width: 18px;
-  height: 18px;
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
   padding: 0;
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-panel-border-dim);
@@ -218,8 +618,12 @@
   justify-content: center;
 }
 .mcx-strip-act-btn:hover:not(:disabled) { border-color: var(--color-accent); color: var(--color-accent); }
-.mcx-strip-act-btn.is-pinned { color: var(--color-warning); border-color: color-mix(in oklab, var(--color-warning) 55%, transparent); }
-.mcx-strip-act-btn.is-del:hover { border-color: var(--color-danger); color: var(--color-danger); }
+.mcx-strip-act-btn.is-pinned {
+  color: var(--color-warning);
+  border-color: color-mix(in oklab, var(--color-warning) 55%, transparent);
+  background: color-mix(in oklab, var(--color-warning) 12%, var(--color-panel-surface));
+}
+.mcx-strip-act-btn.is-del:hover:not(:disabled) { border-color: var(--color-danger); color: var(--color-danger); }
 .mcx-strip-act-btn:disabled { opacity: 0.32; cursor: not-allowed; }
 
 .mcx-strip-empty {

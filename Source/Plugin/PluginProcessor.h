@@ -82,6 +82,8 @@ public:
     void setPartMidiDevice(int partIdx, bool isOutput, int portIndex, const std::string& deviceName);
     [[nodiscard]] McxLibraryService& libraryService() noexcept { return libraryService_; }
     [[nodiscard]] const juce::CriticalSection& engineLock() const noexcept { return engineMutex_; }
+    /** @brief Drains queued UI commands into the engine; caller MUST hold engineLock(). */
+    void flushPendingUiCommandsLocked() noexcept;
     std::size_t collectUnusedWaves() noexcept;
     int mountBankFromMemory(const std::uint8_t* data, std::size_t sizeBytes, const std::string& bankId = {});
     int mountBankFromFile(const std::string& filePath);

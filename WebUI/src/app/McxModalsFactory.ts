@@ -81,6 +81,7 @@ export function createBankDrawer(bridge: McxHostBridge, state: McxAppState): Mcx
 }
 
 export function createStudioModals(bridge: McxHostBridge, state: McxAppState) {
+  let lastSendLabelsKey = '';
   const fxRackModal = new MultiBusFxRackModal({
     bridge: createFxRackBridge(bridge, state),
     bpm: 120,
@@ -97,7 +98,11 @@ export function createStudioModals(bridge: McxHostBridge, state: McxAppState) {
     },
     onSendLabelsChange: (labels: any) => {
       state.refs.toneDrawer?.updateSendLabels(labels);
-      state.refreshPartList();
+      const nextKey = JSON.stringify(labels ?? null);
+      if (nextKey !== lastSendLabelsKey) {
+        lastSendLabelsKey = nextKey;
+        state.refreshPartList();
+      }
     },
   });
 

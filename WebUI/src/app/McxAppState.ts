@@ -13,16 +13,28 @@ import {
   createDefaultBankLayout,
   deletePart,
   findPartLocation,
+  formatBankDisplayName,
   formatSlotLabel,
+  getBankName,
+  hasAnyBankSoloed,
+  hasPinnedInBank,
+  isBankMuted,
+  isBankSoloed,
   MAX_PARTS,
   type McxBankLayoutData,
   movePart,
   movePartToBank,
+  pinBank,
+  removeBankBit,
   serializeBankLayoutJson,
+  setBankMuted,
+  setBankName,
+  setBankSoloed,
   togglePin,
   unpinBank,
 } from '../ui/McxBankLayout';
 import type { McxBankRail } from '../ui/McxBankRail';
+import { openRenameBankModal } from '../ui/McxRenameBankModal';
 import { renderMixerConsole, createDefaultPartState, type McxMixerCallbacks, type McxPartUiState } from '../ui/McxMixerConsole';
 import type { McxStepStrip } from '../ui/McxStepStrip';
 import type { McxToneDrawer } from '../ui/McxToneDrawer';
@@ -63,6 +75,8 @@ export class McxAppState {
   public refs: McxUiRefs = {};
   private readonly bridge: McxHostBridge;
   private cachedPanelCbs: McxMixerCallbacks | null = null;
+  private preSoloMutedBankMask = 0;
+  private readonly preSoloMutedParts = new Set<number>();
 
   constructor(bridge: McxHostBridge) {
     this.bridge = bridge;
@@ -100,15 +114,34 @@ export class McxAppState {
     this.syncSoloIndicator();
   }
 
+  public clearPreSoloMemory(): void {
+    this.preSoloMutedBankMask = 0;
+    this.preSoloMutedParts.clear();
+  }
+
   public syncSoloIndicator(): void {
-    const anySolo = this.partsState.some((p) => p.enabled !== false && p.solo);
+    const anySolo = this.partsState.some((p) => p.enabled !== false && p.solo) || hasAnyBankSoloed(this.bankLayout);
     const btn = document.getElementById('mcx-solo-clear-btn');
     if (btn) { btn.hidden = !anySolo; btn.textContent = t('mcx.soloActiveClear'); }
   }
 
   public clearAllSolos(): void {
-    this.partsState.forEach((ps, i) => { if (ps.solo) { ps.solo = false; this.bridge.setParam(i, 'partSolo', 0); } });
+    this.bankLayout.bankSoloMask = 0;
+    for (let b = 0; b < this.bankLayout.bankCount; ++b) {
+      if ((this.preSoloMutedBankMask & (1 << b)) !== 0) setBankMuted(this.bankLayout, b, true);
+    }
+    this.preSoloMutedBankMask = 0;
+    this.partsState.forEach((ps, i) => {
+      if (ps.solo) { ps.solo = false; this.bridge.setParam(i, 'partSolo', 0); }
+      if (ps.enabled !== false && this.preSoloMutedParts.has(i)) {
+        ps.mute = true;
+        this.bridge.setParam(i, 'partMute', 1);
+      }
+    });
+    this.preSoloMutedParts.clear();
+    this.syncBankLayoutToHost();
     this.refreshPartList();
+    this.syncOpenEditorsToFocusedPart();
     this.setLcdLine2(t('mcx.allSolosCleared'));
   }
 
@@ -140,24 +173,43 @@ export class McxAppState {
     return 0;
   }
 
+  private syncOpenEditorsToFocusedPart(): void {
+    const idx = this.focusedPart;
+    const ps = this.partsState[idx];
+    if (!ps) return;
+    if (this.refs.toneDrawer?.isOpen()) this.refs.toneDrawer.syncPart(idx, ps);
+    if (this.refs.padModal?.isOpen()) this.refs.padModal.syncPart(idx, ps);
+    if (this.refs.arpModal?.isOpen()) this.syncArpModalForPart(idx);
+    if (this.refs.pianoRollModal?.isOpen()) this.syncPianoRollForPart(idx);
+    if (this.refs.synthModal?.isOpen()) this.refs.synthModal.open(idx);
+  }
+
   public selectBank(bankIdx: number): void {
     const next = Math.max(0, Math.min(this.bankLayout.bankCount - 1, bankIdx));
     if (next === this.bankLayout.activeBank) return;
     this.bankLayout.activeBank = next;
-    this.syncBankLayoutToHost();
     const curLoc = findPartLocation(this.bankLayout, this.focusedPart);
-    if (!curLoc || curLoc.bankIdx !== next) this.focusPart(this.findFirstPlacedPart(next));
-    else { this.refreshPartList(); this.updateLcdLine1(0); }
-    this.setLcdLine2(`${t('mcx.bankLabel')} ${BANK_LETTERS[next]}`);
+    if (!curLoc || curLoc.bankIdx !== next) {
+      this.focusedPart = this.findFirstPlacedPart(next);
+    }
+    this.syncBankLayoutToHost();
+    this.refreshPartList();
+    this.refs.stepStrip?.syncFromSequence(this.focusedPart, this.partsState[this.focusedPart]?.sequence);
+    this.syncOpenEditorsToFocusedPart();
+    this.updateLcdLine1(0);
+    this.setLcdLine2(formatBankDisplayName(this.bankLayout, next, t('mcx.bankLabel')));
   }
 
   public addNewBank(): void {
     const res = addBank(this.bankLayout);
     if (!res.ok || res.bankIdx === undefined) return;
     res.allocated.forEach((a) => this.initAllocatedPart(a.partId, a.defaultChannel));
+    this.focusedPart = res.allocated[0].partId;
     this.syncBankLayoutToHost();
-    this.focusPart(res.allocated[0].partId);
     this.refreshPartList();
+    this.refs.stepStrip?.syncFromSequence(this.focusedPart, this.partsState[this.focusedPart]?.sequence);
+    this.syncOpenEditorsToFocusedPart();
+    this.updateLcdLine1(0);
     this.setLcdLine2(`${t('mcx.bankLabel')} ${BANK_LETTERS[res.bankIdx]} ${t('mcx.bankCreated')}`);
   }
 
@@ -165,9 +217,12 @@ export class McxAppState {
     const res = addPartInFirstFreeSlot(this.bankLayout, bankIdx);
     if (!res.ok || res.partId === undefined || res.slotIdx === undefined || res.defaultChannel === undefined) return;
     this.initAllocatedPart(res.partId, res.defaultChannel);
+    this.focusedPart = res.partId;
     this.syncBankLayoutToHost();
-    this.focusPart(res.partId);
     this.refreshPartList();
+    this.refs.stepStrip?.syncFromSequence(this.focusedPart, this.partsState[this.focusedPart]?.sequence);
+    this.syncOpenEditorsToFocusedPart();
+    this.updateLcdLine1(0);
     this.setLcdLine2(`${formatSlotLabel(bankIdx, res.slotIdx)} · P${String(res.partId + 1).padStart(2, '0')} ${t('mcx.bankAddPart')}`);
   }
 
@@ -181,11 +236,19 @@ export class McxAppState {
     if (res.partId !== undefined) {
       const ps = this.partsState[res.partId];
       if (ps) { ps.enabled = false; ps.mute = false; ps.solo = false; }
+      this.preSoloMutedParts.delete(res.partId);
       this.bridge.setParam(res.partId, 'partEnabled', 0);
+      this.bridge.setParam(res.partId, 'partMute', 0);
+      this.bridge.setParam(res.partId, 'partSolo', 0);
       if (this.focusedPart === res.partId) this.focusedPart = this.findFirstPlacedPart(this.bankLayout.activeBank);
+    }
+    if (res.removedBank) {
+      this.preSoloMutedBankMask = removeBankBit(this.preSoloMutedBankMask, bankIdx);
     }
     this.syncBankLayoutToHost();
     this.refreshPartList();
+    this.refs.stepStrip?.syncFromSequence(this.focusedPart, this.partsState[this.focusedPart]?.sequence);
+    this.syncOpenEditorsToFocusedPart();
     this.updateLcdLine1(0);
     this.setLcdLine2(res.removedBank ? t('mcx.bankRemoved') : t('mcx.bankEmptySlotNotice'));
   }
@@ -195,6 +258,9 @@ export class McxAppState {
     if (!res.ok) {
       this.setLcdLine2(res.reason === 'overflow_blocked' ? t('mcx.bankMoveOverflowBlocked') : t('mcx.bankMoveBlockedPinned'));
       return;
+    }
+    if (res.removedEmptyBank) {
+      this.preSoloMutedBankMask = removeBankBit(this.preSoloMutedBankMask, fromBank);
     }
     this.syncBankLayoutToHost();
     this.refreshPartList();
@@ -223,27 +289,128 @@ export class McxAppState {
     this.setLcdLine2(`${t('mcx.bankLabel')} ${BANK_LETTERS[this.bankLayout.activeBank]}: ${count} ${t('mcx.bankUnpinnedCount')}`);
   }
 
+  public togglePinActiveBank(): void {
+    const b = this.bankLayout.activeBank;
+    if (hasPinnedInBank(this.bankLayout, b)) {
+      const count = unpinBank(this.bankLayout, b);
+      this.syncBankLayoutToHost();
+      this.refreshPartList();
+      this.setLcdLine2(`${t('mcx.bankLabel')} ${BANK_LETTERS[b]}: ${count} ${t('mcx.bankUnpinnedCount')}`);
+    } else {
+      const count = pinBank(this.bankLayout, b);
+      this.syncBankLayoutToHost();
+      this.refreshPartList();
+      this.setLcdLine2(`${t('mcx.bankLabel')} ${BANK_LETTERS[b]}: ${count} ${t('mcx.bankPinnedCount')}`);
+    }
+  }
+
   public toggleLiveMuteBank(bankIdx: number): void {
     if (bankIdx < 0 || bankIdx >= this.bankLayout.bankCount) return;
-    const placed = (this.bankLayout.banks[bankIdx] ?? []).filter((pid): pid is number => pid !== null);
-    if (placed.length === 0) return;
-    const nextMute = !placed.every((pid) => Boolean(this.partsState[pid]?.mute));
-    for (const pid of placed) {
-      if (this.partsState[pid]) this.partsState[pid].mute = nextMute;
-      this.bridge.setParam(pid, 'partMute', nextMute ? 1 : 0);
+    const nextMuted = !isBankMuted(this.bankLayout, bankIdx);
+    setBankMuted(this.bankLayout, bankIdx, nextMuted);
+    const bit = 1 << bankIdx;
+    if (nextMuted) {
+      this.preSoloMutedBankMask &= ~bit;
+      setBankSoloed(this.bankLayout, bankIdx, false);
     }
+    this.syncBankLayoutToHost();
     this.refreshPartList();
-    if (placed.includes(this.focusedPart)) {
-      if (this.refs.toneDrawer?.isOpen()) this.refs.toneDrawer.syncPart(this.focusedPart, this.partsState[this.focusedPart]);
-      if (this.refs.padModal?.isOpen()) this.refs.padModal.syncPart(this.focusedPart, this.partsState[this.focusedPart]);
+    const statusTxt = nextMuted ? t('mcx.bankMutedStatus') : t('mcx.bankActiveStatus');
+    this.setLcdLine2(`${formatBankDisplayName(this.bankLayout, bankIdx, t('mcx.bankLabel'))}: ${statusTxt}`);
+  }
+
+  public toggleLiveSoloBank(bankIdx: number): void {
+    if (bankIdx < 0 || bankIdx >= this.bankLayout.bankCount) return;
+    const nextSolo = !isBankSoloed(this.bankLayout, bankIdx);
+    const bit = 1 << bankIdx;
+    if (nextSolo) {
+      if (isBankMuted(this.bankLayout, bankIdx)) {
+        this.preSoloMutedBankMask |= bit;
+        setBankMuted(this.bankLayout, bankIdx, false);
+      }
+      setBankSoloed(this.bankLayout, bankIdx, true);
+    } else {
+      setBankSoloed(this.bankLayout, bankIdx, false);
+      if ((this.preSoloMutedBankMask & bit) !== 0) {
+        this.preSoloMutedBankMask &= ~bit;
+        setBankMuted(this.bankLayout, bankIdx, true);
+      }
     }
-    const statusTxt = nextMute ? t('mcx.bankMutedStatus') : t('mcx.bankActiveStatus');
-    this.setLcdLine2(`${t('mcx.bankLabel')} ${BANK_LETTERS[bankIdx]}: ${statusTxt} (${placed.length}P)`);
+    this.syncBankLayoutToHost();
+    this.refreshPartList();
+    const statusTxt = nextSolo ? t('mcx.bankSoloStatus') : t('mcx.bankActiveStatus');
+    this.setLcdLine2(`${formatBankDisplayName(this.bankLayout, bankIdx, t('mcx.bankLabel'))}: ${statusTxt}`);
+  }
+
+  public clearAllBankMutes(): void {
+    this.bankLayout.bankMuteMask = 0;
+    this.preSoloMutedBankMask = 0;
+    this.syncBankLayoutToHost();
+    this.refreshPartList();
+    this.setLcdLine2(t('mcx.allBankMutesCleared'));
+  }
+
+  public togglePartMute(partIdx: number): void {
+    const ps = this.partsState[partIdx];
+    if (!ps) return;
+    const nextMuted = !ps.mute;
+    ps.mute = nextMuted;
+    this.bridge.setParam(partIdx, 'partMute', nextMuted ? 1 : 0);
+    if (nextMuted) {
+      this.preSoloMutedParts.delete(partIdx);
+      if (ps.solo) {
+        ps.solo = false;
+        this.bridge.setParam(partIdx, 'partSolo', 0);
+      }
+    }
+    this.notifyPartMetadataChanged(partIdx);
+  }
+
+  public togglePartSolo(partIdx: number): void {
+    const ps = this.partsState[partIdx];
+    if (!ps) return;
+    const nextSolo = !ps.solo;
+    if (nextSolo) {
+      if (ps.mute) {
+        this.preSoloMutedParts.add(partIdx);
+        ps.mute = false;
+        this.bridge.setParam(partIdx, 'partMute', 0);
+      }
+      ps.solo = true;
+      this.bridge.setParam(partIdx, 'partSolo', 1);
+    } else {
+      ps.solo = false;
+      this.bridge.setParam(partIdx, 'partSolo', 0);
+      if (this.preSoloMutedParts.delete(partIdx)) {
+        ps.mute = true;
+        this.bridge.setParam(partIdx, 'partMute', 1);
+      }
+    }
+    this.notifyPartMetadataChanged(partIdx);
+  }
+
+  public openRenameBankDialog(bankIdx = this.bankLayout.activeBank): void {
+    if (bankIdx < 0 || bankIdx >= this.bankLayout.bankCount) return;
+    openRenameBankModal({
+      bankIdx,
+      currentName: getBankName(this.bankLayout, bankIdx),
+      onSave: (idx, nextName) => this.renameBank(idx, nextName),
+    });
+  }
+
+  public renameBank(bankIdx: number, rawName: string): void {
+    if (bankIdx < 0 || bankIdx >= this.bankLayout.bankCount) return;
+    setBankName(this.bankLayout, bankIdx, rawName);
+    this.syncBankLayoutToHost();
+    this.refreshPartList();
+    this.setLcdLine2(`${formatBankDisplayName(this.bankLayout, bankIdx, t('mcx.bankLabel'))} — ${t('mcx.bankRenamedNotice')}`);
   }
 
   public resetToFactoryLayout(): void {
     for (let i = 0; i < MAX_PARTS; ++i) this.partsState[i] = createDefaultPartState(i);
     this.bankLayout = createDefaultBankLayout();
+    this.clearPreSoloMemory();
+    this.bridge.clearLocalBankLayoutFallback?.();
     this.focusedPart = 0;
     this.syncBankLayoutToHost();
     this.refreshPartList();
@@ -290,17 +457,12 @@ export class McxAppState {
       this.refs.stepStrip?.syncFromSequence(idx, this.partsState[idx].sequence);
     }
     this.updateLcdLine1(0);
-    if (this.refs.toneDrawer?.isOpen()) this.refs.toneDrawer.syncPart(idx, this.partsState[idx]);
-    if (this.refs.padModal?.isOpen()) this.refs.padModal.syncPart(idx, this.partsState[idx]);
-    if (this.refs.arpModal?.isOpen()) this.syncArpModalForPart(idx);
-    if (this.refs.pianoRollModal?.isOpen()) this.syncPianoRollForPart(idx);
-    if (this.refs.synthModal?.isOpen()) this.refs.synthModal.open(idx);
+    this.syncOpenEditorsToFocusedPart();
   }
 
   public notifyPartMetadataChanged(idx: number): void {
     this.refreshPartList(); this.updateLcdLine1(0);
     this.refs.stepStrip?.syncFromSequence(idx, this.partsState[idx].sequence);
-    this.bridge.requestPartEngineState(idx);
     if (this.refs.toneDrawer?.isOpen() && this.refs.toneDrawer.getPart() === idx) this.refs.toneDrawer.syncPart(idx, this.partsState[idx]);
     if (this.refs.padModal?.isOpen() && this.refs.padModal.getPart() === idx) this.refs.padModal.syncPart(idx, this.partsState[idx]);
     if (this.refs.arpModal?.isOpen() && this.refs.arpModal.getPart() === idx) this.syncArpModalForPart(idx);

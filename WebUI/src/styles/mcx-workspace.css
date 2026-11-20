@@ -115,3 +115,9 @@
   padding: 0;
   width: 100%;
 }
+
+.mcx-step-strip-host.abd-step-strip {
+  margin: 0 var(--space-2) var(--space-2);
+  padding: 5px 8px;
+  gap: var(--space-3);
+}

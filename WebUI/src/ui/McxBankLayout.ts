@@ -6,6 +6,7 @@
 export const MAX_BANKS = 8;
 export const SLOTS_PER_BANK = 8;
 export const MAX_PARTS = 64;
+export const MAX_BANK_NAME_LEN = 20;
 export const BANK_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const;
 export const BANK_COLOR_VARS = [
   'var(--color-bank-a)', 'var(--color-bank-b)', 'var(--color-bank-c)', 'var(--color-bank-d)',
@@ -17,6 +18,9 @@ export interface McxBankLayoutData {
   activeBank: number;
   banks: Array<Array<number | null>>;
   pinnedParts: Set<number>;
+  bankMuteMask: number;
+  bankSoloMask: number;
+  bankNames: string[];
 }
 
 export interface PartLocation { bankIdx: number; slotIdx: number; }
@@ -30,8 +34,80 @@ export interface MovePartResult {
 }
 
 const emptyRow = (): Array<number | null> => Array<number | null>(SLOTS_PER_BANK).fill(null);
+const emptyBankNames = (): string[] => Array<string>(MAX_BANKS).fill('');
 const isRowEmpty = (row: Array<number | null>): boolean => row.every((cell) => cell === null);
 const cloneBanks = (banks: Array<Array<number | null>>): Array<Array<number | null>> => banks.map((r) => [...r]);
+
+export function sanitizeBankName(raw: string): string {
+  return String(raw ?? '').replace(/[\x00-\x1F\x7F]/g, '').trim().slice(0, MAX_BANK_NAME_LEN).trim();
+}
+
+export function getBankName(layout: McxBankLayoutData, bankIdx: number): string {
+  if (bankIdx < 0 || bankIdx >= MAX_BANKS) return '';
+  return sanitizeBankName(layout.bankNames?.[bankIdx] ?? '');
+}
+
+export function setBankName(layout: McxBankLayoutData, bankIdx: number, rawName: string): string {
+  if (bankIdx < 0 || bankIdx >= MAX_BANKS) return '';
+  if (!Array.isArray(layout.bankNames) || layout.bankNames.length < MAX_BANKS) {
+    const next = emptyBankNames();
+    (layout.bankNames ?? []).forEach((v, i) => { if (i < MAX_BANKS) next[i] = v; });
+    layout.bankNames = next;
+  }
+  const clean = sanitizeBankName(rawName);
+  layout.bankNames[bankIdx] = clean;
+  return clean;
+}
+
+export function formatBankDisplayName(layout: McxBankLayoutData, bankIdx: number, bankLabel: string): string {
+  const base = `${bankLabel} ${BANK_LETTERS[bankIdx] ?? '?'}`;
+  const custom = getBankName(layout, bankIdx);
+  return custom ? `${base} · ${custom}` : base;
+}
+
+export function removeBankBit(mask: number, removedBankIdx: number): number {
+  const lowMask = (1 << removedBankIdx) - 1;
+  const highBits = (mask >>> (removedBankIdx + 1)) << removedBankIdx;
+  return ((mask & lowMask) | highBits) & 0xFF;
+}
+
+function compactRemovedBankMeta(layout: McxBankLayoutData, bankIdx: number): void {
+  if (!Array.isArray(layout.bankNames)) layout.bankNames = emptyBankNames();
+  layout.bankNames.splice(bankIdx, 1);
+  while (layout.bankNames.length < MAX_BANKS) layout.bankNames.push('');
+  layout.bankNames.length = MAX_BANKS;
+  layout.bankMuteMask = removeBankBit(layout.bankMuteMask ?? 0, bankIdx);
+  layout.bankSoloMask = removeBankBit(layout.bankSoloMask ?? 0, bankIdx);
+}
+
+export function isBankMuted(layout: McxBankLayoutData, bankIdx: number): boolean {
+  if (bankIdx < 0 || bankIdx >= MAX_BANKS) return false;
+  return ((layout.bankMuteMask ?? 0) & (1 << bankIdx)) !== 0;
+}
+
+export function setBankMuted(layout: McxBankLayoutData, bankIdx: number, muted: boolean): void {
+  if (bankIdx < 0 || bankIdx >= MAX_BANKS) return;
+  const bit = 1 << bankIdx;
+  layout.bankMuteMask = muted ? ((layout.bankMuteMask ?? 0) | bit) & 0xFF : ((layout.bankMuteMask ?? 0) & ~bit) & 0xFF;
+}
+
+export function isBankSoloed(layout: McxBankLayoutData, bankIdx: number): boolean {
+  if (bankIdx < 0 || bankIdx >= MAX_BANKS) return false;
+  return ((layout.bankSoloMask ?? 0) & (1 << bankIdx)) !== 0;
+}
+
+export function setBankSoloed(layout: McxBankLayoutData, bankIdx: number, soloed: boolean): void {
+  if (bankIdx < 0 || bankIdx >= MAX_BANKS) return;
+  const bit = 1 << bankIdx;
+  layout.bankSoloMask = soloed ? ((layout.bankSoloMask ?? 0) | bit) & 0xFF : ((layout.bankSoloMask ?? 0) & ~bit) & 0xFF;
+}
+
+export function hasAnyBankSoloed(layout: McxBankLayoutData): boolean {
+  for (let b = 0; b < layout.bankCount; ++b) {
+    if (isBankSoloed(layout, b) && countOccupiedInBank(layout, b) > 0) return true;
+  }
+  return false;
+}
 
 export function createDefaultBankLayout(): McxBankLayoutData {
   const banks = Array.from({ length: MAX_BANKS }, () => emptyRow());
@@ -41,7 +117,7 @@ export function createDefaultBankLayout(): McxBankLayoutData {
   }
   const pinnedParts = new Set<number>();
   for (let i = 0; i < 16; ++i) pinnedParts.add(i);
-  return { bankCount: 2, activeBank: 0, banks, pinnedParts };
+  return { bankCount: 2, activeBank: 0, banks, pinnedParts, bankMuteMask: 0, bankSoloMask: 0, bankNames: emptyBankNames() };
 }
 
 export function formatSlotLabel(bankIdx: number, slotIdx: number): string {
@@ -115,7 +191,10 @@ export function serializeBankLayoutJson(layout: McxBankLayoutData): string {
   layout.pinnedParts.forEach((pid) => {
     if (pid >= 0 && pid < MAX_PARTS) words[Math.floor(pid / 16)] |= (1 << (pid % 16));
   });
-  return JSON.stringify({ bankCount, activeBank, banks, pinnedMask64: words });
+  const bankMuteMask = (layout.bankMuteMask ?? 0) & 0xFF;
+  const bankSoloMask = (layout.bankSoloMask ?? 0) & 0xFF;
+  const bankNames = Array.from({ length: bankCount }, (_, b) => sanitizeBankName(layout.bankNames?.[b] ?? ''));
+  return JSON.stringify({ bankCount, activeBank, banks, pinnedMask64: words, bankMuteMask, bankSoloMask, bankNames });
 }
 
 export function deserializeBankLayoutJson(jsonText: string | undefined): McxBankLayoutData {
@@ -148,7 +227,23 @@ export function deserializeBankLayoutJson(jsonText: string | undefined): McxBank
     } else {
       for (let i = 0; i < 16; ++i) pinnedParts.add(i);
     }
-    return { bankCount, activeBank: Math.max(0, Math.min(bankCount - 1, Number(parsed.activeBank ?? 0) || 0)), banks, pinnedParts };
+    const bankMuteMask = Math.max(0, Math.min(255, Number(parsed.bankMuteMask ?? 0) || 0)) & 0xFF;
+    const bankSoloMask = Math.max(0, Math.min(255, Number(parsed.bankSoloMask ?? 0) || 0)) & 0xFF;
+    const bankNames = emptyBankNames();
+    if (Array.isArray(parsed.bankNames)) {
+      for (let b = 0; b < Math.min(MAX_BANKS, parsed.bankNames.length); ++b) {
+        bankNames[b] = sanitizeBankName(String(parsed.bankNames[b] ?? ''));
+      }
+    }
+    return {
+      bankCount,
+      activeBank: Math.max(0, Math.min(bankCount - 1, Number(parsed.activeBank ?? 0) || 0)),
+      banks,
+      pinnedParts,
+      bankMuteMask,
+      bankSoloMask,
+      bankNames,
+    };
   } catch {
     return createDefaultBankLayout();
   }
@@ -160,6 +255,9 @@ export function addBank(layout: McxBankLayoutData): { ok: boolean; reason?: 'max
   const allocated: Array<{ partId: number; slotIdx: number; defaultChannel: number }> = [];
   layout.bankCount += 1;
   layout.banks[newBankIdx] = emptyRow();
+  setBankName(layout, newBankIdx, '');
+  setBankMuted(layout, newBankIdx, false);
+  setBankSoloed(layout, newBankIdx, false);
   for (let s = 0; s < SLOTS_PER_BANK; ++s) {
     const pid = allocateFreePartId(layout);
     if (pid === null) break;
@@ -198,6 +296,7 @@ export function deletePart(layout: McxBankLayoutData, bankIdx: number, slotIdx: 
     layout.banks.splice(bankIdx, 1);
     layout.banks.push(emptyRow());
     layout.bankCount -= 1;
+    compactRemovedBankMeta(layout, bankIdx);
     if (layout.activeBank > bankIdx) layout.activeBank -= 1;
     if (layout.activeBank >= layout.bankCount) layout.activeBank = layout.bankCount - 1;
     removedBank = true;
@@ -219,6 +318,31 @@ export function unpinBank(layout: McxBankLayoutData, bankIdx: number): number {
     if (pid !== null && layout.pinnedParts.delete(pid)) ++count;
   }
   return count;
+}
+
+export function pinBank(layout: McxBankLayoutData, bankIdx: number): number {
+  const row = layout.banks[bankIdx];
+  if (!row) return 0;
+  let count = 0;
+  for (const pid of row) {
+    if (pid !== null && !layout.pinnedParts.has(pid)) {
+      layout.pinnedParts.add(pid);
+      ++count;
+    }
+  }
+  return count;
+}
+
+export function areAllPinnedInBank(layout: McxBankLayoutData, bankIdx: number): boolean {
+  const row = layout.banks[bankIdx];
+  if (!row) return false;
+  let occupied = 0;
+  for (const pid of row) {
+    if (pid === null) continue;
+    ++occupied;
+    if (!layout.pinnedParts.has(pid)) return false;
+  }
+  return occupied > 0;
 }
 
 export function movePart(layout: McxBankLayoutData, fromBank: number, fromSlot: number, toBank: number, toSlot: number): MovePartResult {
@@ -278,6 +402,7 @@ export function movePart(layout: McxBankLayoutData, fromBank: number, fromSlot: 
   layout.banks = copy;
   layout.bankCount = nextBankCount;
   layout.activeBank = destBank;
+  if (removedEmptyBank) compactRemovedBankMeta(layout, fromBank);
   return { ok: true, destBank, destSlot: toSlot, removedEmptyBank, createdBankIdx };
 }
 
@@ -291,6 +416,9 @@ export function movePartToBank(layout: McxBankLayoutData, fromBank: number, from
     copy[fromBank][fromSlot] = null;
     copy[targetBank] = emptyRow();
     copy[targetBank][0] = movingPart;
+    setBankName(layout, targetBank, '');
+    setBankMuted(layout, targetBank, false);
+    setBankSoloed(layout, targetBank, false);
     let nextBankCount = layout.bankCount + 1;
     let destBank = targetBank;
     let removedEmptyBank = false;
@@ -304,6 +432,7 @@ export function movePartToBank(layout: McxBankLayoutData, fromBank: number, from
     layout.banks = copy;
     layout.bankCount = nextBankCount;
     layout.activeBank = destBank;
+    if (removedEmptyBank) compactRemovedBankMeta(layout, fromBank);
     return { ok: true, destBank, destSlot: 0, removedEmptyBank, createdBankIdx: destBank };
   }
   if (targetBank === fromBank) return { ok: false, reason: 'same' };

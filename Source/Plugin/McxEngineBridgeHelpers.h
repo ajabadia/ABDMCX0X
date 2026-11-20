@@ -141,6 +141,7 @@ inline bool handleEngineAndBankJsEvent(McxAudioProcessor& proc,
     if (type == "getSessionState")
     {
         const juce::ScopedLock sl(proc.engineLock());
+        proc.flushPendingUiCommandsLocked();
         if (web != nullptr) web->emitEventIfBrowserIsVisible("onNativeTelemetry", buildSessionStatePayload(proc.engine()));
         return true;
     }
@@ -197,12 +198,8 @@ inline bool handleEngineAndBankJsEvent(McxAudioProcessor& proc,
     if (type == "setBankLayout")
     {
         const auto layoutJson = obj.getProperty("layoutJson").toString().toStdString();
-        bool ok = false;
-        {
-            const juce::ScopedLock sl(proc.engineLock());
-            ok = proc.engine().setBankLayoutJson(layoutJson);
-        }
-        if (ok) proc.markSessionStateDirty();
+        const juce::ScopedLock sl(proc.engineLock());
+        (void)proc.engine().setBankLayoutJson(layoutJson);
         return true;
     }
     return false;

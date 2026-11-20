@@ -10,12 +10,18 @@ import {
   deletePart,
   deserializeBankLayoutJson,
   formatSlotLabel,
+  getBankName,
   getFirstFreeSlot,
   getTopStripPair,
+  isBankMuted,
+  isBankSoloed,
   MAX_BANKS,
   movePart,
   movePartToBank,
   serializeBankLayoutJson,
+  setBankMuted,
+  setBankName,
+  setBankSoloed,
   togglePin,
   unpinBank,
 } from './McxBankLayout';
@@ -186,5 +192,36 @@ describe('McxBankLayout 8x8 engine', () => {
     expect(htmlDual).toContain('id="mcx-route-in-port"');
     expect(htmlDual).toContain('id="mcx-route-port"');
     expect(htmlDual).toContain('Sequential Prophet-6');
+  });
+
+  it('serializes and compacts bankNames, bankMuteMask, and bankSoloMask across JSON and bank removal', () => {
+    const layout = createDefaultBankLayout();
+    addBank(layout); // A, B, C
+    setBankName(layout, 0, ' Drums "TR" ');
+    setBankName(layout, 2, 'Leads');
+    setBankMuted(layout, 1, true);
+    setBankSoloed(layout, 2, true);
+
+    const json = serializeBankLayoutJson(layout);
+    const restored = deserializeBankLayoutJson(json);
+    expect(getBankName(restored, 0)).toBe('Drums "TR"');
+    expect(getBankName(restored, 1)).toBe('');
+    expect(getBankName(restored, 2)).toBe('Leads');
+    expect(isBankMuted(restored, 1)).toBe(true);
+    expect(isBankSoloed(restored, 2)).toBe(true);
+
+    // Compact Bank B out -> Bank C shifts down to index 1 with its name and solo bit preserved
+    unpinBank(restored, 1);
+    for (let s = 0; s < 8; ++s) deletePart(restored, 1, s);
+    expect(restored.bankCount).toBe(2);
+    expect(getBankName(restored, 1)).toBe('Leads');
+    expect(isBankMuted(restored, 1)).toBe(false);
+    expect(isBankSoloed(restored, 1)).toBe(true);
+
+    // Legacy JSON without masks/names defaults safely
+    const legacy = deserializeBankLayoutJson('{"bankCount":2,"activeBank":0,"banks":[[0,1,2,3,4,5,6,7],[8,9,10,11,12,13,14,15]]}');
+    expect(legacy.bankMuteMask).toBe(0);
+    expect(legacy.bankSoloMask).toBe(0);
+    expect(getBankName(legacy, 0)).toBe('');
   });
 });

@@ -11,13 +11,22 @@ export class McxScopeCanvas {
   private lastSamples: Float32Array = new Float32Array(128);
   private peakL = 0;
   private peakR = 0;
+  private resizeObs?: ResizeObserver;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('2D canvas unavailable');
     this.ctx = ctx;
+    if (typeof ResizeObserver !== 'undefined') {
+      this.resizeObs = new ResizeObserver(() => this.draw());
+      this.resizeObs.observe(this.canvas);
+    }
     this.draw();
+  }
+
+  public destroy(): void {
+    this.resizeObs?.disconnect();
   }
 
   public pushTelemetry(tel: McxTelemetry): void {

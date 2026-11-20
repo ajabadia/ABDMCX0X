@@ -29,6 +29,7 @@ export interface McxSystemSettingsDto {
 
 type AudioStatusCb = (s: 'idle' | 'loading' | 'ready' | 'error', detail?: string) => void;
 const STORAGE_SETTINGS = 'abdmcx0x.systemSettings';
+const STORAGE_BANK_LAYOUT = 'abdmcx0x.bankLayout.v1';
 
 export class McxHostBridge {
   public readonly isNative: boolean;
@@ -110,7 +111,18 @@ export class McxHostBridge {
     if (this.isNative) this.postNative({ type: 'setPartMidiDevice', part, direction, portIndex, deviceName });
     else this.setParam(part, direction === 'output' ? 'partMidiPort' : 'partMidiInPort', portIndex);
   }
-  public setBankLayout(layoutJson: string): void { this.sendCommand({ type: 'setBankLayout', layoutJson }, { type: 'SET_BANK_LAYOUT', layoutJson }); }
+  public setBankLayout(layoutJson: string): void {
+    if (!this.isNative) {
+      try { localStorage.setItem(STORAGE_BANK_LAYOUT, layoutJson); } catch { /* ignore */ }
+    }
+    this.sendCommand({ type: 'setBankLayout', layoutJson }, { type: 'SET_BANK_LAYOUT', layoutJson });
+  }
+  public loadLocalBankLayoutFallback(): string | null {
+    try { return localStorage.getItem(STORAGE_BANK_LAYOUT); } catch { return null; }
+  }
+  public clearLocalBankLayoutFallback(): void {
+    try { localStorage.removeItem(STORAGE_BANK_LAYOUT); } catch { /* ignore */ }
+  }
   public sendMidiIn(portIndex: number, bytes: Uint8Array): void { if (!this.isNative && bytes.length >= 2) this.wasm?.post({ type: 'MIDI_IN', portIndex, status: bytes[0] ?? 0, data1: bytes[1] ?? 0, data2: bytes[2] ?? 0 }); }
   private emitWebMidiDevices(): void {
     this.midiDevicesCb?.({
@@ -133,7 +145,10 @@ export class McxHostBridge {
   public setTempo(bpm: number): void { this.isNative ? this.postNative({ type: 'setTempo', bpm }) : this.wasm?.setTempo(bpm); }
   public setMasterVolume(volume: number): void { this.isNative ? this.postNative({ type: 'setMasterVolume', volume }) : this.wasm?.setMasterVolume(volume); }
   public loadBankBuffer(buffer: ArrayBuffer): void { if (this.isNative) this.postNative({ type: 'loadBankBase64', base64: arrayBufferToBase64(buffer) }); else this.wasm?.loadBankBuffer(buffer); }
-  public resetToFactory(): void { this.isNative ? this.postNative({ type: 'resetToFactory' }) : this.wasm?.resetToFactory(); }
+  public resetToFactory(): void {
+    this.clearLocalBankLayoutFallback();
+    this.isNative ? this.postNative({ type: 'resetToFactory' }) : this.wasm?.resetToFactory();
+  }
   public setTransportPlaying(playing: boolean, resetOnStop = true): void { if (this.isNative) this.postNative({ type: 'setTransport', playing, reset: resetOnStop }); else this.wasm?.setTransportPlaying(playing, resetOnStop); }
   public setSequencerBars(bars: number): void { this.sendCommand({ type: 'setSequencerBars', bars }, { type: 'SET_SEQ_BARS', bars }); }
   public setSequencerLoop(loop: boolean): void { this.sendCommand({ type: 'setSeqLoop', loop }, { type: 'SET_SEQ_LOOP', loop }); }

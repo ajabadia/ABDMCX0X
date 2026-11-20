@@ -80,12 +80,36 @@ bool McxEngine::isAnyPartSoloed() const noexcept
     return false;
 }
 
+bool McxEngine::isAnyBankSoloed() const noexcept
+{
+    const int bCount = std::clamp(bankLayout_.bankCount, 1, McxBankLayoutState::kMaxBanks);
+    for (int b = 0; b < bCount; ++b)
+    {
+        if (!bankLayout_.isBankSoloed(b)) continue;
+        for (int s = 0; s < McxBankLayoutState::kSlotsPerBank; ++s)
+        {
+            const int pid = static_cast<int>(bankLayout_.slots[static_cast<std::size_t>(b)][static_cast<std::size_t>(s)]);
+            if (pid >= 0 && pid < kNumParts && part(pid).enabled)
+                return true;
+        }
+    }
+    return false;
+}
+
 bool McxEngine::isPartAudible(int partIndex) const noexcept
 {
     const auto& p = part(partIndex);
     if (!p.enabled) return false;
-    if (isAnyPartSoloed()) return p.solo;
-    return !p.mute;
+    const int bankIdx = bankLayout_.findBankOfPart(partIndex);
+    const bool bankMuted = (bankIdx >= 0) && bankLayout_.isBankMuted(bankIdx);
+    const bool bankSoloed = (bankIdx >= 0) && bankLayout_.isBankSoloed(bankIdx);
+    if (isAnyPartSoloed() || isAnyBankSoloed())
+    {
+        if (p.solo) return true;
+        if (bankSoloed) return !p.mute;
+        return false;
+    }
+    return !bankMuted && !p.mute;
 }
 
 void McxEngine::routeMidiPortChannelNoteOn(int midiInPortIdx, int midiChannel1to16, int midiNote, float velocity, std::int32_t sampleOffset) noexcept

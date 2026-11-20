@@ -8,6 +8,10 @@ import {
   BANK_COLOR_VARS,
   BANK_LETTERS,
   countOccupiedInBank,
+  getBankName,
+  hasAnyBankSoloed,
+  isBankMuted,
+  isBankSoloed,
   MAX_BANKS,
   type McxBankLayoutData,
   SLOTS_PER_BANK,
@@ -40,17 +44,32 @@ export function readPartDragPayload(ev: DragEvent): DragPartPayload | null {
   return activeDragPayload;
 }
 
+export type McxBankRailMode = 'edit' | 'mute' | 'solo';
+
 export interface McxBankRailCallbacks {
   onSelectBank: (bankIdx: number) => void;
   onAddBank: () => void;
   onDropPartOnBank: (fromBank: number, fromSlot: number, targetBank: number) => void;
   onToggleMuteBank?: (bankIdx: number) => void;
+  onToggleSoloBank?: (bankIdx: number) => void;
+  onClearAllSolos?: () => void;
+  onClearAllBankMutes?: () => void;
+  onRequestRenameBank?: (bankIdx: number) => void;
 }
+
+const supportsNativeFocusGroup = (): boolean =>
+  typeof HTMLElement !== 'undefined' && 'focusGroup' in HTMLElement.prototype;
+
+const escHtml = (s: string): string =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 export class McxBankRail {
   private readonly hostEl: HTMLElement;
   private readonly cbs: McxBankRailCallbacks;
   private bankCount = 2;
+  private mode: McxBankRailMode = 'edit';
+  private lastLayout: McxBankLayoutData | null = null;
+  private lastParts: McxPartUiState[] | null = null;
 
   constructor(hostEl: HTMLElement, cbs: McxBankRailCallbacks) {
     this.hostEl = hostEl;
@@ -58,51 +77,137 @@ export class McxBankRail {
     this.bindEvents();
   }
 
+  public getMode(): McxBankRailMode {
+    return this.mode;
+  }
+
+  public setMode(next: McxBankRailMode): void {
+    if (this.mode === next) return;
+    const activeEl = document.activeElement as HTMLElement | null;
+    const focusedToolbarBtn = Boolean(activeEl && this.hostEl.contains(activeEl) && activeEl.closest('[data-bank-mode]'));
+    this.mode = next;
+    if (this.lastLayout && this.lastParts) {
+      this.render(this.lastLayout, this.lastParts);
+    }
+    if (focusedToolbarBtn) {
+      this.hostEl.querySelector<HTMLButtonElement>(`[data-bank-mode="${next}"]`)?.focus();
+    }
+  }
+
   public render(layout: McxBankLayoutData, parts: McxPartUiState[]): void {
+    this.lastLayout = layout;
+    this.lastParts = parts;
     this.bankCount = layout.bankCount;
+
     const headerHtml = `
       <div class="mcx-bank-rail-hdr">
         <span class="mcx-bank-rail-title">${t('mcx.banksTitle')}</span>
         <span class="mcx-bank-rail-count">${layout.bankCount}/${MAX_BANKS}</span>
       </div>`;
 
+    const modeMeta: Array<{ id: McxBankRailMode; label: string; hint: string }> = [
+      { id: 'edit', label: t('mcx.bankModeEdit'), hint: t('mcx.bankModeEditHint') },
+      { id: 'mute', label: t('mcx.bankModeMute'), hint: t('mcx.bankModeMuteHint') },
+      { id: 'solo', label: t('mcx.bankModeSolo'), hint: t('mcx.bankModeSoloHint') },
+    ];
+    const hasFocusGroup = supportsNativeFocusGroup();
+    const modeBarHtml = `
+      <div class="mcx-bank-mode-bar" role="toolbar" focusgroup="toolbar wrap"
+        aria-label="${t('mcx.bankRailModeLabel')}" data-rail-mode="${this.mode}">
+        ${modeMeta.map((m) => {
+          const isModeActive = this.mode === m.id;
+          const tabindexAttr = hasFocusGroup ? '' : ` tabindex="${isModeActive ? '0' : '-1'}"`;
+          return `<button type="button" class="mcx-bank-mode-btn" data-bank-mode="${m.id}"
+            aria-pressed="${isModeActive ? 'true' : 'false'}"${tabindexAttr}
+            aria-label="${escHtml(m.hint)}" title="${escHtml(m.hint)}">${m.label}</button>`;
+        }).join('')}
+      </div>`;
+
+    let anyPartSoloGlobal = false;
+    for (let b = 0; b < layout.bankCount && !anyPartSoloGlobal; ++b) {
+      for (let s = 0; s < SLOTS_PER_BANK; ++s) {
+        const pid = layout.banks[b][s];
+        if (pid !== null && parts[pid]?.solo) {
+          anyPartSoloGlobal = true;
+          break;
+        }
+      }
+    }
+    const anySoloGlobal = anyPartSoloGlobal || hasAnyBankSoloed(layout);
+
     const buttonsHtml = Array.from({ length: layout.bankCount }, (_, b) => {
       const isActive = b === layout.activeBank;
       const occupied = countOccupiedInBank(layout, b);
-      let mutedCount = 0;
-      let anySolo = false;
+      const bankMuted = isBankMuted(layout, b);
+      const bankSoloed = isBankSoloed(layout, b);
+      const customName = getBankName(layout, b);
+      let childMutedCount = 0;
+      let childSoloCount = 0;
       for (let s = 0; s < SLOTS_PER_BANK; ++s) {
         const pid = layout.banks[b][s];
         if (pid === null) continue;
-        if (parts[pid]?.mute) ++mutedCount;
-        if (parts[pid]?.solo) anySolo = true;
+        if (parts[pid]?.mute) ++childMutedCount;
+        if (parts[pid]?.solo) ++childSoloCount;
       }
-      const allMuted = occupied > 0 && mutedCount === occupied;
-      const anyMute = mutedCount > 0;
+      const anySoloSelfOrChild = bankSoloed || childSoloCount > 0;
+      const silencedBySolo = anySoloGlobal && !anySoloSelfOrChild && occupied > 0;
       const letter = BANK_LETTERS[b];
-      const flags = anySolo ? 'S' : anyMute ? 'M' : '';
+
+      const flagBadges = [
+        bankSoloed
+          ? '<span class="mcx-bank-flag is-solo">S</span>'
+          : childSoloCount > 0
+            ? '<span class="mcx-bank-flag is-solo is-partial">S</span>'
+            : '',
+        bankMuted
+          ? '<span class="mcx-bank-flag is-muted">M</span>'
+          : childMutedCount > 0
+            ? '<span class="mcx-bank-flag is-muted is-partial">M</span>'
+            : '',
+      ].filter(Boolean).join('');
+
+      const btnClasses = [
+        'mcx-bank-btn',
+        isActive ? 'is-active' : '',
+        bankMuted ? 'is-muted' : childMutedCount > 0 ? 'is-muted-partial' : '',
+        bankSoloed ? 'is-solo' : childSoloCount > 0 ? 'is-solo-partial' : '',
+        silencedBySolo ? 'is-solo-silenced' : '',
+      ].filter(Boolean).join(' ');
+
+      const isModePressed = this.mode === 'mute' ? bankMuted : this.mode === 'solo' ? bankSoloed : isActive;
+      const disabledAttr = this.mode !== 'edit' && occupied === 0 ? ' disabled' : '';
+      const displaySuffix = customName ? ` · ${customName}` : '';
+      const modeTitle = this.mode === 'mute'
+        ? `${t('mcx.liveMuteBankHint')} (${letter}${displaySuffix})`
+        : this.mode === 'solo'
+          ? `${t('mcx.liveSoloBankHint')} (${letter}${displaySuffix})`
+          : `${t('mcx.bankLabel')} ${letter}${displaySuffix} (${occupied}/${SLOTS_PER_BANK})`;
+      const modeAriaLabel = this.mode === 'mute'
+        ? `${t('mcx.liveMuteBank')} ${letter}${displaySuffix}`
+        : this.mode === 'solo'
+          ? `${t('mcx.liveSoloBank')} ${letter}${displaySuffix}`
+          : `${t('mcx.bankLabel')} ${letter}${displaySuffix} (${occupied}/${SLOTS_PER_BANK})`;
+
       return `
         <div class="mcx-bank-item" style="--bank-color:${BANK_COLOR_VARS[b]}">
-          <button type="button" class="mcx-bank-btn${isActive ? ' is-active' : ''}"
+          <button type="button" class="${btnClasses}"
             data-bank-idx="${b}"
-            aria-pressed="${isActive ? 'true' : 'false'}" ${isActive ? 'aria-current="true"' : ''}
-            title="${t('mcx.bankLabel')} ${letter} (${occupied}/${SLOTS_PER_BANK})">
+            aria-pressed="${isModePressed ? 'true' : 'false'}" ${isActive ? 'aria-current="true"' : ''}
+            aria-label="${escHtml(modeAriaLabel)}" title="${escHtml(modeTitle)}"${disabledAttr}>
             <span class="mcx-bank-btn-top">
               <span class="mcx-bank-led" aria-hidden="true"></span>
               <span class="mcx-bank-letter">${letter}</span>
             </span>
-            <span class="mcx-bank-meta">${occupied}/${SLOTS_PER_BANK}${flags ? ` · ${flags}` : ''}</span>
+            ${customName ? `<span class="mcx-bank-name">${escHtml(customName)}</span>` : ''}
+            <span class="mcx-bank-meta">
+              <span>${occupied}/${SLOTS_PER_BANK}</span>${flagBadges ? `<span class="mcx-bank-flags">${flagBadges}</span>` : ''}
+            </span>
             <span class="mcx-bank-activity" aria-hidden="true"><span class="mcx-bank-activity-fill" data-bank-act="${b}"></span></span>
           </button>
-          <button type="button" class="mcx-bank-mute-btn${allMuted ? ' is-muted' : anyMute ? ' is-partial' : ''}"
-            data-bank-mute="${b}" aria-pressed="${allMuted ? 'true' : 'false'}"
-            ${occupied === 0 ? 'disabled' : ''}
-            aria-label="${t('mcx.liveMuteBank')} ${letter}"
-            title="${t('mcx.liveMuteBankHint')} (${letter})">M</button>
         </div>`;
     }).join('');
 
-    const addBtnHtml = layout.bankCount < MAX_BANKS
+    const addBtnHtml = this.mode === 'edit' && layout.bankCount < MAX_BANKS
       ? `<button type="button" class="mcx-bank-add-btn" data-bank-add="1"
           style="--bank-color:${BANK_COLOR_VARS[layout.bankCount]}"
           title="${t('mcx.bankAddTooltip')}" aria-label="${t('mcx.bankAddTooltip')}">
@@ -110,7 +215,7 @@ export class McxBankRail {
         </button>`
       : '';
 
-    this.hostEl.innerHTML = `${headerHtml}<div class="mcx-bank-rail-list">${buttonsHtml}${addBtnHtml}</div>`;
+    this.hostEl.innerHTML = `${headerHtml}${modeBarHtml}<div class="mcx-bank-rail-list" data-rail-mode="${this.mode}">${buttonsHtml}${addBtnHtml}</div>`;
   }
 
   public updateActivity(layout: McxBankLayoutData, partPeaks?: number[], partMidiPeaks?: number[]): void {
@@ -129,19 +234,79 @@ export class McxBankRail {
 
   private bindEvents(): void {
     this.hostEl.addEventListener('click', (ev) => {
-      const muteBtn = (ev.target as HTMLElement).closest<HTMLElement>('[data-bank-mute]');
-      if (muteBtn) {
-        this.cbs.onToggleMuteBank?.(Number(muteBtn.dataset.bankMute));
+      const modeBtn = (ev.target as HTMLElement).closest<HTMLElement>('[data-bank-mode]');
+      if (modeBtn) {
+        const next = modeBtn.dataset.bankMode as McxBankRailMode | undefined;
+        if (next === 'edit' || next === 'mute' || next === 'solo') {
+          const wasFocused = document.activeElement === modeBtn || modeBtn.contains(document.activeElement);
+          if (next === this.mode) {
+            if (next === 'solo' || next === 'mute') {
+              this.mode = 'edit';
+              if (next === 'solo') this.cbs.onClearAllSolos?.();
+              else this.cbs.onClearAllBankMutes?.();
+              if (this.lastLayout && this.lastParts) this.render(this.lastLayout, this.lastParts);
+              if (wasFocused) this.hostEl.querySelector<HTMLButtonElement>('[data-bank-mode="edit"]')?.focus();
+            }
+          } else {
+            this.setMode(next);
+          }
+        }
         return;
       }
-      const bankBtn = (ev.target as HTMLElement).closest<HTMLElement>('[data-bank-idx]');
+      const bankBtn = (ev.target as HTMLElement).closest<HTMLButtonElement>('[data-bank-idx]');
       if (bankBtn) {
-        this.cbs.onSelectBank(Number(bankBtn.dataset.bankIdx));
+        if (bankBtn.disabled) return;
+        const bankIdx = Number(bankBtn.dataset.bankIdx);
+        if (this.mode === 'mute') { this.cbs.onToggleMuteBank?.(bankIdx); return; }
+        if (this.mode === 'solo') { this.cbs.onToggleSoloBank?.(bankIdx); return; }
+        this.cbs.onSelectBank(bankIdx);
         return;
       }
       const addBtn = (ev.target as HTMLElement).closest<HTMLElement>('[data-bank-add]');
       if (addBtn) this.cbs.onAddBank();
     });
+
+    this.hostEl.addEventListener('dblclick', (ev) => {
+      if (this.mode !== 'edit') return;
+      const bankBtn = (ev.target as HTMLElement).closest<HTMLElement>('[data-bank-idx]');
+      if (bankBtn) this.cbs.onRequestRenameBank?.(Number(bankBtn.dataset.bankIdx));
+    });
+
+    if (!supportsNativeFocusGroup()) {
+      this.hostEl.addEventListener('focusin', (ev) => {
+        const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>('[data-bank-mode]');
+        const toolbar = btn?.closest<HTMLElement>('.mcx-bank-mode-bar');
+        if (!btn || !toolbar) return;
+        toolbar.querySelectorAll<HTMLButtonElement>('[data-bank-mode]').forEach((item) => {
+          item.tabIndex = item === btn ? 0 : -1;
+        });
+      });
+
+      this.hostEl.addEventListener('keydown', (ev) => {
+        if (ev.altKey || ev.ctrlKey || ev.metaKey) return;
+        const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>('[data-bank-mode]');
+        const toolbar = btn?.closest<HTMLElement>('.mcx-bank-mode-bar');
+        if (!btn || !toolbar) return;
+        const items = [...toolbar.querySelectorAll<HTMLButtonElement>('[data-bank-mode]:not(:disabled)')];
+        if (items.length === 0) return;
+        const rtl = getComputedStyle(toolbar).direction === 'rtl';
+        const forwardKey = rtl ? 'ArrowLeft' : 'ArrowRight';
+        const backwardKey = rtl ? 'ArrowRight' : 'ArrowLeft';
+        const idx = items.indexOf(btn);
+        if (idx === -1) return;
+
+        let nextIdx = -1;
+        if (ev.key === forwardKey) nextIdx = (idx + 1) % items.length;
+        else if (ev.key === backwardKey) nextIdx = (idx - 1 + items.length) % items.length;
+        else if (ev.key === 'Home') nextIdx = 0;
+        else if (ev.key === 'End') nextIdx = items.length - 1;
+        if (nextIdx === -1) return;
+
+        ev.preventDefault();
+        items.forEach((item, i) => { item.tabIndex = i === nextIdx ? 0 : -1; });
+        items[nextIdx].focus();
+      });
+    }
 
     this.hostEl.addEventListener('dragover', (ev) => {
       const target = (ev.target as HTMLElement).closest<HTMLElement>('[data-bank-idx], [data-bank-add]');

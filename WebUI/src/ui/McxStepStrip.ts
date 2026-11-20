@@ -12,12 +12,15 @@ import {
   createDefaultBankLayout,
   formatSlotLabel,
   getTopStripPair,
+  hasAnyBankSoloed,
+  isBankMuted,
+  isBankSoloed,
   MAX_PARTS,
   type McxBankLayoutData,
 } from './McxBankLayout';
 import type { McxPartUiState } from './McxMixerConsole';
 
-export type StepStripMode = 'part-select' | 'part-mute' | 'step-mute' | 'step-accent' | 'step-slide';
+export type StepStripMode = 'part-select' | 'part-mute' | 'part-solo' | 'step-mute' | 'step-accent' | 'step-slide';
 
 export interface StepState {
   active: boolean;
@@ -31,6 +34,7 @@ export interface McxStepStripCallbacks {
   getPartsState: () => McxPartUiState[];
   getBankLayout?: () => McxBankLayoutData;
   onToggleMute: (partIdx: number) => void;
+  onToggleSolo?: (partIdx: number) => void;
   setLcdNotice: (text: string) => void;
 }
 
@@ -55,19 +59,23 @@ function buildPadState(
   parts: McxPartUiState[],
   s: StepState,
   mapping: PadMapping,
+  layout: McxBankLayoutData,
+  anySolo: boolean,
 ) {
-  if (mode === 'part-select' || mode === 'part-mute') {
+  if (mode === 'part-select' || mode === 'part-mute' || mode === 'part-solo') {
     if (mapping.bankIdx === null) {
       return { disabled: true, active: false, muted: false, solo: false, bankColor: null, legend: '---', subval: '---', tooltip: '' };
     }
     const bankColor = BANK_COLOR_VARS[mapping.bankIdx];
+    const bankMuted = isBankMuted(layout, mapping.bankIdx);
+    const bankSoloed = isBankSoloed(layout, mapping.bankIdx);
     const slotTag = formatSlotLabel(mapping.bankIdx, mapping.slotIdx);
     const p = mapping.partId !== null ? parts[mapping.partId] : undefined;
     if (!p || mapping.partId === null) {
       return { disabled: true, active: false, muted: false, solo: false, bankColor, legend: slotTag, subval: '---', tooltip: '' };
     }
     const trackName = p.name || (p.kind === 'drum_map' ? 'TR-909 Kit' : 'Init Tone');
-    const statusTxt = p.mute ? t('mcx.bankMutedStatus') : t('mcx.bankActiveStatus');
+    const statusTxt = p.solo || bankSoloed ? 'SOLO' : p.mute || bankMuted ? t('mcx.bankMutedStatus') : t('mcx.bankActiveStatus');
     const tooltip = `${slotTag} · ${trackName} — ${statusTxt} (CH${p.midiChannel})`;
     if (mode === 'part-select') {
       return {
@@ -75,21 +83,34 @@ function buildPadState(
         bankColor,
         tooltip,
         active: mapping.partId === focused,
-        muted: p.mute,
-        solo: p.solo,
+        muted: p.mute || (!anySolo && bankMuted),
+        solo: p.solo || bankSoloed,
         legend: slotTag,
         subval: p.kind === 'drum_map' ? 'DRM' : `CH${p.midiChannel}`,
       };
     }
+    if (mode === 'part-solo') {
+      return {
+        disabled: false,
+        bankColor,
+        tooltip,
+        active: p.solo || bankSoloed,
+        muted: anySolo && !p.solo && !bankSoloed,
+        solo: p.solo,
+        legend: slotTag,
+        subval: p.solo || bankSoloed ? 'SOLO' : '---',
+      };
+    }
+    const effectiveMuted = p.mute || bankMuted;
     return {
       disabled: false,
       bankColor,
       tooltip,
-      active: !p.mute,
-      muted: p.mute,
+      active: !effectiveMuted,
+      muted: effectiveMuted,
       solo: p.solo,
       legend: slotTag,
-      subval: p.mute ? 'MUTE' : 'PLAY',
+      subval: effectiveMuted ? 'MUTE' : 'PLAY',
     };
   }
   if (mode === 'step-mute') {
@@ -126,9 +147,13 @@ export class McxStepStrip {
 
     this.strip = new StepButtonStrip(container, {
       padCount: 16,
+      modesPosition: 'right',
+      showModeHeader: false,
+      modeRows: 2,
       modes: [
         { id: 'part-select', label: 'PART SEL', title: t('mcx.stripPartSelHint') },
         { id: 'part-mute', label: 'PART MUTE', title: t('mcx.stripPartMuteHint') },
+        { id: 'part-solo', label: 'PART SOLO', title: t('mcx.stripPartSoloHint') },
         { id: 'step-mute', label: 'STEP MUTE', title: t('mcx.stripStepMuteHint') },
         { id: 'step-accent', label: 'ACCENT', title: t('mcx.stripStepAccHint') },
         { id: 'step-slide', label: 'SLIDE / GLIDE', title: t('mcx.stripStepSlideHint') },
@@ -148,9 +173,10 @@ export class McxStepStrip {
     const parts = this.cbs.getPartsState();
     const layout = this.cbs.getBankLayout?.() ?? createDefaultBankLayout();
     const steps = this.partSteps[focused] ?? this.partSteps[0];
+    const anySolo = parts.some((pt) => pt.enabled !== false && pt.solo) || hasAnyBankSoloed(layout);
     for (let i = 0; i < 16; i++) {
       const mapping = resolvePadMapping(layout, i);
-      this.strip.setPadState(i, buildPadState(mode, i, focused, parts, steps[i], mapping));
+      this.strip.setPadState(i, buildPadState(mode, i, focused, parts, steps[i], mapping, layout, anySolo));
     }
   }
 
@@ -160,6 +186,7 @@ export class McxStepStrip {
     const msgs: Record<StepStripMode, string> = {
       'part-select': t('mcx.stripModePartSelect'),
       'part-mute': t('mcx.stripModePartMute'),
+      'part-solo': t('mcx.stripModePartSolo'),
       'step-mute': `${t('mcx.stripModeStepMute')} (P${focused + 1})`,
       'step-accent': `${t('mcx.stripModeStepAccent')} (P${focused + 1})`,
       'step-slide': `${t('mcx.stripModeStepSlide')} (P${focused + 1}: ${porta.timeMs}ms)`,
@@ -172,7 +199,7 @@ export class McxStepStrip {
     const mode = this.strip.getMode() as StepStripMode;
     const focused = this.cbs.getFocusedPart();
     const layout = this.cbs.getBankLayout?.() ?? createDefaultBankLayout();
-    if (mode === 'part-select' || mode === 'part-mute') {
+    if (mode === 'part-select' || mode === 'part-mute' || mode === 'part-solo') {
       const mapping = resolvePadMapping(layout, padIdx);
       if (mapping.bankIdx === null || mapping.partId === null) return;
       const pid = mapping.partId;
@@ -183,6 +210,14 @@ export class McxStepStrip {
           this.cbs.setFocusedPart(pid);
           this.cbs.setLcdNotice(`FOCUSED ${slotTag} · P${String(pid + 1).padStart(2, '0')}`);
         }
+      } else if (mode === 'part-solo') {
+        this.cbs.onToggleSolo?.(pid);
+        const p = this.cbs.getPartsState()[pid];
+        this.cbs.setLcdNotice(`${slotTag} · P${String(pid + 1).padStart(2, '0')} ${p?.solo ? 'SOLO ON' : 'SOLO OFF'}`);
+      } else if (ev.shiftKey && this.cbs.onToggleSolo) {
+        this.cbs.onToggleSolo(pid);
+        const p = this.cbs.getPartsState()[pid];
+        this.cbs.setLcdNotice(`${slotTag} · P${String(pid + 1).padStart(2, '0')} ${p?.solo ? 'SOLO ON' : 'SOLO OFF'}`);
       } else {
         this.cbs.onToggleMute(pid);
         const p = this.cbs.getPartsState()[pid];

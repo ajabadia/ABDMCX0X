@@ -62,7 +62,11 @@ void McxAudioProcessorEditor::timerCallback() {
     if (processor_.consumeSongStateDirty()) {
         webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildSongAndScenesStatePayload(processor_.engine()));
     }
-    if (processor_.consumeSessionStateDirty()) { const juce::ScopedLock sl(processor_.engineLock()); webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildSessionStatePayload(processor_.engine())); }
+    if (processor_.consumeSessionStateDirty()) {
+        const juce::ScopedLock sl(processor_.engineLock());
+        processor_.flushPendingUiCommandsLocked();
+        webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildSessionStatePayload(processor_.engine()));
+    }
     const auto snap = processor_.readTelemetrySnapshot();
     if (snap.activeVoices == 0 && ++gcTickCounter_ >= 30) {
         gcTickCounter_ = 0;
@@ -98,6 +102,7 @@ void McxAudioProcessorEditor::handleJsEvent(const juce::var& msg) {
         processor_.nativeMidiRouter().refreshDevices();
         webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", processor_.nativeMidiRouter().buildDevicesPayload(processor_.isStandaloneApp()));
         const juce::ScopedLock sl(processor_.engineLock());
+        processor_.flushPendingUiCommandsLocked();
         webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildEngineCatalogPayload(processor_.engine()));
         webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildPartPresetsPayload(processor_.engine(), 0));
         webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildPartEngineStatePayload(processor_.engine(), 0));

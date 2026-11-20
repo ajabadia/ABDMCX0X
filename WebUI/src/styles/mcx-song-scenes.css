@@ -1,8 +1,8 @@
 /* ABDMCX0X -- Bar-Quantized Live Scene Bar & Song Mode Drawer (100% @abdsynths/shared tokens) */
 
-.mcx-scene-bar-host { display: flex; align-items: center; }
+.mcx-scene-bar-host { display: flex; align-items: stretch; }
 .mcx-scene-bar {
-  display: flex; flex-direction: column; gap: 3px; padding: 3px 6px;
+  display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 3px 6px;
   background: color-mix(in srgb, var(--color-panel-surface) 75%, transparent);
   border: 1px solid var(--color-panel-border); border-radius: var(--radius-sm);
 }

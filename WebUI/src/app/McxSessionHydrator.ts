@@ -170,6 +170,7 @@ export function hydrateSessionState(state: McxAppState, dto: McxSessionStateDto)
   if (dto.bankLayoutJson) {
     state.bankLayout = deserializeBankLayoutJson(dto.bankLayoutJson);
   }
+  state.clearPreSoloMemory();
   if (!findPartLocation(state.bankLayout, state.focusedPart)) {
     state.focusedPart = state.findFirstPlacedPart(state.bankLayout.activeBank);
   }

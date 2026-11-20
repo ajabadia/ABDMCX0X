@@ -230,7 +230,60 @@ void testT6_BankManagerV2PersistenceAndV1Fallback()
     assert(dstV1->part(0).enabled && dstV1->part(15).enabled && !dstV1->part(16).enabled);
     assert(dstV1->part(0).midiChannel == 3 && dstV1->part(0).midiPortIndex == 2);
     assert(dstV1->bankLayout().bankCount == 2 && dstV1->bankLayout().pinnedMask == 0x000000000000FFFFull);
+    assert(dstV1->bankLayout().bankMuteMask == 0 && dstV1->bankLayout().bankSoloMask == 0);
+    assert(dstV1->bankLayout().bankName(0).empty() && dstV1->bankLayout().bankName(1).empty());
     std::cout << "[T6] BankManager v2 persistence (3 banks, pins, devices) & v1 fallback verified.\n";
+}
+
+void testT7_TwoLevelGroupMuteSoloAndBankNamesPersistence()
+{
+    auto e = std::make_unique<abdmcx::McxEngine>();
+    e->prepare(44100.0);
+    abdmcx::McxHardwareBridge br(*e);
+
+    auto& layout = e->bankLayout();
+    layout.bankCount = 3;
+    layout.slots[2][0] = 20;
+    e->setPartEnabled(20, true);
+    layout.setBankName(0, "Drums \"TR\"");
+    layout.setBankName(1, "  Bass & Sub  ");
+    layout.setBankName(2, "Leads");
+
+    // 1. Muted Bank B silences B1..B8 while Bank A remains audible
+    layout.setBankMuted(1, true);
+    assert(e->isPartAudible(0) && !e->isPartAudible(8) && !e->isPartAudible(9) && e->isPartAudible(20));
+
+    // 2. Soloing Bank B isolates unmuted tracks in B while keeping child muted tracks muted
+    layout.setBankMuted(1, false);
+    layout.setBankSoloed(1, true);
+    e->part(9).mute = true;
+    assert(!e->isPartAudible(0) && e->isPartAudible(8) && !e->isPartAudible(9) && !e->isPartAudible(20));
+
+    // 3. Child Solo passes through a muted parent bus while remaining children stay silent
+    layout.setBankSoloed(1, false);
+    layout.setBankMuted(1, true);
+    e->part(9).mute = false;
+    e->part(9).solo = true;
+    assert(!e->isPartAudible(0) && !e->isPartAudible(8) && e->isPartAudible(9) && !e->isPartAudible(20));
+
+    // 4. Clearing child solo restores parent bank mute state
+    e->part(9).solo = false;
+    assert(e->isPartAudible(0) && !e->isPartAudible(8) && !e->isPartAudible(9) && e->isPartAudible(20));
+
+    // 5. Project / Preset JSON persistence preserves bankNames (with escaped quotes) & bankMuteMask/bankSoloMask
+    layout.setBankSoloed(2, true);
+    const std::string saved = abdmcx::McxBankManagerBridge::serializeToJson(*e, br, "GroupNamesProject");
+
+    auto restored = std::make_unique<abdmcx::McxEngine>();
+    restored->prepare(44100.0);
+    abdmcx::McxHardwareBridge brRestored(*restored);
+    assert(abdmcx::McxBankManagerBridge::deserializeFromJson(*restored, brRestored, saved));
+    assert(restored->bankLayout().bankName(0) == "Drums \"TR\"");
+    assert(restored->bankLayout().bankName(1) == "Bass & Sub");
+    assert(restored->bankLayout().bankName(2) == "Leads");
+    assert(restored->bankLayout().isBankMuted(1));
+    assert(!restored->bankLayout().isBankSoloed(1) && restored->bankLayout().isBankSoloed(2));
+    std::cout << "[T7] Two-level DAW group mute/solo audibility & persistent bank names verified.\n";
 }
 
 } // namespace
@@ -244,6 +297,7 @@ int main()
     testT4_SixtyFourBitSceneMasksAndJsonRoundtrip();
     testT5_SixtyFourPartSequencerAndGroove();
     testT6_BankManagerV2PersistenceAndV1Fallback();
-    std::cout << "=== All Phase 13A Tests PASSED (6/6) ===\n";
+    testT7_TwoLevelGroupMuteSoloAndBankNamesPersistence();
+    std::cout << "=== All Phase 13A Tests PASSED (7/7) ===\n";
     return 0;
 }

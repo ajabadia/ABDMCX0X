@@ -114,6 +114,7 @@ export class McxInstrumentRouteModal {
       btn.addEventListener('click', () => {
         const next = btn.dataset.kind === 'drum_map' ? 'drum_map' : 'chromatic';
         ps.kind = next; b.setParam(p, 'partKind', next === 'drum_map' ? 1 : 0);
+        b.requestPartEngineState(p);
         this.opts.setLcdLine2(`${tag} FORMAT: ${next === 'drum_map' ? 'DRUM' : 'CHROMATIC'}`);
         this.opts.onPartUpdated(p); this.render();
       });

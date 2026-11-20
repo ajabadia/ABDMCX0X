@@ -96,6 +96,7 @@ export class McxAppState {
     const el = document.getElementById('part-list');
     if (el) renderMixerConsole(el, this.getPanelCallbacks(), this.bridge);
     this.refs.stepStrip?.refresh();
+    this.refs.songDrawer?.renderAll();
     this.syncSoloIndicator();
   }
 
@@ -220,6 +221,24 @@ export class McxAppState {
     this.syncBankLayoutToHost();
     this.refreshPartList();
     this.setLcdLine2(`${t('mcx.bankLabel')} ${BANK_LETTERS[this.bankLayout.activeBank]}: ${count} ${t('mcx.bankUnpinnedCount')}`);
+  }
+
+  public toggleLiveMuteBank(bankIdx: number): void {
+    if (bankIdx < 0 || bankIdx >= this.bankLayout.bankCount) return;
+    const placed = (this.bankLayout.banks[bankIdx] ?? []).filter((pid): pid is number => pid !== null);
+    if (placed.length === 0) return;
+    const nextMute = !placed.every((pid) => Boolean(this.partsState[pid]?.mute));
+    for (const pid of placed) {
+      if (this.partsState[pid]) this.partsState[pid].mute = nextMute;
+      this.bridge.setParam(pid, 'partMute', nextMute ? 1 : 0);
+    }
+    this.refreshPartList();
+    if (placed.includes(this.focusedPart)) {
+      if (this.refs.toneDrawer?.isOpen()) this.refs.toneDrawer.syncPart(this.focusedPart, this.partsState[this.focusedPart]);
+      if (this.refs.padModal?.isOpen()) this.refs.padModal.syncPart(this.focusedPart, this.partsState[this.focusedPart]);
+    }
+    const statusTxt = nextMute ? t('mcx.bankMutedStatus') : t('mcx.bankActiveStatus');
+    this.setLcdLine2(`${t('mcx.bankLabel')} ${BANK_LETTERS[bankIdx]}: ${statusTxt} (${placed.length}P)`);
   }
 
   public resetToFactoryLayout(): void {

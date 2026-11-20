@@ -103,6 +103,7 @@ function initApp(): void {
       onSelectBank: (bankIdx) => state.selectBank(bankIdx),
       onAddBank: () => state.addNewBank(),
       onDropPartOnBank: (fromBank, fromSlot, targetBank) => state.movePartSlot(fromBank, fromSlot, targetBank, -1),
+      onToggleMuteBank: (bankIdx) => state.toggleLiveMuteBank(bankIdx),
     });
   }
   state.refreshPartList();

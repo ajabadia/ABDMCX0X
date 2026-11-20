@@ -6,12 +6,25 @@
 
 import type { McxSceneSlotDto, McxSongBridge, McxSongScenesStateDto } from '../bridge/McxSongBridge';
 import { t } from '../i18n/mcxI18n';
-import { applySongBlockListAction, buildSceneCardsHtml, buildSceneInspectorHtml, buildSongBlocksHtml, buildSongDrawerShellHtml } from './McxSongDrawerViews';
+import { createDefaultBankLayout, type McxBankLayoutData } from './McxBankLayout';
+import type { McxPartUiState } from './McxPartState';
+import {
+  applySongBlockListAction,
+  buildSceneCardsHtml,
+  buildSceneInspectorHtml,
+  buildSongBlocksHtml,
+  buildSongDrawerShellHtml,
+  ensureMuteMask64,
+  toggleBankMutedInMask64,
+  togglePartMutedInMask64,
+} from './McxSongDrawerViews';
 
 export interface McxSongDrawerOptions {
   hostEl: HTMLElement;
   songBridge: McxSongBridge;
   getState: () => McxSongScenesStateDto;
+  getBankLayout?: () => McxBankLayoutData;
+  getPartsState?: () => McxPartUiState[];
   onStateMutated: () => void;
   onClose?: () => void;
 }
@@ -58,14 +71,20 @@ export class McxSongDrawer {
   public renderAll(): void {
     if (!this.opened) return;
     const st = this.opts.getState();
+    const layout = this.opts.getBankLayout?.() ?? createDefaultBankLayout();
+    const parts = this.opts.getPartsState?.() ?? [];
     this.selectedScene = Math.max(0, Math.min(7, this.selectedScene));
     this.selectedBlock = st.blocks.length > 0 ? Math.max(0, Math.min(st.blocks.length - 1, this.selectedBlock)) : 0;
 
     const grid = this.el.querySelector('#mcx-scenes-grid');
-    if (grid) grid.innerHTML = buildSceneCardsHtml(st, this.selectedScene);
+    if (grid) grid.innerHTML = buildSceneCardsHtml(st, this.selectedScene, layout);
     const insp = this.el.querySelector('#mcx-scene-inspector');
-    const sc: McxSceneSlotDto = st.scenes[this.selectedScene] ?? { index: this.selectedScene, name: `S${this.selectedScene + 1}`, muteMask: 0, transpose: 0 };
-    if (insp && document.activeElement?.id !== 'mcx-sc-name-input') insp.innerHTML = buildSceneInspectorHtml(sc, this.selectedScene);
+    const sc: McxSceneSlotDto = st.scenes[this.selectedScene] ?? {
+      index: this.selectedScene, name: `S${this.selectedScene + 1}`, muteMask: 0, muteMask64: [0, 0, 0, 0], transpose: 0,
+    };
+    if (insp && document.activeElement?.id !== 'mcx-sc-name-input') {
+      insp.innerHTML = buildSceneInspectorHtml(sc, this.selectedScene, layout, parts);
+    }
     const list = this.el.querySelector('#mcx-song-blocks-list');
     if (list) list.innerHTML = buildSongBlocksHtml(st.blocks, st.scenes, st.songBlockIdx, st.songBarInBlock, st.songMode, this.selectedBlock);
     this.syncLiveStatus();
@@ -104,7 +123,8 @@ export class McxSongDrawer {
   }
 
   private commitSceneEdit(sc: McxSceneSlotDto): void {
-    this.opts.songBridge.updateScene(this.selectedScene, sc.muteMask, sc.transpose, sc.name);
+    const mask64 = ensureMuteMask64(sc);
+    this.opts.songBridge.updateScene(this.selectedScene, sc.muteMask, sc.transpose, sc.name, mask64);
     this.opts.onStateMutated();
     this.renderAll();
   }
@@ -160,8 +180,15 @@ export class McxSongDrawer {
     this.el.querySelector('#mcx-scene-inspector')?.addEventListener('click', (ev) => {
       const tgt = ev.target as HTMLElement, sc = this.opts.getState().scenes[this.selectedScene];
       if (!sc) return;
+      const bankMuteBtn = tgt.closest<HTMLElement>('[data-sc-bank-mute]');
+      if (bankMuteBtn) {
+        const layout = this.opts.getBankLayout?.() ?? createDefaultBankLayout();
+        toggleBankMutedInMask64(sc, layout, Number(bankMuteBtn.dataset.scBankMute));
+        this.commitSceneEdit(sc);
+        return;
+      }
       const muteBtn = tgt.closest<HTMLElement>('[data-sc-part-mute]');
-      if (muteBtn) { sc.muteMask ^= (1 << Number(muteBtn.dataset.scPartMute)); this.commitSceneEdit(sc); return; }
+      if (muteBtn) { togglePartMutedInMask64(sc, Number(muteBtn.dataset.scPartMute)); this.commitSceneEdit(sc); return; }
       if (tgt.id === 'mcx-sc-tr-dec') { sc.transpose = Math.max(-24, sc.transpose - 1); this.commitSceneEdit(sc); }
       else if (tgt.id === 'mcx-sc-tr-inc') { sc.transpose = Math.min(24, sc.transpose + 1); this.commitSceneEdit(sc); }
       else if (tgt.id === 'mcx-sc-capture') b.captureScene(this.selectedScene);

@@ -20,8 +20,22 @@ export function bindGlobalShortcuts(state: McxAppState): void {
     const key = ev.key.toLowerCase();
     const mod = ev.ctrlKey || ev.metaKey;
     if (ev.altKey && !mod) {
-      const scNum = Number(ev.key);
-      if (scNum >= 1 && scNum <= 8) { ev.preventDefault(); state.refs.triggerLiveScene?.(scNum - 1, false); }
+      const code = ev.code || '';
+      const scNum = code.startsWith('Digit') ? Number(code.slice(5)) : Number(ev.key);
+      if (scNum >= 1 && scNum <= 8) {
+        ev.preventDefault();
+        state.refs.triggerLiveScene?.(scNum - 1, ev.shiftKey);
+        return;
+      }
+      const bankChar = code.startsWith('Key') && code.length === 4 ? code.charCodeAt(3) : key.toUpperCase().charCodeAt(0);
+      if (bankChar >= 65 && bankChar <= 72) {
+        const bankIdx = bankChar - 65;
+        if (bankIdx < state.bankLayout.bankCount) {
+          ev.preventDefault();
+          if (ev.shiftKey) state.toggleLiveMuteBank(bankIdx);
+          else state.selectBank(bankIdx);
+        }
+      }
       return;
     }
     if (!mod && !ev.altKey && ev.key === 'Escape') {

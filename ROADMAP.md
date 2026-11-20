@@ -17,8 +17,8 @@
 | **10** | Rediseño UX WebUI, `McxInstrumentRouteModal` y Drawer 3 Pestañas (Fase 4 — Bloque 4A) | ✅ VERIFICADO (`WebUI HMR 1280×720`) | Tiras de consola limpias (`24 px` botones, badge Motor/Ruta), `<dialog>` `McxInstrumentRouteModal` conectado a catálogo/presets de Punto 1, `McxToneDrawer` en 3 pestañas (`MOTOR` + `EnginePanelHost`, `CANAL / MEZCLA`, `MIDI FX`) sin recortes ni scroll en `1280×720`, `MANUAL_WEB_OVER_200=0` y `0` colores hardcodeados. |
 | **11** | Modo Canción (`Song Mode`) + Escenas en Vivo `1..8` (Fase 4 — Bloque 4B) | ✅ VERIFICADO (`5/5 build.bat full`, `10/10` CTest) | `McxSongAndScenes` (`S1..S8` + arreglo 64 bloques lock-free), cuantización exacta en frontera de compás sobre `McxPatternSequencer`, puentes SPSC/DAW/WASM (`11` exports), `Tests/McxPhase9SongScenesTests.cpp` (`T1..T8`, `10/10` suites en verde en `0.78s`), `McxSceneBar` (`Alt+1..8`), `McxSongDrawer` (`Ctrl+M`), integración universal de paneles de motor (`EnginePanelHost`) y cero warnings. |
 | **12** | Armario Rack FX Modular 19'' + Patchbay + Carátulas Canónicas (Fase 4 & 5) | ✅ IMPLEMENTADO (`11/11` CTest + WebUI) | Chasis modular 8 bahías (`McxRackChassis`, heap pre-alloc `SlotDsp`, dynamic auto-sleep 0% CPU, sidechain ducking, vúmetros pico dobles IN/OUT con clip hold, serialización JSON), puente `McxRackSlotBridge`, `FxFaceplateModal` en `ABDShared` con carátulas dedicadas (`RE-201`, `Zita`, `BBD Chorus`, `Stereo Delay`, `Saturation`, `Generic`), columna WebUI a la izquierda de Master con cabezal Patchbay 4 envíos, e inserciones de canal directas (`insertSlot`) exclusivas para pistas de audio (`routeMode !== 1`). |
-| **12B** | Puerta de Saneamiento Pre-Fase 13 (`[CR-01]..[CR-11]`, Sincronía, `1280x720`, DRY) | PENDIENTE (BLOQUEANTE) | Corrección previa obligatoria de ruta Master/Multi-Bus FX, bypass/DryWet/motores en Rack, thread-safety hilo audio, contratos WASM/paramIds/velocidad/modales, ergonomía `1280x720`, tokens CSS y límites `< 300` / `< 200` en `ABDMCX0X` y `ABDShared`. Detalle completo en [PLAN_SANEAMIENTO_PRE_FASE13.md](file:///d:/desarrollos/ABDSynths/ABDMCX0X/DOCS/PLAN_SANEAMIENTO_PRE_FASE13.md). |
-| **13** | Expansión a 64 Pistas (Bancos A..D) + Modo Canción / Performance en Vivo | BLOQUEADO POR 12B (0 % código) | Arquitectura de 64 pistas / partes (`kNumParts = 64`, Bancos A, B, C, D de 16 pistas), `muteMask` de 64 bits (`uint64_t`), secuenciador 64 pistas, consola y matriz de pads con conmutación ergonómica de bancos, y orquestación avanzada de escenas y bloques de canción. |
+| **12B** | Puerta de Saneamiento Pre-Fase 13 (`[CR-01]..[CR-11]`, Sincronía, `1280x720`, DRY) | ✅ VERIFICADO (`P0–P4`) | Corrección de ruta Master/Multi-Bus FX, bypass/DryWet/motores en Rack, thread-safety audio, contratos WASM/paramIds/velocidad/modales, ergonomía `1280x720`, tokens CSS y saneamiento P0–P4 verificado (`5a27b76` en `ABDShared`, `928a02c` en `ABDMCX0X`). Detalle en [PLAN_SANEAMIENTO_PRE_FASE13.md](file:///d:/desarrollos/ABDSynths/ABDMCX0X/DOCS/PLAN_SANEAMIENTO_PRE_FASE13.md). |
+| **13** | Expansión a 64 Pistas (`8×8` Bancos `A..H`), Router MIDI DAW Real y Live Performance | ✅ IMPLEMENTADO (`13A/13B/13C`) | **13A:** Core C++20 `kNumParts = 64` + `McxNativeMidiRouter.h` multipuerto real + escenas `muteMask64` + preset `v2` (`13/13` CTest + JUCE 9 + WASM). **13B:** Mezclador `8×8`, rail vertical `A..H`, `McxBankLayout` (pines/cascada/hueco libre/compactación), selectores de puertos MIDI físicos reales y emparejamiento `StepButtonStrip` + popover. **13C:** Matriz dinámica `A..H × 8` + Mute-Bank 1 clic en `McxSongDrawer`, Live Mute-Bank y atajos directos `Alt+A..H` / `Shift+Alt+A..H` / `Shift+Alt+1..8`. |
 
 ---
 
@@ -284,37 +284,38 @@
 
 ---
 
-### Fase 12B — Puerta de Saneamiento Pre-Fase 13 (Obligatoria antes de 64 Pistas)
+### Fase 12B — Puerta de Saneamiento Pre-Fase 13 (Completada antes de Fase 13)
 
 > Plan de ejecución detallado, anclajes por archivo y lista completa de verificación en [PLAN_SANEAMIENTO_PRE_FASE13.md](file:///d:/desarrollos/ABDSynths/ABDMCX0X/DOCS/PLAN_SANEAMIENTO_PRE_FASE13.md).
 
-- [ ] **Oleada P0 — Bloqueantes Críticos DSP, Realtime, Contratos y Modales (`[CR-01]`..`[CR-11]`):**
+- [x] **Oleada P0 — Bloqueantes Críticos DSP, Realtime, Contratos y Modales (`[CR-01]`..`[CR-11]`):**
   - Corregir ruta Master y Multi-Bus FX cuando existen bahías activas en `McxOutputAndFx`, implementar bypass real/Dry-Wet y ramas DSP faltantes en `McxRackChassis`, eliminar mutaciones desde el hilo UI hacia el DSP en `PluginEditor` / `McxRackBridgeHelpers`, evitar cortes y doble procesado en inserciones directas y remapear rutas al mover ranuras + cablear parámetros reales en `McxRackSlotBridge`.
   - Reparar tabla `mcxParamIds.ts` y contrato `GlobalLfoModal`, corregir escala de velocidad `8..127` en `McxMidiModalsFactory`, arreglar `McxSynthModal` (pantalla en blanco y modo modeless), exportar `_drainMidiOut` con selección real de puerto WebMIDI, corregir `PianoRollModal` (`this.opts`/`partIndex` y cuantización) y pasar `MpcPadModal` a `show()`.
-- [ ] **Oleada P1 — Sincronía de los 3 Mundos (C++ / WASM / WebUI) y Persistencia (`[ME-06]`..`[ME-08]`, `[DT-01]`..`[DT-03]`, `[DT-06]`):**
+- [x] **Oleada P1 — Sincronía de los 3 Mundos (C++ / WASM / WebUI) y Persistencia (`[ME-06]`..`[ME-08]`, `[DT-01]`..`[DT-03]`, `[DT-06]`):**
   - Cablear controles placebo de `multiBusFxRackModal.js`, WASM y `McxMasterPanel`, persistir nombres de presets guardados, asegurar resincronización DAW/WebUI vía `uiReady` sin sobrescribir con `localStorage`, centralizar sincronía de pista/formato en `McxAppState`, desacoplar `onAudioStatus` y sustituir `lfoPhase` simulado por telemetría DSP real.
-- [ ] **Oleada P2 — Ergonomía `1280x720`, Ventanas Modeless y Claridad UX (`[ME-09]`, `[DT-04]`, `[DT-05]`):**
-  - Ajustar rejilla horizontal (Rack + 16 tiras + Master/Transport) para eliminar el recorte en `P15-P16` a `1280x720`, estandarizar ventanas modeless con drag/z-order y limpieza de listeners `keydown`, reemplazar `window.prompt()` en `McxRackColumn`, añadir `SOLO ACTIVE — CLEAR`, limpiar controles muertos (`NUKE`, Macros vacío) y completar i18n/atajos.
-- [ ] **Oleada P3 — Saneamiento DRY, Tokens CSS, SVG y Límites `< 300` / `< 200` (`[ME-01]`..`[ME-05]`, `[ME-10]`, `[DT-07]`):**
-  - Definir los 11 tokens CSS faltantes, erradicar colores fijos y emojis/glifos textuales por SVG `currentColor` en `ABDShared` y `ABDMCX0X`, dividir `GrooveArpeggiator.h` (`301` lín.) y archivos JS/CSS sobredimensionados en `ABDShared`, consolidar copias duplicadas, retirar archivos muertos, resolver los 11 errores `tsc` y alinear la documentación pendiente de `MidiFaceplates`.
-- [ ] **Oleada P4 — Cobertura Automática e Infraestructura Pre-Fase 13:**
-  - Añadir tests CTest/Vitest de regresión para P0-P1 y dividir archivos puente pegados al límite (`WasmBridge.cpp`, `PluginProcessor.cpp`, `mcx0xWorklet.js`, `main.ts`, `McxHostBridge.ts`, `McxGlobalDrawer.ts`, `McxSettingsModal.ts`) antes de ampliar a `kNumParts = 64`.
+- [x] **Oleada P2 — Ergonomía `1280x720`, Ventanas Modeless y Claridad UX (`[ME-09]`, `[DT-04]`, `[DT-05]`):**
+  - Ajustar rejilla horizontal (Rack + tiras + Master/Transport), estandarizar ventanas modeless con drag/z-order y limpieza de listeners `keydown`, reemplazar `window.prompt()` en `McxRackColumn`, añadir `SOLO ACTIVE — CLEAR`, limpiar controles muertos (`NUKE`, Macros vacío) y completar i18n/atajos.
+- [x] **Oleada P3 — Saneamiento DRY, Tokens CSS, SVG y Límites `< 300` / `< 200` (`[ME-01]`..`[ME-05]`, `[ME-10]`, `[DT-07]`):**
+  - Definir los 11 tokens CSS faltantes, erradicar colores fijos y emojis/glifos textuales por SVG `currentColor` en `ABDShared` y `ABDMCX0X`, dividir `GrooveArpeggiator.h` y archivos JS/CSS sobredimensionados en `ABDShared`, consolidar copias duplicadas, retirar archivos muertos y resolver los errores `tsc`.
+- [x] **Oleada P4 — Cobertura Automática e Infraestructura Pre-Fase 13:**
+  - Añadir tests CTest/Vitest de regresión para P0-P1 y dividir archivos puente críticos antes de ampliar a `kNumParts = 64`.
 
 ---
 
-### Fase 13 — Expansión a 64 Pistas (Bancos A..D de 16 Pistas) y Modo Canción / Performance en Vivo
-- [ ] **Arquitectura DSP y Secuenciador a 64 Pistas (`kNumParts = 64`):**
-  - Expansión de `McxEngine`, `McxCommandQueue` y `McxPatternSequencer` a 64 partes completas organizadas en **4 Bancos de 16 Pistas (Banco A: P01..P16, Banco B: P17..P32, Banco C: P33..P48, Banco D: P49..P64)**.
-  - Gestión lock-free de polifonía, asignación dinámica de voces (`ISoundEngine`), memoria y colas SPSC sin penalización de rendimiento en reposo (0 % CPU por pista inactiva).
-  - Máscaras de mute y solo de 64 bits (`std::uint64_t muteMask`) en `McxSongAndScenes` para control total e instantáneo por escena.
-- [ ] **Ergonomía de Superficie WebUI con Conmutador de Bancos [A] [B] [C] [D]:**
-  - Conmutador de banco activo en cabecera de la Consola de Mezcla y en la tira de pasos (Step Strip).
-  - Al seleccionar un banco, los 16 channel strips y pads reflejan inmediatamente las pistas del banco correspondiente manteniendo la cuadrícula de 16 tiras limpias sin saturación visual ni micro-faders inaccesibles.
-  - Indicador global de actividad/actividad MIDI y picos en los 4 bancos simultáneos.
-- [ ] **Modo Canción y Performance en Vivo Expandido:**
-  - Integración completa de escenas `S1..S8` cuantizadas a frontera de compás (`onBarBoundary`).
-  - Arreglo lineal de hasta 64 bloques con repeticiones, saltos, muteos y transposiciones por compás.
-  - Panel flotante o cajón dedicado de Performance en Vivo para disparo ágil de escenas y muting rítmico de pistas por grupos.
+### Fase 13 — Expansión a 64 Pistas (`8×8` Bancos `A..H`), Router MIDI DAW Real y Live Performance
+- [x] **13A — Core C++20 64 Pistas, Router MIDI Físico Real y Escenas 64-bit (`✅ VERIFICADO 13/13 CTest + JUCE 9 + WASM`):**
+  - Expansión de `McxEngine`, `GrooveShuffleEngine`, `McxCommandQueue`, `McxPatternSequencer` (compacto, 0 % CPU en reposo para pistas desactivadas) y `McxBankManagerBridge` (`abd_mcx0x_preset_v2` con compatibilidad `v1`) a **64 partes** organizadas en `McxBankLayoutState` (Bancos **A+B** activos inicialmente `0..15`, resto limpios/desactivados).
+  - Router multipuerto nativo **`McxNativeMidiRouter.h`**: solo dispositivos físicos reales del SO con nombres exactos (cero puertos ficticios, apertura perezosa bajo demanda en WinMM/CoreMIDI) + colas SPSC lock-free bidireccionales y libertad total para compartir `(puerto, canal)` entre pistas internas o hardware.
+  - Máscaras de 64 bits (`std::uint64_t` + JSON `muteMask64` en 4 palabras de 16 bits) en `McxSongAndScenes` y verificación completa en `Tests/McxPhase12SixtyFourPartsTests.cpp`.
+- [x] **13B — Consola `8×8`, Rail de Bancos `A..H`, Pines/Cascada, Puertos Reales y `StepButtonStrip` (`✅ VERIFICADO tsc + Vitest 10/10 + build.bat full`):**
+  - **Rail vertical izquierdo `McxBankRail`:** hasta 8 bancos (`A..H` + `+`), cada uno con token de color WCAG (`ABDShared/Assets/styles/tokens/bank-colors.css`), indicador de actividad LED y respiración suave en banco activo (`prefers-reduced-motion`).
+  - **Mezclador de 8 canales visibles (`~105 px` a `1280×720`) y motor puro `McxBankLayout.ts`:** identidad DSP estable (`partId 0..63`), pines protectores (con *"Desfijar banco"*), borrado dejando hueco libre + `+ Añadir parte` exclusivamente en el primer hueco libre, compactación/renombrado de bancos vacíos preservando puerto/canal MIDI, y reordenación Drag & Drop / popover `"Mover a..."` con cascada automática que salta pines y crea banco de desbordamiento hasta `H`.
+  - **Puertos MIDI reales en `McxInstrumentRouteModal` y `McxSettingsModal`:** selectores reales IN/OUT en `INT`, `EXT` y `A+B` + habilitación y refresco de interfaces del SO.
+  - **Emparejamiento en `McxStepStrip` + Popover WCAG (`ABDShared/stepButtonStrip.js`):** bloques de color por banco (`A+B`, `C+D`, último banco impar siempre a la derecha p.ej. `B+C`, solo `A` + derecha deshabilitada si únicamente existe `A`, huecos deshabilitados) y popover con nombre de pista y estado de mute.
+- [x] **13C — Song/Scenes `A..H × 8` (`muteMask64`), Live Mute-Bank y Cierre Documental:**
+  - Matriz de mutes dinámica por bancos activos (`A..H × 8`) en `McxSongDrawer` con botón **Mute Bank** por fila y serialización sin pérdida sobre `muteMask64`.
+  - Botón rápido en vivo de **Mute Bank** (`M`) en `McxBankRail` sin cambiar la pista enfocada y atajos en directo `Alt+1..8` (cola compás), `Shift+Alt+1..8` (disparo inmediato), `Alt+A..H` (cambio de banco) y `Shift+Alt+A..H` (mute de banco en vivo).
+  - Tests en `WebUI/src/ui/McxSongScenes64.test.ts` y actualización completa del `ROADMAP.md`.
 
 ---
 

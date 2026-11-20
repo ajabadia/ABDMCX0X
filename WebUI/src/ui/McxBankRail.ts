@@ -44,6 +44,7 @@ export interface McxBankRailCallbacks {
   onSelectBank: (bankIdx: number) => void;
   onAddBank: () => void;
   onDropPartOnBank: (fromBank: number, fromSlot: number, targetBank: number) => void;
+  onToggleMuteBank?: (bankIdx: number) => void;
 }
 
 export class McxBankRail {
@@ -68,28 +69,37 @@ export class McxBankRail {
     const buttonsHtml = Array.from({ length: layout.bankCount }, (_, b) => {
       const isActive = b === layout.activeBank;
       const occupied = countOccupiedInBank(layout, b);
-      let anyMute = false;
+      let mutedCount = 0;
       let anySolo = false;
       for (let s = 0; s < SLOTS_PER_BANK; ++s) {
         const pid = layout.banks[b][s];
         if (pid === null) continue;
-        if (parts[pid]?.mute) anyMute = true;
+        if (parts[pid]?.mute) ++mutedCount;
         if (parts[pid]?.solo) anySolo = true;
       }
+      const allMuted = occupied > 0 && mutedCount === occupied;
+      const anyMute = mutedCount > 0;
       const letter = BANK_LETTERS[b];
       const flags = anySolo ? 'S' : anyMute ? 'M' : '';
       return `
-        <button type="button" class="mcx-bank-btn${isActive ? ' is-active' : ''}"
-          data-bank-idx="${b}" style="--bank-color:${BANK_COLOR_VARS[b]}"
-          aria-pressed="${isActive ? 'true' : 'false'}" ${isActive ? 'aria-current="true"' : ''}
-          title="${t('mcx.bankLabel')} ${letter} (${occupied}/${SLOTS_PER_BANK})">
-          <span class="mcx-bank-btn-top">
-            <span class="mcx-bank-led" aria-hidden="true"></span>
-            <span class="mcx-bank-letter">${letter}</span>
-          </span>
-          <span class="mcx-bank-meta">${occupied}/${SLOTS_PER_BANK}${flags ? ` · ${flags}` : ''}</span>
-          <span class="mcx-bank-activity" aria-hidden="true"><span class="mcx-bank-activity-fill" data-bank-act="${b}"></span></span>
-        </button>`;
+        <div class="mcx-bank-item" style="--bank-color:${BANK_COLOR_VARS[b]}">
+          <button type="button" class="mcx-bank-btn${isActive ? ' is-active' : ''}"
+            data-bank-idx="${b}"
+            aria-pressed="${isActive ? 'true' : 'false'}" ${isActive ? 'aria-current="true"' : ''}
+            title="${t('mcx.bankLabel')} ${letter} (${occupied}/${SLOTS_PER_BANK})">
+            <span class="mcx-bank-btn-top">
+              <span class="mcx-bank-led" aria-hidden="true"></span>
+              <span class="mcx-bank-letter">${letter}</span>
+            </span>
+            <span class="mcx-bank-meta">${occupied}/${SLOTS_PER_BANK}${flags ? ` · ${flags}` : ''}</span>
+            <span class="mcx-bank-activity" aria-hidden="true"><span class="mcx-bank-activity-fill" data-bank-act="${b}"></span></span>
+          </button>
+          <button type="button" class="mcx-bank-mute-btn${allMuted ? ' is-muted' : anyMute ? ' is-partial' : ''}"
+            data-bank-mute="${b}" aria-pressed="${allMuted ? 'true' : 'false'}"
+            ${occupied === 0 ? 'disabled' : ''}
+            aria-label="${t('mcx.liveMuteBank')} ${letter}"
+            title="${t('mcx.liveMuteBankHint')} (${letter})">M</button>
+        </div>`;
     }).join('');
 
     const addBtnHtml = layout.bankCount < MAX_BANKS
@@ -119,6 +129,11 @@ export class McxBankRail {
 
   private bindEvents(): void {
     this.hostEl.addEventListener('click', (ev) => {
+      const muteBtn = (ev.target as HTMLElement).closest<HTMLElement>('[data-bank-mute]');
+      if (muteBtn) {
+        this.cbs.onToggleMuteBank?.(Number(muteBtn.dataset.bankMute));
+        return;
+      }
       const bankBtn = (ev.target as HTMLElement).closest<HTMLElement>('[data-bank-idx]');
       if (bankBtn) {
         this.cbs.onSelectBank(Number(bankBtn.dataset.bankIdx));

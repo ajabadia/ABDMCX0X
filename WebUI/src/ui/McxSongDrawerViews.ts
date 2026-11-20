@@ -6,7 +6,16 @@
 
 import type { McxSceneSlotDto, McxSongBlockDto, McxSongScenesStateDto } from '../bridge/McxSongBridge';
 import { t } from '../i18n/mcxI18n';
+import {
+  BANK_COLOR_VARS,
+  BANK_LETTERS,
+  createDefaultBankLayout,
+  formatSlotLabel,
+  SLOTS_PER_BANK,
+  type McxBankLayoutData,
+} from './McxBankLayout';
 import { ICON_CLOSE, ICON_DOWN, ICON_PLAY, ICON_UP } from './mcxIcons';
+import type { McxPartUiState } from './McxPartState';
 
 export function escHtml(raw: string): string {
   return String(raw)
@@ -16,10 +25,64 @@ export function escHtml(raw: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function countMutedParts(mask: number): number {
-  let c = 0;
-  for (let i = 0; i < 16; ++i) if ((mask & (1 << i)) !== 0) ++c;
-  return c;
+export function ensureMuteMask64(sc: McxSceneSlotDto): [number, number, number, number] {
+  const m64: [number, number, number, number] = Array.isArray(sc.muteMask64)
+    ? [
+        (sc.muteMask64[0] ?? 0) & 0xFFFF,
+        (sc.muteMask64[1] ?? 0) & 0xFFFF,
+        (sc.muteMask64[2] ?? 0) & 0xFFFF,
+        (sc.muteMask64[3] ?? 0) & 0xFFFF,
+      ]
+    : [sc.muteMask & 0xFFFF, 0, 0, 0];
+  sc.muteMask64 = m64;
+  sc.muteMask = m64[0];
+  return m64;
+}
+
+export function isPartMutedInMask64(mask64: readonly number[], partId: number): boolean {
+  if (partId < 0 || partId >= 64) return false;
+  return ((mask64[Math.floor(partId / 16)] ?? 0) & (1 << (partId % 16))) !== 0;
+}
+
+export function togglePartMutedInMask64(sc: McxSceneSlotDto, partId: number): boolean {
+  const m64 = ensureMuteMask64(sc);
+  if (partId < 0 || partId >= 64) return false;
+  const w = Math.floor(partId / 16);
+  const bit = 1 << (partId % 16);
+  m64[w] = (m64[w] ^ bit) & 0xFFFF;
+  sc.muteMask64 = m64;
+  sc.muteMask = m64[0];
+  return (m64[w] & bit) !== 0;
+}
+
+export function toggleBankMutedInMask64(sc: McxSceneSlotDto, layout: McxBankLayoutData, bankIdx: number): boolean {
+  const m64 = ensureMuteMask64(sc);
+  const placed = (layout.banks[bankIdx] ?? []).filter((pid): pid is number => pid !== null);
+  if (placed.length === 0) return false;
+  const nextMute = !placed.every((pid) => isPartMutedInMask64(m64, pid));
+  for (const pid of placed) {
+    const w = Math.floor(pid / 16);
+    const bit = 1 << (pid % 16);
+    m64[w] = nextMute ? ((m64[w] | bit) & 0xFFFF) : ((m64[w] & ~bit) & 0xFFFF);
+  }
+  sc.muteMask64 = m64;
+  sc.muteMask = m64[0];
+  return nextMute;
+}
+
+export function countLayoutMutes(sc: McxSceneSlotDto, layout: McxBankLayoutData): { total: number; muted: number } {
+  const m64 = ensureMuteMask64(sc);
+  let total = 0;
+  let muted = 0;
+  for (let b = 0; b < layout.bankCount; ++b) {
+    for (let s = 0; s < SLOTS_PER_BANK; ++s) {
+      const pid = layout.banks[b]?.[s] ?? null;
+      if (pid === null) continue;
+      ++total;
+      if (isPartMutedInMask64(m64, pid)) ++muted;
+    }
+  }
+  return { total, muted };
 }
 
 function fmtSigned(n: number): string {
@@ -65,12 +128,16 @@ export function buildSongDrawerShellHtml(): string {
   `;
 }
 
-export function buildSceneCardsHtml(state: McxSongScenesStateDto, selectedScene: number): string {
+export function buildSceneCardsHtml(
+  state: McxSongScenesStateDto,
+  selectedScene: number,
+  layout: McxBankLayoutData = createDefaultBankLayout(),
+): string {
   return state.scenes.map((sc, i) => {
     const isAct = i === state.activeScene;
     const isQ = i === state.queuedScene;
     const isSel = i === selectedScene;
-    const muted = countMutedParts(sc.muteMask);
+    const { total, muted } = countLayoutMutes(sc, layout);
     const cls = ['mcx-scene-card', isAct ? 'is-active' : '', isQ ? 'is-queued' : '', isSel ? 'is-selected' : ''].filter(Boolean).join(' ');
     return `
       <div class="${cls}" data-scene-card="${i}" tabindex="0" role="button" aria-label="Scene ${i + 1}: ${escHtml(sc.name)}">
@@ -80,16 +147,46 @@ export function buildSceneCardsHtml(state: McxSongScenesStateDto, selectedScene:
           <button type="button" class="mcx-sc-play-mini" data-scene-launch="${i}" title="${t('mcx.queueAtBar')}">${ICON_PLAY}</button>
         </div>
         <div class="mcx-sc-name">${escHtml(sc.name)}</div>
-        <div class="mcx-sc-meta">${muted === 0 ? '16/16 ON' : `${16 - muted}/16 · ${muted} ${t('mcx.mutedCountUnit')}`}</div>
+        <div class="mcx-sc-meta">${muted === 0 ? `${total}/${total} ON` : `${total - muted}/${total} · ${muted} ${t('mcx.mutedCountUnit')}`}</div>
       </div>
     `;
   }).join('');
 }
 
-export function buildSceneInspectorHtml(sc: McxSceneSlotDto, idx: number): string {
-  const mutes = Array.from({ length: 16 }, (_, p) => {
-    const isMuted = (sc.muteMask & (1 << p)) !== 0;
-    return `<button type="button" class="mcx-sc-mute-btn ${isMuted ? 'is-muted' : 'is-audible'}" data-sc-part-mute="${p}" aria-pressed="${isMuted ? 'true' : 'false'}" title="Part ${p + 1}">P${String(p + 1).padStart(2, '0')}</button>`;
+export function buildSceneInspectorHtml(
+  sc: McxSceneSlotDto,
+  idx: number,
+  layout: McxBankLayoutData = createDefaultBankLayout(),
+  parts: McxPartUiState[] = [],
+): string {
+  const mask64 = ensureMuteMask64(sc);
+  const banksHtml = Array.from({ length: layout.bankCount }, (_, b) => {
+    const letter = BANK_LETTERS[b];
+    const placed = (layout.banks[b] ?? []).filter((pid): pid is number => pid !== null);
+    const mutedCount = placed.filter((pid) => isPartMutedInMask64(mask64, pid)).length;
+    const allMuted = placed.length > 0 && mutedCount === placed.length;
+    const anyMuted = mutedCount > 0;
+    const slotsHtml = Array.from({ length: SLOTS_PER_BANK }, (_, s) => {
+      const slotLbl = formatSlotLabel(b, s);
+      const pid = layout.banks[b]?.[s] ?? null;
+      if (pid === null) {
+        return `<span class="mcx-sc-mute-empty" aria-hidden="true">${slotLbl}</span>`;
+      }
+      const isMuted = isPartMutedInMask64(mask64, pid);
+      const pName = parts[pid]?.name || `P${String(pid + 1).padStart(2, '0')}`;
+      return `<button type="button" class="mcx-sc-mute-btn ${isMuted ? 'is-muted' : 'is-audible'}"
+        data-sc-part-mute="${pid}" aria-pressed="${isMuted ? 'true' : 'false'}"
+        aria-label="${slotLbl} ${escHtml(pName)}" title="${slotLbl} · P${String(pid + 1).padStart(2, '0')} · ${escHtml(pName)}">${slotLbl}</button>`;
+    }).join('');
+    return `
+      <div class="mcx-sc-bank-row" style="--bank-color:${BANK_COLOR_VARS[b]}">
+        <button type="button" class="mcx-sc-bank-mute-btn${allMuted ? ' is-muted' : anyMuted ? ' is-partial' : ''}"
+          data-sc-bank-mute="${b}" aria-pressed="${allMuted ? 'true' : 'false'}"
+          ${placed.length === 0 ? 'disabled' : ''}
+          aria-label="${escHtml(t('mcx.sceneMuteBank'))} ${letter}"
+          title="${escHtml(t('mcx.sceneMuteBankHint'))} (${letter})">${letter}</button>
+        <div class="mcx-sc-bank-slots">${slotsHtml}</div>
+      </div>`;
   }).join('');
 
   return `
@@ -108,7 +205,7 @@ export function buildSceneInspectorHtml(sc: McxSceneSlotDto, idx: number): strin
       <button type="button" class="mcx-song-tool-btn" id="mcx-sc-now">${t('mcx.launchNow')}</button>
     </div>
     <div class="mcx-sc-mutes-label">${t('mcx.sceneMutes')}</div>
-    <div class="mcx-sc-mutes-grid">${mutes}</div>
+    <div class="mcx-sc-banks-matrix">${banksHtml}</div>
   `;
 }
 

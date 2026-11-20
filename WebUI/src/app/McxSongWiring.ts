@@ -16,7 +16,7 @@ function createDefaultSongState(): McxSongScenesStateDto {
   const trs = [0, 0, 0, 5, 7, -3, 0, 0];
   return {
     songMode: false, songLoop: true, activeScene: 0, queuedScene: -1, songBlockIdx: 0, songBarInBlock: 0,
-    scenes: names.map((name, index) => ({ index, name, muteMask: masks[index], transpose: trs[index] })),
+    scenes: names.map((name, index) => ({ index, name, muteMask: masks[index], muteMask64: [masks[index], 0, 0, 0], transpose: trs[index] })),
     blocks: [
       { sceneIndex: 1, bars: 2, transposeOffset: 0 },
       { sceneIndex: 0, bars: 2, transposeOffset: 0 },
@@ -50,6 +50,8 @@ export function mountSongAndScenesUi(bridge: McxHostBridge, state: McxAppState):
       hostEl: mainCol,
       songBridge,
       getState: () => songState,
+      getBankLayout: () => state.bankLayout,
+      getPartsState: () => state.partsState,
       onStateMutated: () => {
         state.refs.sceneBar?.setScenes(songState.scenes);
         state.refs.sceneBar?.updateLiveState(songState.activeScene, songState.queuedScene, songState.songMode, songState.songBlockIdx, songState.songBarInBlock, songState.blocks.length);

@@ -13,7 +13,13 @@ export function createMixerCallbacks(state: McxAppState, bridge: McxHostBridge):
     getFocusedPart: () => state.focusedPart,
     setFocusedPart: (idx) => state.focusPart(idx),
     getPartsState: () => state.partsState,
+    getBankLayout: () => state.bankLayout,
+    getMidiDevices: () => state.midiDevices,
     getEngineCatalog: () => state.refs.routeModal?.getEngineCatalog() ?? [],
+    onTogglePin: (partId) => state.togglePartPin(partId),
+    onDeletePart: (bankIdx, slotIdx, forceUnpin) => state.requestDeletePart(bankIdx, slotIdx, forceUnpin),
+    onMovePart: (fromBank, fromSlot, toBank, toSlot) => state.movePartSlot(fromBank, fromSlot, toBank, toSlot),
+    onAddPartInFirstFreeSlot: (bankIdx) => state.addPartAtFirstFreeSlot(bankIdx),
     onOpenRouteForPart: (idx) => { state.focusPart(idx); state.refs.routeModal?.open(idx); },
     onTogglePartKind: (idx) => {
       const next = state.partsState[idx].kind === 'drum_map' ? 'chromatic' : 'drum_map';

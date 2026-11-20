@@ -8,6 +8,7 @@ import { MultiBusFxRackModal, GlobalLfoModal, PianoRollModal, GrooveShuffleModal
 import type { McxHostBridge } from '../bridge/McxHostBridge';
 import { getLocale, t } from '../i18n/mcxI18n';
 import { McxBankDrawer } from '../ui/McxBankDrawer';
+import { formatSlotLabel, SLOTS_PER_BANK } from '../ui/McxBankLayout';
 import { McxSavePresetModal } from '../ui/McxSavePresetModal';
 import type { McxAppState } from './McxAppState';
 import { createGlobalLfoBridgeAdapter, GLOBAL_LFO1_DESTS, GLOBAL_LFO2_DESTS } from './McxPianoRollSync';
@@ -52,6 +53,18 @@ export function createBankDrawer(bridge: McxHostBridge, state: McxAppState): Mcx
   const drawer = new McxBankDrawer(bridge, {
     getTargetPart: () => state.focusedPart,
     setTargetPart: (idx) => state.focusPart(idx),
+    getPlacedParts: () => {
+      const out: Array<{ partId: number; label: string }> = [];
+      for (let b = 0; b < state.bankLayout.bankCount; ++b) {
+        for (let s = 0; s < SLOTS_PER_BANK; ++s) {
+          const pid = state.bankLayout.banks[b][s];
+          if (pid === null) continue;
+          const pName = state.partsState[pid]?.name ?? 'Init Tone';
+          out.push({ partId: pid, label: `${formatSlotLabel(b, s)} · P${String(pid + 1).padStart(2, '0')} (${pName})` });
+        }
+      }
+      return out;
+    },
     onSelectModel: (pIdx, item) => loadBankDrawerItem(bridge, state, pIdx, item),
     onSelectPartPreset: (pIdx, item) => loadBankDrawerItem(bridge, state, pIdx, item),
     onSelectMultiPreset: (item) => loadBankDrawerItem(bridge, state, 0, item),

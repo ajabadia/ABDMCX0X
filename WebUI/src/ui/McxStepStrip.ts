@@ -6,8 +6,16 @@
 
 import { StepButtonStrip } from '@abdsynths/shared/components/Controls/stepButtonStrip.js';
 import type { McxHostBridge } from '../bridge/McxHostBridge';
-import type { McxPartUiState } from './McxMixerConsole';
 import { t } from '../i18n/mcxI18n';
+import {
+  BANK_COLOR_VARS,
+  createDefaultBankLayout,
+  formatSlotLabel,
+  getTopStripPair,
+  MAX_PARTS,
+  type McxBankLayoutData,
+} from './McxBankLayout';
+import type { McxPartUiState } from './McxMixerConsole';
 
 export type StepStripMode = 'part-select' | 'part-mute' | 'step-mute' | 'step-accent' | 'step-slide';
 
@@ -21,24 +29,76 @@ export interface McxStepStripCallbacks {
   getFocusedPart: () => number;
   setFocusedPart: (idx: number) => void;
   getPartsState: () => McxPartUiState[];
+  getBankLayout?: () => McxBankLayoutData;
   onToggleMute: (partIdx: number) => void;
   setLcdNotice: (text: string) => void;
 }
 
-function buildPadState(mode: StepStripMode, idx: number, focused: number, p: McxPartUiState, s: StepState) {
-  if (mode === 'part-select') {
-    return { active: idx === focused, muted: p.mute, label: `P${String(idx + 1).padStart(2, '0')}`, subLabel: p.kind === 'drum_map' ? 'DRM' : `CH${p.midiChannel}` };
-  }
-  if (mode === 'part-mute') {
-    return { active: !p.mute, muted: p.mute, label: `P${idx + 1}`, subLabel: p.mute ? 'MUTE' : 'PLAY' };
+interface PadMapping {
+  bankIdx: number | null;
+  slotIdx: number;
+  partId: number | null;
+}
+
+function resolvePadMapping(layout: McxBankLayoutData, padIdx: number): PadMapping {
+  const pair = getTopStripPair(layout.activeBank, layout.bankCount);
+  const bankIdx = padIdx < 8 ? pair.leftBank : pair.rightBank;
+  const slotIdx = padIdx % 8;
+  const partId = bankIdx !== null ? (layout.banks[bankIdx]?.[slotIdx] ?? null) : null;
+  return { bankIdx, slotIdx, partId };
+}
+
+function buildPadState(
+  mode: StepStripMode,
+  idx: number,
+  focused: number,
+  parts: McxPartUiState[],
+  s: StepState,
+  mapping: PadMapping,
+) {
+  if (mode === 'part-select' || mode === 'part-mute') {
+    if (mapping.bankIdx === null) {
+      return { disabled: true, active: false, muted: false, solo: false, bankColor: null, legend: '---', subval: '---', tooltip: '' };
+    }
+    const bankColor = BANK_COLOR_VARS[mapping.bankIdx];
+    const slotTag = formatSlotLabel(mapping.bankIdx, mapping.slotIdx);
+    const p = mapping.partId !== null ? parts[mapping.partId] : undefined;
+    if (!p || mapping.partId === null) {
+      return { disabled: true, active: false, muted: false, solo: false, bankColor, legend: slotTag, subval: '---', tooltip: '' };
+    }
+    const trackName = p.name || (p.kind === 'drum_map' ? 'TR-909 Kit' : 'Init Tone');
+    const statusTxt = p.mute ? t('mcx.bankMutedStatus') : t('mcx.bankActiveStatus');
+    const tooltip = `${slotTag} · ${trackName} — ${statusTxt} (CH${p.midiChannel})`;
+    if (mode === 'part-select') {
+      return {
+        disabled: false,
+        bankColor,
+        tooltip,
+        active: mapping.partId === focused,
+        muted: p.mute,
+        solo: p.solo,
+        legend: slotTag,
+        subval: p.kind === 'drum_map' ? 'DRM' : `CH${p.midiChannel}`,
+      };
+    }
+    return {
+      disabled: false,
+      bankColor,
+      tooltip,
+      active: !p.mute,
+      muted: p.mute,
+      solo: p.solo,
+      legend: slotTag,
+      subval: p.mute ? 'MUTE' : 'PLAY',
+    };
   }
   if (mode === 'step-mute') {
-    return { active: s.active, muted: !s.active, label: String(idx + 1), subLabel: s.active ? 'ON' : 'OFF' };
+    return { disabled: false, bankColor: null, tooltip: '', active: s.active, muted: !s.active, solo: false, legend: String(idx + 1), subval: s.active ? 'ON' : 'OFF' };
   }
   if (mode === 'step-accent') {
-    return { active: s.accent, muted: !s.accent, label: String(idx + 1), subLabel: s.accent ? 'ACC' : '---' };
+    return { disabled: false, bankColor: null, tooltip: '', active: s.accent, muted: !s.accent, solo: false, legend: String(idx + 1), subval: s.accent ? 'ACC' : '---' };
   }
-  return { active: s.slide, muted: !s.slide, label: String(idx + 1), subLabel: s.slide ? 'SLD' : '---' };
+  return { disabled: false, bankColor: null, tooltip: '', active: s.slide, muted: !s.slide, solo: false, legend: String(idx + 1), subval: s.slide ? 'SLD' : '---' };
 }
 
 export class McxStepStrip {
@@ -55,14 +115,14 @@ export class McxStepStrip {
   constructor(container: HTMLElement, bridge: McxHostBridge, cbs: McxStepStripCallbacks) {
     this.bridge = bridge;
     this.cbs = cbs;
-    this.partSteps = Array.from({ length: 16 }, (_, p) =>
+    this.partSteps = Array.from({ length: MAX_PARTS }, (_, p) =>
       Array.from({ length: 16 }, (_, s) => ({
         active: p === 9 ? (s % 4 === 0) : (s % 2 === 0),
         accent: s === 0 || s === 8,
         slide: s === 3 || s === 11,
       })),
     );
-    this.partPorta = Array.from({ length: 16 }, () => ({ enabled: true, timeMs: 60 }));
+    this.partPorta = Array.from({ length: MAX_PARTS }, () => ({ enabled: true, timeMs: 60 }));
 
     this.strip = new StepButtonStrip(container, {
       padCount: 16,
@@ -86,9 +146,11 @@ export class McxStepStrip {
     const mode = this.strip.getMode() as StepStripMode;
     const focused = this.cbs.getFocusedPart();
     const parts = this.cbs.getPartsState();
-    const steps = this.partSteps[focused];
+    const layout = this.cbs.getBankLayout?.() ?? createDefaultBankLayout();
+    const steps = this.partSteps[focused] ?? this.partSteps[0];
     for (let i = 0; i < 16; i++) {
-      this.strip.setPadState(i, buildPadState(mode, i, focused, parts[i], steps[i]));
+      const mapping = resolvePadMapping(layout, i);
+      this.strip.setPadState(i, buildPadState(mode, i, focused, parts, steps[i], mapping));
     }
   }
 
@@ -109,16 +171,23 @@ export class McxStepStrip {
   private handlePadClick(padIdx: number, ev: MouseEvent): void {
     const mode = this.strip.getMode() as StepStripMode;
     const focused = this.cbs.getFocusedPart();
-    if (mode === 'part-select') {
-      if (ev.shiftKey) this.cbs.onToggleMute(padIdx);
-      else {
-        this.cbs.setFocusedPart(padIdx);
-        this.cbs.setLcdNotice(`FOCUSED PART P${String(padIdx + 1).padStart(2, '0')}`);
+    const layout = this.cbs.getBankLayout?.() ?? createDefaultBankLayout();
+    if (mode === 'part-select' || mode === 'part-mute') {
+      const mapping = resolvePadMapping(layout, padIdx);
+      if (mapping.bankIdx === null || mapping.partId === null) return;
+      const pid = mapping.partId;
+      const slotTag = formatSlotLabel(mapping.bankIdx, mapping.slotIdx);
+      if (mode === 'part-select') {
+        if (ev.shiftKey) this.cbs.onToggleMute(pid);
+        else {
+          this.cbs.setFocusedPart(pid);
+          this.cbs.setLcdNotice(`FOCUSED ${slotTag} · P${String(pid + 1).padStart(2, '0')}`);
+        }
+      } else {
+        this.cbs.onToggleMute(pid);
+        const p = this.cbs.getPartsState()[pid];
+        this.cbs.setLcdNotice(`${slotTag} · P${String(pid + 1).padStart(2, '0')} ${p?.mute ? 'MUTED' : 'UNMUTED'}`);
       }
-    } else if (mode === 'part-mute') {
-      this.cbs.onToggleMute(padIdx);
-      const p = this.cbs.getPartsState()[padIdx];
-      this.cbs.setLcdNotice(`P${String(padIdx + 1).padStart(2, '0')} ${p.mute ? 'MUTED' : 'UNMUTED'}`);
     } else {
       const isMute = mode === 'step-mute', isAcc = mode === 'step-accent';
       const prop = isMute ? 'active' : isAcc ? 'accent' : 'slide';
@@ -139,8 +208,11 @@ export class McxStepStrip {
       this.bridge.setParam(focused, 'portaTimeMs', cur.timeMs);
       this.cbs.setLcdNotice(`P${focused + 1} PORTAMENTO TIME: ${cur.timeMs} ms`);
     } else {
-      this.cbs.setFocusedPart(padIdx);
-      this.cbs.setLcdNotice(`FOCUSED PART P${String(padIdx + 1).padStart(2, '0')}`);
+      const layout = this.cbs.getBankLayout?.() ?? createDefaultBankLayout();
+      const mapping = resolvePadMapping(layout, padIdx);
+      if (mapping.bankIdx === null || mapping.partId === null) return;
+      this.cbs.setFocusedPart(mapping.partId);
+      this.cbs.setLcdNotice(`FOCUSED ${formatSlotLabel(mapping.bankIdx, mapping.slotIdx)} · P${String(mapping.partId + 1).padStart(2, '0')}`);
       this.refresh();
     }
   }

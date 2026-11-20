@@ -23,6 +23,7 @@ import { applyI18n, getLocale, onLocaleChange, t } from './i18n/mcxI18n';
 import { ThemeManager, type ThemeFamilyKey } from './ui/ThemeManager'; import { McxNavbar } from './ui/McxNavbar';
 import { McxSettingsModal } from './ui/McxSettingsModal'; import { wireBankDropZone } from './ui/McxPanels';
 import { McxScopeCanvas } from './ui/McxScopeCanvas'; import { McxStepStrip } from './ui/McxStepStrip';
+import { McxBankRail } from './ui/McxBankRail';
 import { McxToneDrawer } from './ui/McxToneDrawer'; import { McxGlobalDrawer } from './ui/McxGlobalDrawer';
 import { McxAppState } from './app/McxAppState'; import { bindGlobalShortcuts, bindTelemetry, mountKeyboardDock } from './app/McxInputAndTelemetry';
 import { buildProbeDestinations, createBankDrawer, createProbeModal, createStudioModals, openSavePresetModal } from './app/McxModalsFactory';
@@ -52,6 +53,7 @@ function initApp(): void {
   const onToggleProbe = () => probeModal?.toggle({ theme: document.documentElement.getAttribute('data-theme'), locale: getLocale(), sampleRate: bridge.getSampleRate(), frequencyHz: state.globalSettings.masterTuneHz || 440 });
   state.refs = { ...state.refs, bankDrawer, settingsModal, globalDrawer, ...modals, ...midiModals, onPanic, onToggleProbe, onSavePreset: (multi) => openSavePresetModal(bridge, state, multi ? 'multi' : 'part'), onOpenBankFile: () => fileInput?.click() };
   byId('mcx-solo-clear-btn')?.addEventListener('click', () => state.clearAllSolos());
+  byId('mcx-unpin-bank-btn')?.addEventListener('click', () => state.unpinActiveBank());
   const navbar = navHost ? new McxNavbar(navHost, {
     themeMgr,
     onConfigureFolder: () => (bridge.isNative ? bridge.chooseWorkingDir() : settingsModal.open()),
@@ -60,7 +62,7 @@ function initApp(): void {
     onSavePartPreset: () => openSavePresetModal(bridge, state, 'part'),
     onSaveMultiPreset: () => openSavePresetModal(bridge, state, 'multi'),
     onLoadBank: () => fileInput?.click(),
-    onFactoryReset: () => { bridge.resetToFactory(); bridge.requestPartEngineState(state.focusedPart); bridge.requestPartPresets(state.focusedPart); state.setLcdLine2(t('mcx.factoryReset')); },
+    onFactoryReset: () => { state.resetToFactoryLayout(); bridge.resetToFactory(); bridge.requestPartEngineState(state.focusedPart); bridge.requestPartPresets(state.focusedPart); state.setLcdLine2(t('mcx.factoryReset')); },
     onPanic,
     onEnableAudio: () => { void bridge.enableAudio(); },
     onToggleProbe,
@@ -95,6 +97,14 @@ function initApp(): void {
 
   mountMultiEngineUi(bridge, state, themeMgr);
   mountSongAndScenesUi(bridge, state);
+  const railHost = byId('mcx-bank-rail');
+  if (railHost) {
+    state.refs.bankRail = new McxBankRail(railHost, {
+      onSelectBank: (bankIdx) => state.selectBank(bankIdx),
+      onAddBank: () => state.addNewBank(),
+      onDropPartOnBank: (fromBank, fromSlot, targetBank) => state.movePartSlot(fromBank, fromSlot, targetBank, -1),
+    });
+  }
   state.refreshPartList();
   const stripHost = byId('mcx-step-strip-host');
   if (stripHost) {
@@ -102,6 +112,7 @@ function initApp(): void {
       getFocusedPart: () => state.focusedPart,
       setFocusedPart: (idx) => panelCbs.setFocusedPart(idx),
       getPartsState: () => state.partsState,
+      getBankLayout: () => state.bankLayout,
       onToggleMute: (partIdx) => { panelCbs.onToggleMute(partIdx); state.refs.stepStrip?.refresh(); },
       setLcdNotice: state.setLcdLine2,
     });
@@ -117,9 +128,15 @@ function initApp(): void {
     if (s.standaloneBpm) { state.refs.masterPanel?.setBpm(s.standaloneBpm); modals.fxRackModal.setBpm(s.standaloneBpm); modals.globalLfoModal.setBpm(s.standaloneBpm); }
     state.updateLcdLine1(0);
   });
+  bridge.onMidiDevices((dto) => {
+    state.midiDevices = dto;
+    settingsModal.setMidiDevices(dto);
+    state.refs.routeModal?.setMidiDevices(dto);
+    state.refreshPartList();
+  });
   bridge.onAudioStatus((status, detail) => {
     navbar?.setAudioStatus(status, detail);
-    if (status === 'ready') probeModal?.setSampleRate(bridge.getSampleRate());
+    if (status === 'ready') { probeModal?.setSampleRate(bridge.getSampleRate()); bridge.refreshMidiDevices(); }
     if (status === 'error' && detail) state.setLcdLine2(`WASM ERR: ${detail}`);
   });
   onLocaleChange(() => {
@@ -135,6 +152,7 @@ function initApp(): void {
   });
   themeMgr.apply(); if (!bridge.isNative) bridge.updateSystemSettings(state.globalSettings); state.uploadInitialPatterns();
   bindGlobalShortcuts(state); mountKeyboardDock(bridge, state); bindTelemetry(bridge, state, scopeView);
+  bridge.refreshMidiDevices();
   bridge.notifyReady(); document.body.classList.add('is-ready');
 }
 

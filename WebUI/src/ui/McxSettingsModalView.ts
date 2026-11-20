@@ -3,8 +3,30 @@
  * Pure HTML template builder for Global Synth Settings Modal. Strictly < 200 lines.
  */
 
-import type { McxSystemSettingsDto } from '../bridge/McxHostBridge';
+import type { McxMidiDeviceInfoDto, McxMidiDevicesDto, McxSystemSettingsDto } from '../bridge/McxHostBridge';
 import { t } from '../i18n/mcxI18n';
+import { ICON_CLOSE, ICON_REFRESH } from './mcxIcons';
+
+const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+function renderDeviceList(list: McxMidiDeviceInfoDto[], dir: 'input' | 'output', isNative: boolean): string {
+  if (!list || list.length === 0) return `<p class="mcx-midi-dev-empty">${esc(t('mcx.settingsMidiEmpty'))}</p>`;
+  return list.map((d) => {
+    if (isNative) {
+      return `
+        <div class="mcx-midi-dev-row">
+          <label><input type="checkbox" data-midi-dir="${dir}" data-midi-id="${esc(d.id)}"${d.enabled ? ' checked' : ''} />
+            <span class="mcx-midi-dev-name" title="${esc(d.name)}">${esc(d.name)}</span></label>
+        </div>`;
+    }
+    const statusLbl = d.enabled ? t('mcx.settingsMidiConnected') : t('mcx.settingsMidiDisconnected');
+    return `
+      <div class="mcx-midi-dev-row">
+        <span class="mcx-midi-dev-name" title="${esc(d.name)}">${esc(d.name)}</span>
+        <span class="mcx-bank-rail-count">${esc(statusLbl)}</span>
+      </div>`;
+  }).join('');
+}
 
 export const SCALE_NAMES = [
   'Off (Chromatic)', 'Major', 'Minor Natural', 'Minor Harmonic', 'Minor Melodic',
@@ -21,16 +43,17 @@ export function buildSettingsModalHtml(
   globalTranspose: number,
   scaleRoot: number,
   scaleType: number,
+  midiDevices: McxMidiDevicesDto = { isStandalone: !isNative, inputs: [], outputs: [] },
 ): string {
   const trSign = globalTranspose > 0 ? '+' : '';
   return `
     <div class="abd-probe-shell">
       <div class="abd-probe-header">
         <div>
-          <h2 class="abd-probe-title" id="mcx-settings-title">${t('mcx.settingsTitle')}</h2>
-          <p class="abd-probe-subtitle">${t('mcx.settingsSubtitle')}</p>
+          <h2 class="abd-probe-title" id="mcx-settings-title">${esc(t('mcx.settingsTitle'))}</h2>
+          <p class="abd-probe-subtitle">${esc(t('mcx.settingsSubtitle'))}</p>
         </div>
-        <button type="button" class="abd-probe-close" data-role="close" aria-label="${t('mcx.close')}">&times;</button>
+        <button type="button" class="abd-probe-close" data-role="close" aria-label="${esc(t('mcx.close'))}">${ICON_CLOSE}</button>
       </div>
 
       <div class="mcx-settings-grid">
@@ -79,8 +102,26 @@ export function buildSettingsModalHtml(
         </div>
 
         <div class="mcx-settings-field">
-          <span class="abd-probe-section-label">${t('mcx.settingsSampleRate')}</span>
+          <span class="abd-probe-section-label">${esc(t('mcx.settingsSampleRate'))}</span>
           <div class="mcx-readonly-pill">${sr} Hz (${isNative ? 'JUCE Native' : 'WASM AudioWorklet'})</div>
+        </div>
+
+        <div class="mcx-settings-field mcx-settings-field--full">
+          <div class="mcx-route-midi-head-row">
+            <span class="abd-probe-section-label">${esc(t('mcx.settingsMidiTitle'))}</span>
+            <button type="button" class="mcx-route-refresh-btn" id="btn-refresh-midi">${ICON_REFRESH}<span>${esc(t('mcx.routeMidiRefresh'))}</span></button>
+          </div>
+          <div class="mcx-midi-devices-grid">
+            <div class="mcx-midi-dev-col">
+              <span class="mcx-route-label">${esc(t('mcx.settingsMidiInHead'))}</span>
+              <div class="mcx-midi-dev-list">${renderDeviceList(midiDevices.inputs, 'input', isNative)}</div>
+            </div>
+            <div class="mcx-midi-dev-col">
+              <span class="mcx-route-label">${esc(t('mcx.settingsMidiOutHead'))}</span>
+              <div class="mcx-midi-dev-list">${renderDeviceList(midiDevices.outputs, 'output', isNative)}</div>
+            </div>
+          </div>
+          ${!isNative ? `<span class="abd-probe-subtitle">${esc(t('mcx.settingsMidiWebHint'))}</span>` : ''}
         </div>
       </div>
     </div>

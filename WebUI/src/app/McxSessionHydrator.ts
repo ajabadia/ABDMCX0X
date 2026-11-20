@@ -7,6 +7,7 @@
 import type { FxRackBridgeAdapter } from '@abdsynths/shared/components';
 import type { McxHostBridge, McxParamKey, McxSessionStateDto } from '../bridge/McxHostBridge';
 import type { McxCatalogItem } from '../ui/McxBankDrawer';
+import { deserializeBankLayoutJson, findPartLocation } from '../ui/McxBankLayout';
 import type { McxPartUiState } from '../ui/McxMixerConsole';
 import type { McxAppState } from './McxAppState';
 
@@ -147,8 +148,13 @@ export function hydrateSessionState(state: McxAppState, dto: McxSessionStateDto)
     const ps = state.partsState[p.index];
     if (!ps) continue;
     Object.assign(ps, {
+      enabled: p.enabled !== undefined ? Boolean(p.enabled) : ps.enabled,
       name: p.name || ps.name, kind: p.kind === 'drum_map' ? 'drum_map' : 'chromatic',
-      midiChannel: p.midiChannel, midiPortIndex: p.midiPortIndex, routeMode: p.routeMode,
+      midiChannel: p.midiChannel, midiPortIndex: p.midiPortIndex,
+      midiInPortIndex: p.midiInPortIndex !== undefined ? p.midiInPortIndex : ps.midiInPortIndex,
+      midiOutDeviceName: p.midiOutDeviceName ?? ps.midiOutDeviceName,
+      midiInDeviceName: p.midiInDeviceName ?? ps.midiInDeviceName,
+      routeMode: p.routeMode,
       mute: p.mute, solo: p.solo, followTranspose: p.followTranspose,
       engineTypeIndex: p.engineTypeIndex, engineTypeId: p.engineTypeId,
       partLevel: p.partLevel, partPan: p.partPan, reverbSend: p.reverbSend, chorusSend: p.chorusSend,
@@ -160,6 +166,12 @@ export function hydrateSessionState(state: McxAppState, dto: McxSessionStateDto)
       lfo1Shape: p.lfo1Shape, lfo1Sync: p.lfo1Sync, lfo1Rate: p.lfo1Rate, lfo1Depth: p.lfo1Depth, lfo1Target: p.lfo1Target,
       lfo2Shape: p.lfo2Shape, lfo2Sync: p.lfo2Sync, lfo2Rate: p.lfo2Rate, lfo2Depth: p.lfo2Depth, lfo2Target: p.lfo2Target,
     });
+  }
+  if (dto.bankLayoutJson) {
+    state.bankLayout = deserializeBankLayoutJson(dto.bankLayoutJson);
+  }
+  if (!findPartLocation(state.bankLayout, state.focusedPart)) {
+    state.focusedPart = state.findFirstPlacedPart(state.bankLayout.activeBank);
   }
   state.refs.rackColumn?.hydrateFromHost(dto.rackJson, dto.sendTargets);
   state.refs.masterPanel?.setVolume(dto.masterGain);

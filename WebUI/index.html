@@ -79,13 +79,22 @@
   <main class="mcx-workspace" id="mcx-workspace">
     <input type="file" id="bank-file-input" accept=".abdbank" hidden />
 
-    <!-- MAIN COLUMN: Horizontal 16-Part Mixer on top, Contextual Tone/Drums on bottom -->
+    <!-- LEFT RAIL: Banks A..H + Add Bank -->
+    <aside class="mcx-panel mcx-bank-rail" id="mcx-bank-rail" aria-label="Banks A-H"></aside>
+
+    <!-- MAIN COLUMN: Horizontal 8-Slot Active Bank Mixer on top, Contextual Tone/Drums on bottom -->
     <section class="mcx-main-col">
-      <!-- TOP: 16-Part Console (Horizontal Rack of 16 Vertical Channel Strips) -->
+      <!-- TOP: Active-Bank 8-Slot Console -->
       <section class="mcx-panel mcx-mixer-panel">
         <div class="mcx-panel-head-row">
-          <div class="mcx-panel-title" data-i18n="mcx.partsTitle">MEZCLADOR 16 PARTES</div>
-          <button type="button" id="mcx-solo-clear-btn" class="mcx-solo-clear-btn" hidden data-i18n="mcx.soloActiveClear">SOLO ACTIVE — CLEAR</button>
+          <div class="mcx-panel-head-left">
+            <span class="mcx-bank-active-pill" id="mcx-active-bank-pill">BANCO A</span>
+            <div class="mcx-panel-title" data-i18n="mcx.partsTitle">MEZCLADOR 8×8 (64 PARTES)</div>
+          </div>
+          <div class="mcx-panel-head-right">
+            <button type="button" id="mcx-unpin-bank-btn" class="mcx-unpin-bank-btn" hidden data-i18n="mcx.bankUnpinAll">Desfijar banco</button>
+            <button type="button" id="mcx-solo-clear-btn" class="mcx-solo-clear-btn" hidden data-i18n="mcx.soloActiveClear">SOLO ACTIVE — CLEAR</button>
+          </div>
         </div>
         <div class="mcx-mixer-console" id="part-list"></div>
       </section>

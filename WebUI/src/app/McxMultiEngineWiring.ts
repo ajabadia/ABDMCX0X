@@ -18,6 +18,7 @@ export function mountMultiEngineUi(
   const routeModal = new McxInstrumentRouteModal({
     bridge,
     getPartState: (idx) => state.partsState[idx],
+    getMidiDevices: () => state.midiDevices,
     onPartUpdated: (idx) => state.notifyPartMetadataChanged(idx),
     onOpenToneDrawer: (idx) => { state.focusPart(idx); state.refs.synthModal?.open(idx); },
     setLcdLine2: state.setLcdLine2,

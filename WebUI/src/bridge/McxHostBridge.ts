@@ -8,6 +8,7 @@ import { webMidiService } from '../midi/McxWebMidiService';
 import {
   parseTelemetryPayload,
   type McxEngineDescriptorDto,
+  type McxMidiDeviceInfoDto,
   type McxMidiDevicesDto,
   type McxPartEngineStateDto,
   type McxPartPresetsDto,
@@ -19,7 +20,7 @@ import { arrayBufferToBase64, readLocalSettingsJson, routeNativeBridgeEvent, rou
 import { WASM_PARAM_ID, type McxParamKey } from './mcxParamIds';
 
 export { WASM_PARAM_ID, type McxParamKey };
-export type { McxTelemetry, McxEngineDescriptorDto, McxMidiDevicesDto, McxPartPresetsDto, McxPartEngineStateDto, McxSessionStateDto, McxSessionPartDto };
+export type { McxTelemetry, McxEngineDescriptorDto, McxMidiDeviceInfoDto, McxMidiDevicesDto, McxPartPresetsDto, McxPartEngineStateDto, McxSessionStateDto, McxSessionPartDto };
 
 export interface McxSystemSettingsDto {
   workingDirectory: string; maxPolyphony: number; masterTuneHz: number; standaloneBpm: number;

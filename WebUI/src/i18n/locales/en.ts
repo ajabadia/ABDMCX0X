@@ -3,13 +3,14 @@
  * English dictionary for ABDMCX0X Groove-Rompler.
  */
 
+import { bankEn } from './bankLocales';
 import { songEn } from './songLocales';
 import { uxEn } from './uxLocales';
 
 export const mcxEn = {
   mcx: {
-    subtitle: '16-Part Modular Groovebox & Multi-Engine Synth',
-    aboutBuildInfo: '16-Part Modular Groovebox · C++20 + JUCE 9 + WASM + ABDShared',
+    subtitle: '64-Part Modular Groovebox & Multi-Engine Synth',
+    aboutBuildInfo: '64-Part Modular Groovebox (8×8 Banks) · C++20 + JUCE 9 + WASM + ABDShared',
     audioIdle: 'Click key to start Audio',
     audioLoading: 'Loading WASM...',
     audioReady: 'Audio Active',
@@ -26,7 +27,7 @@ export const mcxEn = {
     dropBankHint: 'Drop .abdbank file here to load soundbank',
     bankLoaded: 'Bank loaded',
     bankFailed: 'Invalid .abdbank file',
-    partsTitle: '16-PART GROOVE MIXER',
+    partsTitle: '8×8 GROOVE MIXER (64 PARTS)',
     deckTitle: 'TONE & MACRO DECK',
     fxTitle: 'MASTER FX',
     vectorTitle: 'VECTOR 2D MORPH',
@@ -189,5 +190,6 @@ export const mcxEn = {
     transportMetro: 'Metronome',
     ...uxEn,
     ...songEn,
+    ...bankEn,
   },
 };

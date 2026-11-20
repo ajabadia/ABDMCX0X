@@ -6,6 +6,7 @@
 import { DEFAULT_ROMPLER_PRESETS } from './McxEngineCatalogDefaults';
 
 export interface McxPartUiState {
+  enabled?: boolean;
   kind: 'chromatic' | 'drum_map'; midiChannel: number; mute: boolean; solo: boolean;
   followTranspose?: boolean; name?: string; categoryId?: number; thumbnailUri?: string;
   engineTypeIndex?: number; engineTypeId?: string; factoryPresetIndex?: number; arpEnabled?: boolean;
@@ -13,7 +14,8 @@ export interface McxPartUiState {
   cutoffOffset?: number; resonanceOffset?: number; envAttackOffset?: number; envDecayOffset?: number;
   envSustainOffset?: number; envReleaseOffset?: number; vibratoOffset?: number;
   portaEnabled?: boolean; portaTimeMs?: number; portaLegatoOnly?: boolean; routeMode?: number;
-  midiPortIndex?: number; patternSwing?: number; vectorX?: number; vectorY?: number;
+  midiPortIndex?: number; midiInPortIndex?: number; midiOutDeviceName?: string; midiInDeviceName?: string;
+  patternSwing?: number; vectorX?: number; vectorY?: number;
   partLevel?: number; partPan?: number; reverbSend?: number; chorusSend?: number; delaySend?: number; auxSend?: number;
   sendAPre?: boolean; sendBPre?: boolean; sendCPre?: boolean; sendDPre?: boolean; insertSlot?: number;
   filterCutoff?: number; filterResonance?: number; filterModel?: number; filterMode?: number;
@@ -28,16 +30,20 @@ export interface McxPartUiState {
 }
 
 export function createDefaultPartState(i: number): McxPartUiState {
-  const isDrum = i === 9;
-  const presetIdx = isDrum ? 16 : i;
-  const presetName = isDrum ? 'TR-909 Kit' : (DEFAULT_ROMPLER_PRESETS[i]?.name ?? `Sound P${i + 1}`);
+  const isClean = i >= 16;
+  const isDrum = !isClean && i === 9;
+  const presetIdx = isClean ? 0 : (isDrum ? 16 : i);
+  const presetName = isClean ? 'Init Tone' : (isDrum ? 'TR-909 Kit' : (DEFAULT_ROMPLER_PRESETS[i]?.name ?? `Sound P${i + 1}`));
   return {
-    kind: isDrum ? 'drum_map' : 'chromatic', midiChannel: i + 1, mute: false, solo: false,
+    enabled: !isClean,
+    kind: isDrum ? 'drum_map' : 'chromatic', midiChannel: (i % 16) + 1, mute: false, solo: false,
     followTranspose: !isDrum, name: presetName, categoryId: isDrum ? 9 : 3,
     engineTypeIndex: 0, engineTypeId: 'structured_rompler', factoryPresetIndex: presetIdx, arpEnabled: false,
     cutoffOffset: 0, resonanceOffset: 0, envAttackOffset: 0, envDecayOffset: 0,
     envSustainOffset: 0, envReleaseOffset: 0, vibratoOffset: 0,
-    portaEnabled: false, portaTimeMs: 60, portaLegatoOnly: true, routeMode: 0, midiPortIndex: 0, patternSwing: 0.50, vectorX: 0, vectorY: 0, partLevel: 0.85, partPan: 0,
+    portaEnabled: false, portaTimeMs: 60, portaLegatoOnly: true, routeMode: 0,
+    midiPortIndex: 0, midiInPortIndex: isClean ? -1 : 0, midiOutDeviceName: '', midiInDeviceName: '',
+    patternSwing: 0.50, vectorX: 0, vectorY: 0, partLevel: 0.85, partPan: 0,
     reverbSend: 0.28, chorusSend: 0.20, delaySend: 0.0, auxSend: 0.0,
     sendAPre: false, sendBPre: false, sendCPre: false, sendDPre: false,
     filterCutoff: 0.72, filterResonance: 0.18, filterModel: 0, filterMode: 0,

@@ -6,16 +6,15 @@
  */
 
 import { attachDialogDrag, bringToFront } from '@abdsynths/shared/diagnostic-probe';
-import type { McxEngineDescriptorDto, McxHostBridge, McxPartPresetsDto } from '../bridge/McxHostBridge';
+import type { McxEngineDescriptorDto, McxHostBridge, McxMidiDevicesDto, McxPartPresetsDto } from '../bridge/McxHostBridge';
 import { DEFAULT_ENGINE_CATALOG, getFallbackPresetsForEngine } from './McxEngineCatalogDefaults';
 import { buildRouteModalHtml } from './McxInstrumentRouteModalView';
 import type { McxPartUiState } from './McxMixerConsole';
-import { webMidiService } from '../midi/McxWebMidiService';
-
 
 export interface McxInstrumentRouteModalOptions {
   bridge: McxHostBridge;
   getPartState: (idx: number) => McxPartUiState;
+  getMidiDevices?: () => McxMidiDevicesDto;
   onPartUpdated: (idx: number) => void;
   onOpenToneDrawer: (idx: number) => void;
   setLcdLine2: (text: string) => void;
@@ -27,6 +26,7 @@ export class McxInstrumentRouteModal {
   private currentPart = 0;
   private catalog: McxEngineDescriptorDto[] = [...DEFAULT_ENGINE_CATALOG];
   private presetsByPart = new Map<number, McxPartPresetsDto>();
+  private cachedDevices?: McxMidiDevicesDto;
   private readonly onEscKey: (ev: KeyboardEvent) => void;
 
   constructor(opts: McxInstrumentRouteModalOptions) {
@@ -53,7 +53,7 @@ export class McxInstrumentRouteModal {
     this.currentPart = partIdx;
     this.syncTheme();
     this.opts.bridge.requestPartPresets(partIdx);
-    void webMidiService.init().then(() => { if (this.dialog.open) this.render(); });
+    this.opts.bridge.refreshMidiDevices();
     this.render();
     if (!this.dialog.open) {
       if (typeof this.dialog.show === 'function') this.dialog.show();
@@ -61,6 +61,11 @@ export class McxInstrumentRouteModal {
     }
     window.addEventListener('keydown', this.onEscKey);
     bringToFront(this.dialog);
+  }
+
+  public setMidiDevices(dto: McxMidiDevicesDto): void {
+    this.cachedDevices = dto;
+    if (this.dialog.open) this.render();
   }
 
   public close(): void {
@@ -87,11 +92,15 @@ export class McxInstrumentRouteModal {
     if (this.dialog.open && dto.part === this.currentPart) this.render();
   }
 
+  private getDevices(): McxMidiDevicesDto {
+    return this.opts.getMidiDevices?.() ?? this.cachedDevices ?? { isStandalone: !this.opts.bridge.isNative, inputs: [], outputs: [] };
+  }
+
   private render(): void {
     const p = this.currentPart, ps = this.opts.getPartState(p);
     const engIdx = ps.engineTypeIndex ?? ((ps.routeMode ?? 0) === 1 ? 1 : 0);
     const presets = this.presetsByPart.get(p)?.presets ?? getFallbackPresetsForEngine(engIdx);
-    this.dialog.innerHTML = buildRouteModalHtml(p, ps, this.catalog, presets, webMidiService.getOutputs());
+    this.dialog.innerHTML = buildRouteModalHtml(p, ps, this.catalog, presets, this.getDevices());
     const head = this.dialog.querySelector<HTMLElement>('.mcx-route-head');
     if (head) attachDialogDrag(this.dialog, head);
     this.bindEvents(presets);
@@ -147,10 +156,30 @@ export class McxInstrumentRouteModal {
       this.opts.setLcdLine2(`${tag} PRESET: ${ps.name || presetIdx}`);
       this.opts.onPartUpdated(p); this.render();
     });
+    this.dialog.querySelector<HTMLSelectElement>('#mcx-route-in-port')?.addEventListener('change', (ev) => {
+      const portIdx = parseInt((ev.target as HTMLSelectElement).value, 10);
+      const dev = portIdx > 0 ? this.getDevices().inputs.find((d) => d.portIndex === portIdx) : undefined;
+      ps.midiInPortIndex = portIdx;
+      ps.midiInDeviceName = dev?.name ?? '';
+      if (dev && !dev.enabled && b.isNative) b.setMidiDeviceEnabled('input', dev.id, true);
+      b.setPartMidiDevice(p, 'input', portIdx, dev?.name ?? '');
+      this.opts.setLcdLine2(`${tag} MIDI IN: ${dev ? dev.name : portIdx === 0 ? 'DAW' : 'SEQ'}`);
+      this.opts.onPartUpdated(p);
+      this.render();
+    });
     this.dialog.querySelector<HTMLSelectElement>('#mcx-route-port')?.addEventListener('change', (ev) => {
-      const port = parseInt((ev.target as HTMLSelectElement).value, 10);
-      ps.midiPortIndex = port; b.setParam(p, 'partMidiPort', port);
-      this.opts.setLcdLine2(`${tag} MIDI PORT ${port + 1}`);
+      const portIdx = parseInt((ev.target as HTMLSelectElement).value, 10);
+      const dev = portIdx > 0 ? this.getDevices().outputs.find((d) => d.portIndex === portIdx) : undefined;
+      ps.midiPortIndex = portIdx;
+      ps.midiOutDeviceName = dev?.name ?? '';
+      if (dev && !dev.enabled && b.isNative) b.setMidiDeviceEnabled('output', dev.id, true);
+      b.setPartMidiDevice(p, 'output', portIdx, dev?.name ?? '');
+      this.opts.setLcdLine2(`${tag} MIDI OUT: ${dev ? dev.name : 'DAW'}`);
+      this.opts.onPartUpdated(p);
+      this.render();
+    });
+    this.dialog.querySelector('[data-act="refresh-midi"]')?.addEventListener('click', () => {
+      b.refreshMidiDevices();
     });
     this.dialog.querySelector<HTMLSelectElement>('#mcx-route-ch')?.addEventListener('change', (ev) => {
       const ch = parseInt((ev.target as HTMLSelectElement).value, 10);

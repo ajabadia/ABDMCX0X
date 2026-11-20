@@ -3,9 +3,26 @@
  * Centralized UI state container, LCD readout sync, transport state, and mixer callbacks.
  */
 
-import type { McxHostBridge, McxSystemSettingsDto, McxTelemetry } from '../bridge/McxHostBridge';
+import type { McxHostBridge, McxMidiDevicesDto, McxSystemSettingsDto, McxTelemetry } from '../bridge/McxHostBridge';
 import type { MultiBusFxRackModal, GlobalLfoModal, PianoRollModal, GrooveShuffleModal, MpcPadModal, GrooveArpeggiatorModal } from '@abdsynths/shared/components';
 import { t } from '../i18n/mcxI18n';
+import {
+  addBank,
+  addPartInFirstFreeSlot,
+  BANK_LETTERS,
+  createDefaultBankLayout,
+  deletePart,
+  findPartLocation,
+  formatSlotLabel,
+  MAX_PARTS,
+  type McxBankLayoutData,
+  movePart,
+  movePartToBank,
+  serializeBankLayoutJson,
+  togglePin,
+  unpinBank,
+} from '../ui/McxBankLayout';
+import type { McxBankRail } from '../ui/McxBankRail';
 import { renderMixerConsole, createDefaultPartState, type McxMixerCallbacks, type McxPartUiState } from '../ui/McxMixerConsole';
 import type { McxStepStrip } from '../ui/McxStepStrip';
 import type { McxToneDrawer } from '../ui/McxToneDrawer';
@@ -22,7 +39,7 @@ import { createMixerCallbacks } from './McxMixerCallbacksFactory';
 import { syncPianoRollPart } from './McxPianoRollSync';
 
 export interface McxUiRefs {
-  stepStrip?: McxStepStrip | null; toneDrawer?: McxToneDrawer | null;
+  stepStrip?: McxStepStrip | null; bankRail?: McxBankRail | null; toneDrawer?: McxToneDrawer | null;
   songDrawer?: McxSongDrawer | null; sceneBar?: McxSceneBar | null; bankDrawer?: McxBankDrawer | null;
   masterPanel?: McxMasterPanel | null; routeModal?: McxInstrumentRouteModal | null;
   synthModal?: McxSynthModal | null; rackColumn?: McxRackColumn | null;
@@ -38,7 +55,9 @@ export interface McxUiRefs {
 }
 
 export class McxAppState {
-  public readonly partsState: McxPartUiState[] = Array.from({ length: 16 }, (_, i) => createDefaultPartState(i));
+  public readonly partsState: McxPartUiState[] = Array.from({ length: MAX_PARTS }, (_, i) => createDefaultPartState(i));
+  public bankLayout: McxBankLayoutData = createDefaultBankLayout();
+  public midiDevices: McxMidiDevicesDto;
   public focusedPart = 0;
   public globalSettings: McxSystemSettingsDto;
   public refs: McxUiRefs = {};
@@ -47,6 +66,7 @@ export class McxAppState {
 
   constructor(bridge: McxHostBridge) {
     this.bridge = bridge;
+    this.midiDevices = { isStandalone: !bridge.isNative, inputs: [], outputs: [] };
     this.globalSettings = bridge.loadLocalSettingsFallback();
   }
 
@@ -54,8 +74,10 @@ export class McxAppState {
     const ps = this.partsState[this.focusedPart];
     const budget = Math.max(8, Math.min(64, this.globalSettings.maxPolyphony || 64));
     const el = document.getElementById('lcd-line1');
-    if (el) {
-      el.textContent = `GROOVEBOX 16P  |  P${String(this.focusedPart + 1).padStart(2, '0')} (${ps.kind === 'drum_map' ? 'DRM' : 'CHR'}·CH${ps.midiChannel})  |  ${activeVoices}/${budget} ${t('mcx.voices')}  |  ${this.globalSettings.masterTuneHz.toFixed(1)}Hz  |  ${Math.round(this.globalSettings.standaloneBpm)} BPM`;
+    if (el && ps) {
+      const loc = findPartLocation(this.bankLayout, this.focusedPart);
+      const slotPrefix = loc ? `${formatSlotLabel(loc.bankIdx, loc.slotIdx)}·` : '';
+      el.textContent = `GROOVEBOX 64P  |  ${slotPrefix}P${String(this.focusedPart + 1).padStart(2, '0')} (${ps.kind === 'drum_map' ? 'DRM' : 'CHR'}·CH${ps.midiChannel})  |  ${activeVoices}/${budget} ${t('mcx.voices')}  |  ${this.globalSettings.masterTuneHz.toFixed(1)}Hz  |  ${Math.round(this.globalSettings.standaloneBpm)} BPM`;
     }
   }
 
@@ -70,6 +92,7 @@ export class McxAppState {
   }
 
   public refreshPartList(): void {
+    this.refs.bankRail?.render(this.bankLayout, this.partsState);
     const el = document.getElementById('part-list');
     if (el) renderMixerConsole(el, this.getPanelCallbacks(), this.bridge);
     this.refs.stepStrip?.refresh();
@@ -77,7 +100,7 @@ export class McxAppState {
   }
 
   public syncSoloIndicator(): void {
-    const anySolo = this.partsState.some((p) => p.solo);
+    const anySolo = this.partsState.some((p) => p.enabled !== false && p.solo);
     const btn = document.getElementById('mcx-solo-clear-btn');
     if (btn) { btn.hidden = !anySolo; btn.textContent = t('mcx.soloActiveClear'); }
   }
@@ -86,6 +109,126 @@ export class McxAppState {
     this.partsState.forEach((ps, i) => { if (ps.solo) { ps.solo = false; this.bridge.setParam(i, 'partSolo', 0); } });
     this.refreshPartList();
     this.setLcdLine2(t('mcx.allSolosCleared'));
+  }
+
+  public syncBankLayoutToHost(): void {
+    this.bridge.setBankLayout(serializeBankLayoutJson(this.bankLayout));
+  }
+
+  private initAllocatedPart(partId: number, defaultChannel: number): void {
+    this.partsState[partId] = {
+      ...createDefaultPartState(Math.max(16, partId)),
+      enabled: true, midiChannel: defaultChannel, midiInPortIndex: 0, midiPortIndex: 0,
+    };
+    this.bridge.setParam(partId, 'partEnabled', 1);
+    this.bridge.setParam(partId, 'partMidiChannel', defaultChannel);
+    this.bridge.setParam(partId, 'partMidiInPort', 0);
+    this.bridge.setParam(partId, 'partMidiPort', 0);
+    this.bridge.setParam(partId, 'routeMode', 0);
+    this.bridge.setParam(partId, 'partKind', 0);
+    this.bridge.setParam(partId, 'partMute', 0);
+    this.bridge.setParam(partId, 'partSolo', 0);
+    this.bridge.setPartPresetName(partId, 'Init Tone');
+  }
+
+  public findFirstPlacedPart(preferredBank = this.bankLayout.activeBank): number {
+    for (const pid of this.bankLayout.banks[preferredBank] ?? []) { if (pid !== null) return pid; }
+    for (let b = 0; b < this.bankLayout.bankCount; ++b) {
+      for (const pid of this.bankLayout.banks[b]) { if (pid !== null) return pid; }
+    }
+    return 0;
+  }
+
+  public selectBank(bankIdx: number): void {
+    const next = Math.max(0, Math.min(this.bankLayout.bankCount - 1, bankIdx));
+    if (next === this.bankLayout.activeBank) return;
+    this.bankLayout.activeBank = next;
+    this.syncBankLayoutToHost();
+    const curLoc = findPartLocation(this.bankLayout, this.focusedPart);
+    if (!curLoc || curLoc.bankIdx !== next) this.focusPart(this.findFirstPlacedPart(next));
+    else { this.refreshPartList(); this.updateLcdLine1(0); }
+    this.setLcdLine2(`${t('mcx.bankLabel')} ${BANK_LETTERS[next]}`);
+  }
+
+  public addNewBank(): void {
+    const res = addBank(this.bankLayout);
+    if (!res.ok || res.bankIdx === undefined) return;
+    res.allocated.forEach((a) => this.initAllocatedPart(a.partId, a.defaultChannel));
+    this.syncBankLayoutToHost();
+    this.focusPart(res.allocated[0].partId);
+    this.refreshPartList();
+    this.setLcdLine2(`${t('mcx.bankLabel')} ${BANK_LETTERS[res.bankIdx]} ${t('mcx.bankCreated')}`);
+  }
+
+  public addPartAtFirstFreeSlot(bankIdx: number): void {
+    const res = addPartInFirstFreeSlot(this.bankLayout, bankIdx);
+    if (!res.ok || res.partId === undefined || res.slotIdx === undefined || res.defaultChannel === undefined) return;
+    this.initAllocatedPart(res.partId, res.defaultChannel);
+    this.syncBankLayoutToHost();
+    this.focusPart(res.partId);
+    this.refreshPartList();
+    this.setLcdLine2(`${formatSlotLabel(bankIdx, res.slotIdx)} · P${String(res.partId + 1).padStart(2, '0')} ${t('mcx.bankAddPart')}`);
+  }
+
+  public requestDeletePart(bankIdx: number, slotIdx: number, forceUnpin = false): void {
+    const res = deletePart(this.bankLayout, bankIdx, slotIdx, { forceUnpin });
+    if (!res.ok) {
+      if (res.reason === 'last_part') this.setLcdLine2(t('mcx.bankDeleteLastBlocked'));
+      else if (res.reason === 'pinned') this.setLcdLine2(t('mcx.bankMoveBlockedPinned'));
+      return;
+    }
+    if (res.partId !== undefined) {
+      const ps = this.partsState[res.partId];
+      if (ps) { ps.enabled = false; ps.mute = false; ps.solo = false; }
+      this.bridge.setParam(res.partId, 'partEnabled', 0);
+      if (this.focusedPart === res.partId) this.focusedPart = this.findFirstPlacedPart(this.bankLayout.activeBank);
+    }
+    this.syncBankLayoutToHost();
+    this.refreshPartList();
+    this.updateLcdLine1(0);
+    this.setLcdLine2(res.removedBank ? t('mcx.bankRemoved') : t('mcx.bankEmptySlotNotice'));
+  }
+
+  public movePartSlot(fromBank: number, fromSlot: number, toBank: number, toSlot: number): void {
+    const res = toSlot < 0 ? movePartToBank(this.bankLayout, fromBank, fromSlot, toBank) : movePart(this.bankLayout, fromBank, fromSlot, toBank, toSlot);
+    if (!res.ok) {
+      this.setLcdLine2(res.reason === 'overflow_blocked' ? t('mcx.bankMoveOverflowBlocked') : t('mcx.bankMoveBlockedPinned'));
+      return;
+    }
+    this.syncBankLayoutToHost();
+    this.refreshPartList();
+    this.updateLcdLine1(0);
+    const destLabel = formatSlotLabel(res.destBank ?? toBank, res.destSlot ?? Math.max(0, toSlot));
+    if (res.createdBankIdx !== null && res.createdBankIdx !== undefined) {
+      this.setLcdLine2(`${t('mcx.bankMoveOverflowNotice')} ${t('mcx.bankLabel')} ${BANK_LETTERS[res.createdBankIdx]}`);
+    } else if (res.removedEmptyBank) {
+      this.setLcdLine2(`${destLabel} — ${t('mcx.bankRemoved')}`);
+    } else {
+      this.setLcdLine2(`${formatSlotLabel(fromBank, fromSlot)} ${t('mcx.bankMovedNotice')} ${destLabel}`);
+    }
+  }
+
+  public togglePartPin(partId: number): void {
+    const pinned = togglePin(this.bankLayout, partId);
+    this.syncBankLayoutToHost();
+    this.refreshPartList();
+    this.setLcdLine2(`P${String(partId + 1).padStart(2, '0')} ${pinned ? 'PIN ON' : 'PIN OFF'}`);
+  }
+
+  public unpinActiveBank(): void {
+    const count = unpinBank(this.bankLayout, this.bankLayout.activeBank);
+    this.syncBankLayoutToHost();
+    this.refreshPartList();
+    this.setLcdLine2(`${t('mcx.bankLabel')} ${BANK_LETTERS[this.bankLayout.activeBank]}: ${count} ${t('mcx.bankUnpinnedCount')}`);
+  }
+
+  public resetToFactoryLayout(): void {
+    for (let i = 0; i < MAX_PARTS; ++i) this.partsState[i] = createDefaultPartState(i);
+    this.bankLayout = createDefaultBankLayout();
+    this.focusedPart = 0;
+    this.syncBankLayoutToHost();
+    this.refreshPartList();
+    this.updateLcdLine1(0);
   }
 
   public syncPianoRollForPart(idx: number): void {
@@ -116,10 +259,18 @@ export class McxAppState {
   }
 
   public focusPart(idx: number): void {
+    if (!this.partsState[idx]) return;
     this.focusedPart = idx;
+    const loc = findPartLocation(this.bankLayout, idx);
+    if (loc && loc.bankIdx !== this.bankLayout.activeBank) {
+      this.bankLayout.activeBank = loc.bankIdx;
+      this.syncBankLayoutToHost();
+      this.refreshPartList();
+    } else {
+      document.getElementById('part-list')?.querySelectorAll('.mcx-strip').forEach((el) => el.classList.toggle('is-active', el.getAttribute('data-part') === String(idx)));
+      this.refs.stepStrip?.syncFromSequence(idx, this.partsState[idx].sequence);
+    }
     this.updateLcdLine1(0);
-    document.getElementById('part-list')?.querySelectorAll('.mcx-strip').forEach((el, k) => el.classList.toggle('is-active', k === idx));
-    this.refs.stepStrip?.syncFromSequence(idx, this.partsState[idx].sequence);
     if (this.refs.toneDrawer?.isOpen()) this.refs.toneDrawer.syncPart(idx, this.partsState[idx]);
     if (this.refs.padModal?.isOpen()) this.refs.padModal.syncPart(idx, this.partsState[idx]);
     if (this.refs.arpModal?.isOpen()) this.syncArpModalForPart(idx);

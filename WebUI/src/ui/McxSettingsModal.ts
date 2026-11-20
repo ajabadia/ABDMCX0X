@@ -4,7 +4,7 @@
  */
 
 import { attachDialogDrag } from '@abdsynths/shared/diagnostic-probe/DiagnosticProbeI18n.js';
-import type { McxHostBridge, McxSystemSettingsDto } from '../bridge/McxHostBridge';
+import type { McxHostBridge, McxMidiDevicesDto, McxSystemSettingsDto } from '../bridge/McxHostBridge';
 import { buildSettingsModalHtml } from './McxSettingsModalView';
 
 export interface SettingsModalCallbacks {
@@ -17,6 +17,7 @@ export class McxSettingsModal {
   private dialog: HTMLDialogElement;
   private cb: SettingsModalCallbacks;
   private state: McxSystemSettingsDto;
+  private midiDevices: McxMidiDevicesDto = { isStandalone: true, inputs: [], outputs: [] };
   private globalTranspose = 0; private scaleRoot = 0; private scaleType = 0;
 
   constructor(cb: SettingsModalCallbacks) {
@@ -48,10 +49,16 @@ export class McxSettingsModal {
     this.cb.onSettingsApplied(this.getState());
   }
 
+  public setMidiDevices(dto: McxMidiDevicesDto): void {
+    this.midiDevices = dto;
+    if (this.dialog.open) this.render();
+  }
+
   public refreshLocale(): void { this.render(); }
 
   public open(): void {
     this.syncTheme();
+    this.cb.bridge.refreshMidiDevices();
     this.render();
     if (!this.dialog.open) this.dialog.show();
   }
@@ -69,7 +76,7 @@ export class McxSettingsModal {
   private render(): void {
     const sr = Math.round(this.cb.bridge.getSampleRate());
     this.dialog.innerHTML = buildSettingsModalHtml(
-      this.state, sr, this.cb.bridge.isNative, this.globalTranspose, this.scaleRoot, this.scaleType,
+      this.state, sr, this.cb.bridge.isNative, this.globalTranspose, this.scaleRoot, this.scaleType, this.midiDevices,
     );
 
     attachDialogDrag(this.dialog, this.dialog.querySelector('.abd-probe-header'));
@@ -129,6 +136,17 @@ export class McxSettingsModal {
       this.scaleType = parseInt(scaleType.value, 10);
       this.cb.bridge.setParam(0, 'globalScale', this.scaleType);
       this.cb.bridge.setParam(0, 'globalScaleQuantize', this.scaleType > 0 ? 1 : 0);
+    });
+
+    this.dialog.querySelector('#btn-refresh-midi')?.addEventListener('click', () => {
+      this.cb.bridge.refreshMidiDevices();
+    });
+    this.dialog.querySelectorAll<HTMLInputElement>('input[data-midi-dir]').forEach((inp) => {
+      inp.addEventListener('change', () => {
+        const dir = inp.dataset.midiDir === 'output' ? 'output' : 'input';
+        const id = inp.dataset.midiId ?? '';
+        if (id) this.cb.bridge.setMidiDeviceEnabled(dir, id, inp.checked);
+      });
     });
   }
 }

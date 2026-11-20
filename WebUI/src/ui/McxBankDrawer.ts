@@ -23,6 +23,7 @@ export interface McxCatalogItem {
 export interface McxBankDrawerCallbacks {
   getTargetPart: () => number;
   setTargetPart: (idx: number) => void;
+  getPlacedParts?: () => Array<{ partId: number; label: string }>;
   onSelectModel: (partIdx: number, item: McxCatalogItem) => void;
   onSelectPartPreset: (partIdx: number, item: McxCatalogItem) => void;
   onSelectMultiPreset: (item: McxCatalogItem) => void;
@@ -46,7 +47,7 @@ export class McxBankDrawer {
   private initShell(): void {
     this.shell = createBankShell({
       title: 'ABDMCX0X BANK MANAGER',
-      badge: '16 PARTS',
+      badge: '64 PARTS',
       tabs: [
         { id: 'models', label: t('mcx.bankTabModels'), iconHtml: BANK_ICONS.database },
         { id: 'parts', label: t('mcx.bankTabParts'), iconHtml: BANK_ICONS.sliders },
@@ -81,11 +82,13 @@ export class McxBankDrawer {
 
   private renderToolbar(): void {
     const targetPart = this.cb.getTargetPart();
+    const partOpts = this.cb.getPlacedParts?.()
+      ?? Array.from({ length: 16 }, (_, i) => ({ partId: i, label: `PART ${String(i + 1).padStart(2, '0')}` }));
     this.shell.toolbarEl.innerHTML = `
       <div class="mcx-bank-target-bar">
         <span class="mcx-bank-target-label">${t('mcx.destination')}</span>
         <select class="mcx-bank-part-select" id="mcx-bank-part-select">
-          ${Array.from({ length: 16 }, (_, i) => `<option value="${i}"${i === targetPart ? ' selected' : ''}>PART ${String(i + 1).padStart(2, '0')}</option>`).join('')}
+          ${partOpts.map((o) => `<option value="${o.partId}"${o.partId === targetPart ? ' selected' : ''}>${o.label}</option>`).join('')}
         </select>
         <button type="button" class="btn btn-xs ${this.state.favoritesOnly ? 'btn-warning' : 'btn-outline'}" id="mcx-bank-favs-btn" title="${t('mcx.filterFavorites')}">
           ${BANK_ICONS.starFilled} ${t('mcx.favs')}

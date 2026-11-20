@@ -115,12 +115,18 @@ export function mountSongAndScenesUi(bridge: McxHostBridge, state: McxAppState):
     }
     if (tel.sceneApplySeq && tel.sceneApplySeq !== lastApplySeq) {
       lastApplySeq = tel.sceneApplySeq;
-      if (tel.appliedMuteMask !== undefined) {
+      if (tel.appliedMuteMask64 && tel.appliedMuteMask64.length >= 4) {
+        for (let p = 0; p < state.partsState.length; ++p) {
+          const word = tel.appliedMuteMask64[Math.floor(p / 16)] ?? 0;
+          state.partsState[p].mute = ((word & (1 << (p % 16))) !== 0);
+        }
+        state.refreshPartList();
+      } else if (tel.appliedMuteMask !== undefined) {
         for (let p = 0; p < 16; ++p) state.partsState[p].mute = ((tel.appliedMuteMask & (1 << p)) !== 0);
         state.refreshPartList();
-        if (state.refs.toneDrawer?.isOpen()) state.refs.toneDrawer.syncPart(state.focusedPart, state.partsState[state.focusedPart]);
-        if (state.refs.padModal?.isOpen()) state.refs.padModal.syncPart(state.focusedPart, state.partsState[state.focusedPart]);
       }
+      if (state.refs.toneDrawer?.isOpen()) state.refs.toneDrawer.syncPart(state.focusedPart, state.partsState[state.focusedPart]);
+      if (state.refs.padModal?.isOpen()) state.refs.padModal.syncPart(state.focusedPart, state.partsState[state.focusedPart]);
       const scName = songState.scenes[songState.activeScene]?.name ?? `S${songState.activeScene + 1}`;
       const tr = tel.appliedTranspose ?? 0;
       state.setLcdLine2(`SCENE S${songState.activeScene + 1} (${scName}) · TR ${tr >= 0 ? '+' : ''}${tr} st`);

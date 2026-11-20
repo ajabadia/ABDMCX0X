@@ -114,7 +114,9 @@ export function bindTelemetry(bridge: McxHostBridge, state: McxAppState, scopeVi
 
     const strips = document.getElementById('part-list');
     if (strips && (tel.partPeaks || tel.partMidiPeaks)) {
-      for (let i = 0; i < 16; ++i) {
+      const activeRow = state.bankLayout.banks[state.bankLayout.activeBank] ?? [];
+      for (const i of activeRow) {
+        if (i === null) continue;
         const routeMode = state.partsState[i]?.routeMode ?? 0;
         const audioPk = tel.partPeaks?.[i] ?? 0;
         const midiPk = tel.partMidiPeaks?.[i] ?? 0;
@@ -128,6 +130,7 @@ export function bindTelemetry(bridge: McxHostBridge, state: McxAppState, scopeVi
         }
       }
     }
+    state.refs.bankRail?.updateActivity(state.bankLayout, tel.partPeaks, tel.partMidiPeaks);
 
     const lfo1 = tel.lfoPhase ?? 0, lfo2 = tel.lfo2Phase ?? 0;
     if (state.refs.toneDrawer?.isOpen()) {

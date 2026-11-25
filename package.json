@@ -8,6 +8,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "generate:registry": "node Scripts/registry_generator.js",
+    "generate:sc55-bank": "python Scripts/extract_and_build_sc55_bank.py",
+    "generate:sc55-mkii": "python Scripts/extract_and_build_sc55_bank.py --mkii --bank WebUI/public/banks/Roland_SC55_MKII_GM.abdbank",
+    "generate:roland-drums": "python Scripts/build_roland_phase1_banks.py",
+    "generate:rm1x": "python Scripts/build_yamaha_rm1x_bank.py",
+    "generate:d50": "python Scripts/extract_and_build_d50_bank.py",
     "test": "vitest run"
   },
   "dependencies": {

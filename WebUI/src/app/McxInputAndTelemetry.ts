@@ -50,6 +50,7 @@ export function bindGlobalShortcuts(state: McxAppState): void {
       n: () => state.refs.onNewProject?.(),
       f: () => state.refs.fxRackModal?.toggle(), l: () => state.refs.globalLfoModal?.toggle(),
       p: () => { state.syncPianoRollForPart(state.focusedPart); state.refs.pianoRollModal?.toggle(); },
+      k: () => state.refs.performanceModal?.toggle(),
       g: () => state.refs.grooveModal?.open(-1), m: () => state.refs.toggleSongDrawer?.(),
       e: () => state.refs.onOpenExport?.(),
       s: () => state.refs.onSavePreset?.(ev.shiftKey), o: () => state.refs.onOpenBankFile?.(),
@@ -105,6 +106,7 @@ export function bindTelemetry(bridge: McxHostBridge, state: McxAppState, scopeVi
     state.refs.onSongTelemetry?.(tel);
     state.refs.masterPanel?.updateMeter(tel.peakL, tel.peakR);
     state.refs.synthModal?.updateTelemetry?.(tel);
+    state.refs.performanceModal?.onTelemetryTick(tel.seqTick ?? 0, Boolean(tel.seqPlaying), tel.seqTotalTicks ?? 384);
 
     if (tel.seqPlaying !== undefined) {
       const playing = Boolean(tel.seqPlaying);

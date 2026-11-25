@@ -13,7 +13,13 @@ import { webMidiService } from '../midi/McxWebMidiService';
 import type { McxAppState } from './McxAppState';
 import { createMidiLearnAutoDetector } from './McxMidiLearnAutoDetect';
 
-interface LearnParamDef { index: number; key: McxParamKey | 'masterVolume'; name: string; group: string; min: number; max: number; }
+interface LearnParamDef { index: number; key: string; name: string; group: string; min: number; max: number; }
+
+const PERF_LEARN_PARAMS: LearnParamDef[] = [
+  ...Array.from({ length: 10 }, (_, i) => ({ index: 910 + i, key: `perf.macro.${i + 1}`, name: `Perf Macro ${i + 1}`, group: 'Performance', min: 0, max: 1 })),
+  { index: 920, key: 'perf.xy.x', name: 'Perf XY Pad X', group: 'Performance', min: 0, max: 1 },
+  { index: 921, key: 'perf.xy.y', name: 'Perf XY Pad Y', group: 'Performance', min: 0, max: 1 },
+];
 
 const LEARNABLE_PARAMS: LearnParamDef[] = [
   { index: 6, key: 'partLevel', name: 'Part Level', group: 'Mixer', min: 0, max: 1 },
@@ -37,6 +43,7 @@ const LEARNABLE_PARAMS: LearnParamDef[] = [
   { index: 78, key: 'lfo2Rate', name: 'LFO 2 Rate', group: 'LFO', min: 0, max: 1 },
   { index: 80, key: 'lfo2Depth', name: 'LFO 2 Depth', group: 'LFO', min: 0, max: 1 },
   { index: 900, key: 'masterVolume', name: 'Master Volume', group: 'Master', min: 0, max: 1 },
+  ...PERF_LEARN_PARAMS,
 ];
 
 export function mountMidiLearnWiring(bridge: McxHostBridge, state: McxAppState) {
@@ -54,13 +61,17 @@ export function mountMidiLearnWiring(bridge: McxHostBridge, state: McxAppState) 
         state.refs.masterPanel?.setVolume(normValue);
         return;
       }
+      if (targetKey?.startsWith('perf.')) {
+        state.refs.performanceModal?.applyExternalMidiTarget(targetKey, normValue);
+        return;
+      }
       const p = byIdx.get(targetIndex) || byKey.get(targetKey);
       if (!p || p.key === 'masterVolume') return;
       const val = p.min + normValue * (p.max - p.min);
       const partIdx = state.focusedPart;
       if (state.partsState[partIdx]) (state.partsState[partIdx] as any)[p.key] = val;
-      bridge.setParam(partIdx, p.key, val);
-      state.refs.toneDrawer?.updateParamLive?.(p.key, val);
+      bridge.setParam(partIdx, p.key as McxParamKey, val);
+      state.refs.toneDrawer?.updateParamLive?.(p.key as McxParamKey, val);
     },
   });
 

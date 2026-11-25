@@ -95,6 +95,7 @@ function initApp(): void {
     onOpenFxRack: () => modals.fxRackModal.toggle(), onOpenGlobalLfo: () => modals.globalLfoModal.toggle(),
     onOpenPianoRoll: () => { state.syncPianoRollForPart(state.focusedPart); modals.pianoRollModal.toggle(); },
     onOpenGroove: () => modals.grooveModal.open(-1), onOpenSong: () => state.refs.toggleSongDrawer?.(),
+    onOpenPerformance: () => state.refs.performanceModal?.toggle(),
   }) : null;
   const dropZone = byId('mcx-workspace') || document.body;
   if (fileInput) wireBankDropZone(dropZone, fileInput, bridge, state.setLcdLine2, (items) => bankDrawer.setLibraryItems(items));

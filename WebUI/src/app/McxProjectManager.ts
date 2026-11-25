@@ -8,6 +8,7 @@ import type { McxHostBridge } from '../bridge/McxHostBridge';
 import { deserializeBankLayoutJson, serializeBankLayoutJson } from '../ui/McxBankLayout';
 import type { McxPartUiState } from '../ui/McxPartState';
 import type { McxAppState } from './McxAppState';
+import { deserializeProjectPerformanceMaps, serializeProjectPerformanceMaps, type PerformanceMapState } from '@abdsynths/shared/components/performance-map';
 
 export { applyStarterTemplate, resetToEmptyProject } from './McxProjectTemplates';
 
@@ -28,6 +29,7 @@ export interface McxProjectDto {
   parts: McxPartUiState[];
   rackJson?: string;
   songState?: any;
+  performanceMaps?: Record<string, PerformanceMapState>;
 }
 
 export function getRecentProjectsList(): RecentProjectEntry[] {
@@ -64,6 +66,7 @@ export function exportProjectJson(state: McxAppState, projectName = 'ABDMCX0X Pr
     bankLayoutJson: serializeBankLayoutJson(state.bankLayout),
     parts: state.partsState,
     songState: state.refs.getSongState?.() ?? null,
+    performanceMaps: serializeProjectPerformanceMaps(state.performanceMaps),
   };
   return JSON.stringify(dto, null, 2);
 }
@@ -86,6 +89,7 @@ export function importProjectJson(state: McxAppState, bridge: McxHostBridge, raw
       state.bankLayout = deserializeBankLayoutJson(dto.bankLayoutJson);
       state.syncBankLayoutToHost();
     }
+    state.performanceMaps = deserializeProjectPerformanceMaps(dto.performanceMaps);
 
     for (let i = 0; i < state.partsState.length && i < dto.parts.length; ++i) {
       const src = dto.parts[i];
@@ -99,6 +103,7 @@ export function importProjectJson(state: McxAppState, bridge: McxHostBridge, raw
 
     state.refreshPartList();
     state.updateLcdLine1(0);
+    state.refs.performanceModal?.syncFromAppState();
     const projName = dto.name || 'Project';
     recordRecentProject(projName, state.globalSettings.standaloneBpm);
     state.setLcdLine2(`PROJECT LOADED: ${projName}`);

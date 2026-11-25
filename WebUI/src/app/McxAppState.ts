@@ -47,6 +47,8 @@ import type { McxSynthModal } from '../ui/McxSynthModal';
 import type { McxRackColumn } from '../ui/McxRackColumn';
 import type { McxGlobalDrawer } from '../ui/McxGlobalDrawer';
 import type { McxSettingsModal } from '../ui/McxSettingsModal';
+import type { McxPerformanceModal } from '../ui/McxPerformanceModal';
+import type { PerformanceMapState } from '@abdsynths/shared/components/performance-map';
 import { createMixerCallbacks } from './McxMixerCallbacksFactory';
 import type { McxLiveTransposeHandle } from './McxLiveTranspose';
 import { syncPianoRollPart } from './McxPianoRollSync';
@@ -60,6 +62,7 @@ export interface McxUiRefs {
   fxRackModal?: MultiBusFxRackModal | null; globalLfoModal?: GlobalLfoModal | null;
   pianoRollModal?: PianoRollModal | null; grooveModal?: GrooveShuffleModal | null;
   padModal?: MpcPadModal | null; arpModal?: GrooveArpeggiatorModal | null;
+  performanceModal?: McxPerformanceModal | null;
   keyboard?: {
     setPlayableNotes(notes: number[] | null): void; setScaleFilter?(type: string | null, root?: number): void;
     disableScaleFilter?(): void; setScaleSnapMode?(mode: 'block' | 'snap' | 'highlight'): void;
@@ -85,6 +88,7 @@ export interface McxUiRefs {
 export class McxAppState {
   public readonly partsState: McxPartUiState[] = Array.from({ length: MAX_PARTS }, (_, i) => createDefaultPartState(i));
   public bankLayout: McxBankLayoutData = createDefaultBankLayout();
+  public performanceMaps: Record<string, PerformanceMapState> = {};
   public midiDevices: McxMidiDevicesDto;
   public focusedPart = 0;
   public isRecording = false;
@@ -203,6 +207,7 @@ export class McxAppState {
     if (this.refs.arpModal?.isOpen()) this.syncArpModalForPart(idx);
     if (this.refs.pianoRollModal?.isOpen() || this.isRecording) this.syncPianoRollForPart(idx);
     if (this.refs.synthModal?.isOpen()) this.refs.synthModal.open(idx);
+    if (this.refs.performanceModal?.isOpen()) this.refs.performanceModal.syncFromAppState();
   }
 
   public setSequencerRecording(rec: boolean): void {
@@ -464,6 +469,7 @@ export class McxAppState {
   public resetToFactoryLayout(): void {
     for (let i = 0; i < MAX_PARTS; ++i) this.partsState[i] = createDefaultPartState(i);
     this.bankLayout = createDefaultBankLayout();
+    this.performanceMaps = {};
     this.clearPreSoloMemory();
     this.bridge.clearLocalBankLayoutFallback?.();
     this.focusedPart = 0;
@@ -531,6 +537,7 @@ export class McxAppState {
     if (this.refs.arpModal?.isOpen() && this.refs.arpModal.getPart() === idx) this.syncArpModalForPart(idx);
     if (this.refs.pianoRollModal?.isOpen() && this.focusedPart === idx) this.syncPianoRollForPart(idx);
     if (this.focusedPart === idx) this.syncFocusedKeyboardPlayableNotes();
+    if (this.refs.performanceModal?.isOpen()) this.refs.performanceModal.syncFromAppState();
     this.refs.bankDrawer?.syncToolbar();
   }
 

@@ -70,6 +70,7 @@ export function buildMcxNavbarMenus() {
         { id: 304, label: 'Master Groove & Shuffle...', labelEs: 'Groove y Shuffle Maestro...', action: 'openGroove', shortcut: 'Ctrl+G' },
         { id: 305, label: 'Song Mode & Live Scenes...', labelEs: 'Modo Canción y Escenas...', action: 'openSong', shortcut: 'Ctrl+M' },
         { id: 306, label: 'MIDI Learn Matrix...', labelEs: 'Matriz MIDI Learn...', action: 'openMidiLearn' },
+        { id: 307, label: 'Performance Deck...', labelEs: 'Superficie Performance...', action: 'openPerformance', shortcut: 'Ctrl+K' },
         { id: 301, label: '440 Hz Signal Probe...', labelEs: 'Sonda de Señal 440 Hz...', action: 'toggleProbe', shortcut: 'Ctrl+4' },
       ],
     },

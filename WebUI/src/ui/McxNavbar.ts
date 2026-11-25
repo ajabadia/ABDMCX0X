@@ -20,7 +20,7 @@ export interface McxNavbarCallbacks {
   onFactoryReset: () => void; onPanic: () => void; onEnableAudio: () => void; onToggleProbe: () => void;
   onOpenFxRack?: () => void; onOpenGlobalLfo?: () => void; onOpenPianoRoll?: () => void;
   onOpenGroove?: () => void; onOpenSong?: () => void; onOpenExport?: () => void; onOpenMidiLearn?: () => void;
-  onSelectTab?: (tab: 'tone' | 'drums') => void;
+  onOpenPerformance?: () => void; onSelectTab?: (tab: 'tone' | 'drums') => void;
 }
 
 export class McxNavbar {
@@ -51,8 +51,10 @@ export class McxNavbar {
         <button type="button" class="mcx-nav-hist-btn" id="mcx-btn-redo" title="Rehacer (Ctrl+Y)" disabled>↷</button>
         <button type="button" class="mcx-nav-hist-btn" id="mcx-btn-compare" title="Comparar A/B (Ctrl+Shift+B)">A</button>
       </span>
+      <button type="button" class="mcx-nav-perf-btn" id="mcx-btn-perf" title="Performance Deck (Ctrl+K)">PERF</button>
       <button type="button" class="mcx-btn mcx-btn--audio" id="btn-audio"></button>
     `;
+    slot.querySelector('#mcx-btn-perf')?.addEventListener('click', () => this.cb.onOpenPerformance?.());
     slot.querySelector('#mcx-btn-undo')?.addEventListener('click', () => this.cb.onUndo?.());
     slot.querySelector('#mcx-btn-redo')?.addEventListener('click', () => this.cb.onRedo?.());
     slot.querySelector('#mcx-btn-compare')?.addEventListener('click', () => this.cb.onToggleCompare?.());
@@ -77,7 +79,7 @@ export class McxNavbar {
         openFxRack: () => this.cb.onOpenFxRack?.(), openGlobalLfo: () => this.cb.onOpenGlobalLfo?.(),
         openPianoRoll: () => this.cb.onOpenPianoRoll?.(), openGroove: () => this.cb.onOpenGroove?.(),
         openSong: () => this.cb.onOpenSong?.(), openExport: () => this.cb.onOpenExport?.(),
-        openMidiLearn: () => this.cb.onOpenMidiLearn?.(), toggleProbe: () => this.cb.onToggleProbe(),
+        openMidiLearn: () => this.cb.onOpenMidiLearn?.(), openPerformance: () => this.cb.onOpenPerformance?.(), toggleProbe: () => this.cb.onToggleProbe(),
       };
       if (action === 'locale' && (value === 'es' || value === 'en')) setLocale(value);
       else if (action === 'tab' && (value === 'tone' || value === 'drums')) this.cb.onSelectTab?.(value);

@@ -1,3 +1,4 @@
+#include "../Source/Core/McxPadLayerSelector.h"
 #include "Core/McxMidiLearnDiskLibrary.h"
 #include "DSP/Core/McxEngine.h"
 #include "Sequencer/McxSongAndScenes.h"
@@ -105,6 +106,67 @@ int main()
         check(stillAudibleMidBar && e.bankLayout().isBankMuted(0)
                   && qmTel.queuedBankMuteMask == 0u && (qmTel.appliedBankMuteMask & 1u) != 0u,
               "T3: Bar-quantized bank mute defers until bar boundary and updates bankMuteMask cleanly");
+    }
+
+    // T4: Drum pad layers route the internal voice; untouched pads keep their original note.
+    {
+        struct Recorder final : abd::engines::ISoundEngine {
+            int notes[16] {}; int count = 0; int offNote = -1;
+            void prepare(double, int) noexcept override {}
+            void reset() noexcept override {}
+            const char* getEngineTypeId() const noexcept override { return "test.drumrec"; }
+            const char* getEngineDisplayName() const noexcept override { return "Drum Recorder"; }
+            bool supportsDrumMode() const noexcept override { return true; }
+            const abd::engines::EngineControlInputDescriptor* getControlInputDescriptors(std::size_t& n) const noexcept override { n = 0; return nullptr; }
+            void setControlInputs(const float*, std::size_t) noexcept override {}
+            void clearControlInputs() noexcept override {}
+            void setTransportContext(const abd::engines::EngineTransportContext&) noexcept override {}
+            void noteOn(int note, float, float) noexcept override { if (count < 16) notes[count++] = note; }
+            void noteOff(int note) noexcept override { offNote = note; }
+            void allNotesOff() noexcept override {}
+            bool renderBlock(float*, float*, int) noexcept override { return false; }
+        };
+
+        auto mk = [](std::uint8_t lo, std::uint8_t hi, std::uint8_t slot, McxPadPlayMode mode) {
+            McxPadLayer l {}; l.velMin = lo; l.velMax = hi; l.sampleSlot = slot; l.playMode = mode; return l;
+        };
+        McxEngine e;
+        e.prepare(44100.0);
+        Recorder rec;
+        e.setPartSoundEngine(0, &rec);
+        e.setPartKind(0, McxPartKind::DrumMap);
+
+        McxPadLayerConfig zones {};
+        zones.layerCount = 2;
+        zones.layers[0] = mk(0, 63, 38, McxPadPlayMode::VelocityZone);
+        zones.layers[1] = mk(64, 127, 40, McxPadPlayMode::VelocityZone);
+        McxPadLayerConfig rr {};
+        rr.layerCount = 2;
+        rr.layers[0] = mk(0, 127, 42, McxPadPlayMode::RoundRobin);
+        rr.layers[1] = mk(0, 127, 44, McxPadPlayMode::RoundRobin);
+        e.setPartPadLayerConfig(0, 0, zones);
+        e.setPartPadLayerConfig(0, 1, rr);
+
+        e.triggerPartNoteOn(0, 36, 0.3f);  // GM pad 0, soft zone
+        e.triggerPartNoteOn(0, 36, 0.9f);  // GM pad 0, loud zone
+        e.triggerPartNoteOn(0, 0, 0.9f);   // raw pad 0, loud zone
+        e.triggerPartNoteOn(0, 37, 0.8f);  // GM pad 1, RR hit 1
+        e.triggerPartNoteOn(0, 37, 0.8f);  // GM pad 1, RR hit 2
+        e.triggerPartNoteOn(0, 39, 0.8f);  // GM pad 3, no layers
+
+        const bool routed = rec.count == 6 && rec.notes[0] == 38 && rec.notes[1] == 40
+            && rec.notes[2] == 40 && rec.notes[3] == 42 && rec.notes[4] == 44 && rec.notes[5] == 39;
+        check(routed, "T4a: Velocity zones, raw pad indices and round robin select the expected drum slot/note");
+        check(e.part(0).padRrCounters[0] == 0 && e.part(0).padRrCounters[1] == 2
+              && e.part(0).padLayerRng == 0xA5A51234u,
+              "T4b: Layer counters advance only on the matching mode; empty layers preserve the note");
+        check(e.getPartPadLayerConfig(0, 0).layers[1].sampleSlot == 40
+              && e.getPartPadLayerConfig(0, 0).layerCount == 2
+              && e.getPartPadLayerConfig(-1, 0).layerCount == 0
+              && e.getPartPadLayerConfig(0, 99).layerCount == 0,
+              "T4c: Pad layer config accessors copy the config and guard out-of-range indices");
+        e.releasePartNoteOff(0, 36);
+        check(rec.offNote == 40, "T4d: Note-off releases the layer-resolved note held in the latch");
     }
 
     std::printf("Phase 15 Tests: %d passed, %d failed\n", gPassed, gFailed);

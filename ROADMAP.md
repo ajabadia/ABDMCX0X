@@ -213,12 +213,12 @@
 - [x] **Extracción de Nuke Aséptico Universal a `ABDShared` (`PerformanceDeck`):**
   - Creado `ABDShared/Components/PerformanceDeck/` (`performanceDeck.js`, `.css`, `.d.ts`) y exportado en `@abdsynths/shared/components`.
   - Panel deslizante superior aséptico que no solapa con el teclado inferior: Joystick 2D con grabación de movimiento (`TrajectoryStick2D`), 4 macros, 6 controladores físicos y selector de polifonía.
-- [ ] **Integración del Nuke Aséptico (`PerformanceDeck`) en `ABDMCX0X`:**
-  - Instanciar `PerformanceDeck` desde `@abdsynths/shared/components` como cajón superior ("Groove & Performance Deck") accesible desde la barra superior (`PERF / NUKE`).
-  - Conectar sus 4 perillas Macro a los controles globales/rápidos de la Groovebox (Macro 1: Master Cutoff, Macro 2: Master Resonancia, Macro 3: Env Speed / Decay, Macro 4: Vector Mix).
-  - Conectar el Joystick Vectorial 2D central (`TrajectoryStick2D`) al plano de Morphing de parciales de la parte activa, con **grabación de movimiento en vivo (Motion Recording)** y playback en bucle con estela SVG (sincronizado con `StickPlayer.h` en C++).
-  - Conectar la hilera de 6 controladores de expresión física (Pitch Bend, Mod Wheel, Aftertouch, Breath, Foot, Expression) con sus potenciómetros de profundidad bipolar a los parámetros de interpretación y modulación de la parte seleccionada.
-  - Conectar el selector de límite de polifonía de voces a `McxEngine::setMaxPolyphony` y telemetría de voces.
+- [ ] **Integración del Nuke Aséptico (`PerformanceDeck`) en `ABDMCX0X` — Ver especificación aprobada en [`DOCS/PERFORMANCE_DECK_SPEC.md`](DOCS/PERFORMANCE_DECK_SPEC.md):**
+  - Evolucionar `PerformanceDeck` en `ABDShared/Components/PerformanceDeck/` (módulos `< 200` líneas, `0` `#hex`) a una superficie universal aséptica con **10 knobs asépticos** (4 principales + 6 secundarios) + **Joystick XY (`TrajectoryStick2D`)**, soportando `layout: 'overlay'` (para recablear `ABDAxionikVS/WebUI/src/ui/NukeDrawer.ts`) y `layout: 'modeless'` (modal no bloqueante en `ABDMCX0X` con cabecera tintada por Banco + insignia de motor + `FOLLOW / PIN Pxx`).
+  - Extender `parameter_dictionary.schema.json` (CDD v2.0) con `"performanceDeck"`, `shortName`, `automatable` y `automationInterp` + *fallback* automático por `semanticRole` y catálogo *browser-safe*. Slots sobrantes deshabilitados automáticamente y tira fija de Pista/Mixer (`footerSlot`) exclusiva de `ABDMCX0X`.
+  - Modo **`EDIT` inline** (desplegable desde contrato + `LEARN` tocando `McxSynthModal` + `ON/OFF` + `Min/Max/Invert`), persistencia en 4 capas (Contrato → Default usuario por motor → `.mcxprj` por pista → Presets `.abdperf.json` + Importar desde `.mcxprj`) y MIDI Learn universal (`perf.macro.1..10`, `perf.xy.x`, `perf.xy.y`).
+  - Grabación/reproducción de movimiento por `paramId` real en `McxPatternSequencer` (`TOUCH`/`LATCH`) sin saltos (`Override + ↺ RE-ENABLE AUTO`, `Auto-Return` en vivo y Takeover MIDI `SCALE` / `PICK-UP` / `JUMP` + suavizado DSP RT-safe).
+- [ ] **Documentación de integración de PerformanceDeck (`ABDShared/docs/INTEGRACION_PERFORMANCE_DECK.md` + `README.md`):** guía oficial paso a paso para enchufar el Nuke aséptico en cualquier sinte de la suite (contrato CDD v2.0, modo overlay/modeless, EDIT/LEARN, presets y automatización sin saltos).
 
 ### Bloque 4 — Secuenciador / Matriz de 16 Pasos (Estilo Groovebox MC-303), Pianola y Transporte
 - [x] **Motor C++20 y Contrato de Patrón Universal en `ABDShared` (`PatternSequencerEngine.h` & `abd_pattern.schema.json`):**
@@ -239,9 +239,8 @@
   - Botones con LEDs de paso (`step-led`), modos `TR-REC` (Drum/Cromático), `ACCENT`, `SLIDE / GLIDE` y cabezal *chaser* en vivo.
   - Selección de parte activa mediante selector instantáneo y edición rápida de notas por paso.
 - [x] **Transporte extendido en `CompactTransportBar` + C++20:** ubicado centrado en `McxNavbar` (`mode: 'navbar'`, `compact-transport-navbar.css`), liberando Rack 19'' y Master como dos columnas laterales de alto completo colapsables independientemente (`McxNavbarAndSideCols.test.ts`). Incluye `RTZ`, `Rew`/`FF` por compás, `Play`, `Pause`, `Stop`, `Record` (*Overdub/Replace*), `Loop`, `Metrónomo`, `Count-in (0..2 compases)` y edición inline de BPM. *(Pendiente futura opcional: `Tap Tempo` dedicado y sincronización `Host Sync` VST3 vs `Internal`).*
-- [ ] **Utilidades MIDI de Inserción por Parte:**
-  - [x] **Note Repeat / Roll**, **Pad Perform** (`CHORDS` tríadas diatónicas), **16 Levels** (`VEL|TUNE`) y **MPC Swing (`50..75 %`) + Humanize**.
-  - [ ] Pendiente futura: `GrooveArpeggiator`, modos `16 Levels` (`Cutoff/Decay/Attack`) y volcado (*print*) directo de Arp/Acordes al Piano Roll.
+- [x] **Utilidades MIDI de Inserción por Parte:**
+  - [x] **Note Repeat / Roll**, **Pad Perform** (`CHORDS` tríadas diatónicas), **16 Levels** (`VEL | TUNE | CUT | DEC | ATT` vía `onPadParamPreview`), **MPC Swing (`50..75 %`) + Humanize**, **`GrooveArpeggiator`** y volcado directo **`Print -> SEQ`** de Arp y Acordes al Piano Roll (`McxPrintArpToPattern.ts` + `McxPrintPatternWiring.ts` + `GrooveArpeggiatorModal.js` + `McxMidiModalsFactory.ts`).
 - [ ] **Estudio e Integración de Bancos Sliced (Loops tipo REX2 / Recycle):**
   - Análisis de contenedores y bancos de sonido con samples troceados por transitorios/slices.
   - Reproducción sincronizada al tempo sin timestretching destructivo mediante secuencia MIDI/trigger interna por defecto asociada al loop.
@@ -257,7 +256,7 @@
     - Edición, audición y re-ordenación de slices en el Piano Roll (`drum` / slice grid).
   - [x] **Importación y Exportación de Secuencias (`.abdseq` / JSON):**
     - [x] Exportar secuencias a descarga de navegador en formato JSON `.abdseq` y carga mediante selector/drag-drop en `PianoRollModal`.
-    - [ ] Persistencia directa en `<WorkingDir>/Sequences/` desde el explorador del instrumento.
+    - [x] Persistencia directa en `<WorkingDir>/Sequences/` desde el explorador del instrumento (`McxSequenceLibrary.ts`, `McxSequenceLibraryWiring.ts`, `McxSequenceBridgeHelpers.h`, barra `SEQ LIB` en `PianoRollModal`).
 - [x] **Modo Canción (`Song Mode`) y Escenas en Vivo (`1..8`) cuantizadas al compás (Bloque 4B — ✅ VERIFICADO `10/10` CTest):** `McxSongAndScenes` + `McxSongJsonCodec` + `McxSceneBar` (`Alt+1..8`) + `McxSongDrawer` (`Ctrl+M`) + `McxPhase9SongScenesTests.cpp` (`T1..T8`, `100 % pass`). **Exportación:** `McxMidiExporter` (SMF Type 1 Pattern/Song + *Drag-to-DAW*), `McxWavWriter` (`renderEngineOfflineWav` 16-bit estéreo Master/Part/Bank/Stems en C++/JUCE 9/WASM) y `McxExportModal` (✅ VERIFICADO).
 
 ### Bloque 4B — Soporte Multi-Banco `.abdbank` por Pista (`✅ VERIFICADO — Punto 1 / 9/9 CTest`)
@@ -267,7 +266,7 @@
   - Carga selectiva on-demand vía `RomplerBankIndex` (`McxLibraryService` indexa disco con `0` bytes PCM decodificados y carga solo las ondas del Tone/Kit elegido con GC diferido `collectUnusedWaves()`).
 
 ### Bloque 5 — Performance Avanzada, Multi-Motor, Multi-Out y Hardware vía MIDI Learn
-- [ ] **Performance en directo:** **Track/Pad/Bank Mute cuantizado al compás ✅ (`3a`)** (`McxQuantizedMuteState.h` + `McxQuantizedMuteController.ts` + `Q·BAR`); pendiente **Megamix** cuantizado al compás, **Q-Links contextuales** y capas por pad (*Velocity Zones / Round-Robin*).
+- [ ] **Performance en directo:** **Track/Pad/Bank Mute cuantizado al compás ✅ (`3a`)** (`McxQuantizedMuteState.h` + `McxQuantizedMuteController.ts` + `Q·BAR`), **capas por pad C++20 RT-safe ✅** (*Velocity Zones / Round-Robin / Random* en `McxPadLayerSelector.h` + `McxPartState.h` + `McxEngineControl.cpp` + `McxPhase15LivePerfTests.cpp` T4) y **modelo puro `McxQLinksModel.ts` ✅**; pendiente cableado UI de **Q-Links** y **Megamix** cuantizado al compás.
 - [ ] **Guardado Dual DAW + Multi-Out VST3 + Nuevos Motores:** chunk referencial ligero vs bundle portable `.abdbank` con *tree-shaking*; salidas estéreo auxiliares opcionales en VST3; ampliación de motores por parte (`VA`, `FM`, `Spectral/DDSP`).
 - [x] **Hardware Externo como Controlador de Entrada (`MIDI Learn`):**
   - [x] **Aprendizaje N:M y Mapeo CC Runtime (`McxMidiLearnWiring.ts` — ✅ VERIFICADO):** `createMidiLearnStore`, `attachMidiLearnUI` y matriz `createMidiLearnDrawerContent` sobre parámetros de mezcla (`Part Level`, `Part Pan`, envíos `A..D`, filtro, envolvente, drive, EQ, LFOs y `Master Volume`) con persistencia (`abdmcx0x.midiLearn.v1`) y despacho WebMIDI (incl. NRPN `CC99/CC98/CC6`).

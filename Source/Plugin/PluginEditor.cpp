@@ -5,6 +5,7 @@
 #include "McxRackBridgeHelpers.h"
 #include "McxExportBridgeHelpers.h"
 #include "McxMidiLearnBridgeHelpers.h"
+#include "McxSequenceBridgeHelpers.h"
 #include "McxSessionStateBuilder.h"
 #include "McxEditorWebViewHelpers.h"
 
@@ -137,6 +138,8 @@ void McxAudioProcessorEditor::handleJsEvent(const juce::var& msg) {
     if (handleMidiLearnJsEvent(processor_, webComponent_.get(), type, *obj)) {
         return;
     }
+    if (handleSequenceJsEvent(processor_, webComponent_.get(), type, *obj))
+        return;
     if (handleExportJsEvent(processor_, webComponent_.get(), exportChooser_, type, *obj)) {
         return;
     }

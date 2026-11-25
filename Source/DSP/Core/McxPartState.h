@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../Core/McxPadLayerSelector.h"
 #include "McxTypes.h"
 #include "SynthCore/GrooveArpeggiator.h"
 
@@ -89,6 +90,23 @@ struct McxPartState
     float pitchBendSemitones { 0.0f };
     McxTrackSemanticOffsets semanticOffsets {};
     std::array<std::int8_t, 128> latchedNoteMap {};
+
+    // Drum pad layers: fixed-size, trivially copyable, zero allocation on the audio thread.
+    std::array<McxPadLayerConfig, 16> padLayers {};
+    std::array<std::uint32_t, 16> padRrCounters {};
+    std::uint32_t padLayerRng { 0xA5A51234u };
+
+    /** Effective sample note/slot for a pad, or fallbackNote (padIdx by default) on miss/no layers. */
+    [[nodiscard]] int resolveDrumPadLayerNote(int padIdx, int velocity127, int fallbackNote = -1) noexcept
+    {
+        const int fallback = fallbackNote >= 0 ? fallbackNote : padIdx;
+        if (padIdx < 0 || padIdx >= static_cast<int>(padLayers.size())) return fallback;
+        const auto u = static_cast<std::size_t>(padIdx);
+        if (padLayers[u].layerCount == 0) return fallback;
+        const int slot = selectPadSampleSlot(padLayers[u], velocity127, padRrCounters[u], padLayerRng);
+        return slot == kInvalidPadLayer ? fallback : slot;
+    }
+
     abd::synth::GrooveArpeggiator arp {};
 
 private:

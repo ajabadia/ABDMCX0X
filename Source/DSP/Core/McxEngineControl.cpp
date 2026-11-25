@@ -6,6 +6,17 @@
 namespace abdmcx
 {
 
+namespace
+{
+/** Drum pads arrive either as raw 0..15 indices or as GM notes 36..51. */
+[[nodiscard]] int drumPadIndexForNote(int note) noexcept
+{
+    if (note >= 0 && note < 16) return note;
+    if (note >= 36 && note < 52) return note - 36;
+    return -1;
+}
+} // namespace
+
 void McxEngine::setFocusedPart(int partIndex) noexcept
 {
     focusedPartIndex_ = std::clamp(partIndex, 0, kNumParts - 1);
@@ -124,6 +135,19 @@ void McxEngine::dispatchNoteOffToOutputs(int partIdx, int note, std::int32_t sam
         emitExternalNoteOff(partIdx, p, note, sampleOffset);
 }
 
+void McxEngine::setPartPadLayerConfig(int partIdx, int padIdx, const McxPadLayerConfig& cfg) noexcept
+{
+    if (partIdx < 0 || partIdx >= kNumParts || padIdx < 0 || padIdx >= 16) return;
+    parts_[static_cast<std::size_t>(partIdx)].padLayers[static_cast<std::size_t>(padIdx)] = cfg;
+}
+
+const McxPadLayerConfig& McxEngine::getPartPadLayerConfig(int partIdx, int padIdx) const noexcept
+{
+    static const McxPadLayerConfig kEmpty {};
+    if (partIdx < 0 || partIdx >= kNumParts || padIdx < 0 || padIdx >= 16) return kEmpty;
+    return parts_[static_cast<std::size_t>(partIdx)].padLayers[static_cast<std::size_t>(padIdx)];
+}
+
 void McxEngine::triggerPartNoteOn(int partIndex, int inputNote, float velocity, std::int32_t sampleOffset) noexcept
 {
     const int idx = std::clamp(partIndex, 0, kNumParts - 1);
@@ -131,7 +155,16 @@ void McxEngine::triggerPartNoteOn(int partIndex, int inputNote, float velocity, 
     if (!p.enabled) return;
 
     const int rawIn = std::clamp(inputNote, 0, 127);
-    const int effNote = (p.followGlobalTranspose && !p.isDrumKit) ? transposer_.processNote(rawIn) : rawIn;
+    int effNote = (p.followGlobalTranspose && !p.isDrumKit) ? transposer_.processNote(rawIn) : rawIn;
+    if (p.isDrumKit)
+    {
+        const int padIdx = drumPadIndexForNote(rawIn);
+        if (padIdx >= 0)
+        {
+            const int vel127 = static_cast<int>(std::lround(std::clamp(velocity, 0.0f, 1.0f) * 127.0f));
+            effNote = p.resolveDrumPadLayerNote(padIdx, vel127, effNote);
+        }
+    }
     const int prevLatched = static_cast<int>(p.latchedNoteMap[static_cast<std::size_t>(rawIn)]);
     if (prevLatched >= 0 && prevLatched != effNote)
     {

@@ -45,7 +45,25 @@ export interface NativeBridgeCallbacks {
   onWavRendered?: ((dto: McxWavRenderedDto) => void) | null;
   onMidiLearnProfiles?: ((catalogJson: string) => void) | null;
   onMidiLearnAutoDetect?: ((ev: { device: string; displayName: string; reason: string; portName: string; profileJson: string }) => void) | null;
+  onSequenceList?: ((catalogJson: string) => void) | null;
+  onSequenceSaved?: ((ev: { ok: boolean; slug: string }) => void) | null;
+  onSequenceLoaded?: ((ev: { ok: boolean; slug: string; content: string }) => void) | null;
 }
+
+export type SequenceNativeEvent =
+  | { type: 'sequenceList'; catalogJson: string; ok?: boolean }
+  | { type: 'sequenceSaved'; ok: boolean; slug: string }
+  | { type: 'sequenceLoaded'; ok: boolean; slug: string; content: string };
+
+/** Compact in-process bus: McxHostBridge forwards native sequence telemetry here. */
+export const nativeSequenceEvents = {
+  listeners: new Set<(ev: SequenceNativeEvent) => void>(),
+  on(cb: (ev: SequenceNativeEvent) => void): () => void {
+    this.listeners.add(cb);
+    return () => { this.listeners.delete(cb); };
+  },
+  emit(ev: SequenceNativeEvent): void { this.listeners.forEach((cb) => cb(ev)); },
+};
 
 export function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -97,6 +115,12 @@ export function routeNativeBridgeEvent(data: any, cbs: NativeBridgeCallbacks): v
       reason: String(data.reason ?? ''), portName: String(data.portName ?? ''),
       profileJson: String(data.profileJson ?? ''),
     });
+  } else if (data.type === 'sequenceList') {
+    cbs.onSequenceList?.(String(data.catalogJson ?? '[]'));
+  } else if (data.type === 'sequenceSaved') {
+    cbs.onSequenceSaved?.({ ok: Boolean(data.ok), slug: String(data.slug ?? '') });
+  } else if (data.type === 'sequenceLoaded') {
+    cbs.onSequenceLoaded?.({ ok: Boolean(data.ok), slug: String(data.slug ?? ''), content: String(data.content ?? '') });
   } else if (data.type === 'systemSettings') {
     cbs.onSystemSettings?.({
       workingDirectory: String(data.workingDirectory ?? ''),

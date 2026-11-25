@@ -7,6 +7,11 @@
 import { MpcPadModal, GrooveArpeggiatorModal } from '@abdsynths/shared/components';
 import type { McxHostBridge } from '../bridge/McxHostBridge';
 import type { McxAppState } from './McxAppState';
+import type { ChordEvent } from './McxPrintArpToPattern';
+import {
+  applyPadParamPreview, arpRateToStepTicks, motifToArpMode,
+  printArpToPart, printChordsToPart, type PadParamPreview,
+} from './McxPrintPatternWiring';
 import { getLocale } from '../i18n/mcxI18n';
 
 const ARP_RATE_TO_IDX: Record<string, number> = {
@@ -22,17 +27,48 @@ const REC_Q_STEPS: Record<string, number> = {
   off: 0, '1/8': 8, '1/8T': 12, '1/16': 16, '1/16T': 24, '1/32': 32, '1/64': 64,
 };
 
+type PadModalCtor = ConstructorParameters<typeof MpcPadModal>[0];
+type ArpModalCtor = ConstructorParameters<typeof GrooveArpeggiatorModal>[0];
+type PadOptions = PadModalCtor & { onPadParamPreview?: (partIdx: number, preview: PadParamPreview) => void };
+type ArpOptions = ArpModalCtor & {
+  onPrintToSeq?: (partIdx: number, arpState: { motif?: number; rate?: string; octaves?: number }) => void;
+};
+
 export function createMidiModals(bridge: McxHostBridge, state: McxAppState) {
-  const padModal = new MpcPadModal({
+  const chordEvents: ChordEvent[] = [];
+  const partPpq = (idx: number): number => state.partsState[idx]?.sequence?.ppq ?? 96;
+  const printArp = (partIdx: number, arp?: { motif?: number; rate?: string; octaves?: number }): void => {
+    const ps = state.partsState[partIdx];
+    const held = [...new Set((ps?.sequence?.notes ?? []).map((n) => n.midiNote))];
+    printArpToPart(partIdx, {
+      heldNotes: held.length ? held : [60, 64, 67],
+      mode: motifToArpMode(arp?.motif ?? ps?.arpMotif ?? 0),
+      octaves: arp?.octaves ?? ps?.arpOctaves ?? 1,
+      stepTicks: arpRateToStepTicks(arp?.rate ?? ps?.arpRate ?? '1/16', partPpq(partIdx)),
+      bars: ps?.sequence?.bars ?? 1, ppq: partPpq(partIdx),
+    }, state, bridge);
+  };
+  const printChords = (partIdx: number): void => {
+    const ppq = partPpq(partIdx);
+    const events = chordEvents.length ? [...chordEvents] : [{ notes: [60, 64, 67] }];
+    printChordsToPart(partIdx, { bars: 1, ppq, stepDivisionTicks: ppq / 2, events }, state, bridge);
+    chordEvents.length = 0;
+  };
+
+  const padOptions: PadOptions = {
     locale: getLocale() === 'en' ? 'en' : 'es',
     partIndex: state.focusedPart,
     bpm: state.globalSettings?.standaloneBpm || 120,
     mode: state.partsState[state.focusedPart].kind === 'drum_map' ? 'drum' : 'chromatic',
-    onPadTrigger: (partIdx, padIdx, note, vel, _meta, quantize) => {
+    onPadTrigger: (partIdx, padIdx, note, vel, meta, quantize) => {
       const velNorm = vel > 1 ? Math.max(0.05, Math.min(1, vel / 127)) : Math.max(0.05, Math.min(1, vel));
       const velMidi = vel > 1 ? Math.max(1, Math.min(127, Math.round(vel))) : Math.max(1, Math.min(127, Math.round(vel * 127)));
       void bridge.enableAudio();
       bridge.noteOn(partIdx, note, velNorm);
+      if (Array.isArray(meta?.notes)) {
+        chordEvents.push({ notes: meta.notes, velocity: velMidi });
+        if (chordEvents.length > 16) chordEvents.shift();
+      }
       const pr = state.refs.pianoRollModal;
       if (pr?.isRecording?.()) {
         const q = quantize || padModal.getInputQuantize?.() || 'off';
@@ -46,13 +82,39 @@ export function createMidiModals(bridge: McxHostBridge, state: McxAppState) {
       if (pr?.isRecording?.()) pr.recordNoteOff?.(note);
     },
     onInputQuantizeChange: (q) => state.setRecordConfig({ quantizeSteps: REC_Q_STEPS[q] ?? 16 }),
+    onPadParamPreview: (partIdx, preview) => applyPadParamPreview(partIdx, preview, state, bridge),
     onOpen: (partIdx) => {
       padModal.syncPart(partIdx, state.partsState[partIdx]);
+      syncPadPrintVisibility();
     },
-  });
+  };
+  const padModal = new MpcPadModal(padOptions as PadModalCtor);
+  const padEl = (padModal as any).el as HTMLElement | undefined;
+  const syncPadPrintVisibility = (): void => {
+    const btn = padEl?.querySelector<HTMLButtonElement>('#abd-pad-print-seq');
+    if (btn) btn.hidden = (padModal as any).matrix?.mode !== 'chords';
+  };
+  const mountPadPrintBtn = (): void => {
+    if (!padEl || padEl.querySelector('#abd-pad-print-seq')) return;
+    const btn = document.createElement('button');
+    btn.id = 'abd-pad-print-seq';
+    btn.type = 'button';
+    btn.textContent = 'Print -> SEQ';
+    btn.title = 'Print chords to sequence';
+    btn.style.cssText = 'font-size:10px;padding:2px 6px';
+    btn.addEventListener('click', () => printChords(padModal.getPart()));
+    padEl.querySelector('.abd-pad-head-right')?.appendChild(btn);
+    syncPadPrintVisibility();
+  };
+  if (padEl) {
+    mountPadPrintBtn();
+    padEl.addEventListener('click', () => setTimeout(syncPadPrintVisibility, 0));
+    const origSetLocale = padModal.setLocale.bind(padModal);
+    padModal.setLocale = (locale: 'en' | 'es') => { origSetLocale(locale); mountPadPrintBtn(); };
+  }
 
   const fp = state.partsState[state.focusedPart];
-  const arpModal = new GrooveArpeggiatorModal({
+  const arpOptions: ArpOptions = {
     locale: getLocale() === 'en' ? 'en' : 'es',
     partIndex: state.focusedPart,
     initialState: {
@@ -101,8 +163,10 @@ export function createMidiModals(bridge: McxHostBridge, state: McxAppState) {
         state.setLcdLine2(`${tag} ARP LATCH: #${ps.arpLatch}`);
       }
     },
+    onPrintToSeq: (partIdx, arpState) => printArp(partIdx, arpState),
     onOpen: (partIdx) => state.syncArpModalForPart(partIdx),
-  });
+  };
+  const arpModal = new GrooveArpeggiatorModal(arpOptions as ArpModalCtor);
 
   return { padModal, arpModal };
 }

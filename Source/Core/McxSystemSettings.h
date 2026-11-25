@@ -58,7 +58,7 @@ struct McxSystemSettings
         const std::filesystem::path root(dirPath);
         const char* subdirs[] = {
             "Models/Rompler", "Models/Drums", "Models/Wavetables", "Models/Spectral",
-            "Presets/Parts", "Presets/Multis", "Presets/Patterns", "Banks", "MidiLearn"
+            "Presets/Parts", "Presets/Multis", "Presets/Patterns", "Banks", "MidiLearn", "Sequences"
         };
         std::filesystem::create_directories(root, ec);
         if (ec) return false;

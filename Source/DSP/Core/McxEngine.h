@@ -138,6 +138,8 @@ public:
     }
 
     void setPartKind(int partIndex, McxPartKind kind) noexcept;
+    void setPartPadLayerConfig(int partIdx, int padIdx, const McxPadLayerConfig& cfg) noexcept;
+    [[nodiscard]] const McxPadLayerConfig& getPartPadLayerConfig(int partIdx, int padIdx) const noexcept;
     void setPartEnabled(int partIndex, bool enabled) noexcept;
     [[nodiscard]] McxBankLayoutState& bankLayout() noexcept { return bankLayout_; }
     [[nodiscard]] const McxBankLayoutState& bankLayout() const noexcept { return bankLayout_; }

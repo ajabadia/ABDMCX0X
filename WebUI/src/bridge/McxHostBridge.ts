@@ -14,7 +14,7 @@ import {
 import {
   STORAGE_BANK_LAYOUT, STORAGE_SETTINGS, STORAGE_SIDECHAIN,
   arrayBufferToBase64, readLocalSettingsJson, readLocalSidechain, routeNativeBridgeEvent, routeWasmWorkletEvent,
-  writeLocalStr, type NativeBridgeCallbacks,
+  writeLocalStr, nativeSequenceEvents, type NativeBridgeCallbacks,
 } from './McxHostBridgeHelpers';
 import { WASM_PARAM_ID, type McxParamKey } from './mcxParamIds';
 
@@ -51,8 +51,7 @@ export class McxHostBridge {
   private libraryCatalogCb: ((catalogJson: string) => void) | null = null;
   private rackStateCb: ((rackJson: string) => void) | null = null;
   private midiDevicesCb: ((dto: McxMidiDevicesDto) => void) | null = null;
-  private partPatternCb: ((part: number, patternJson: string) => void) | null = null;
-  private exportCompleteCb: ((dto: McxExportCompleteDto) => void) | null = null;
+  private partPatternCb: ((part: number, patternJson: string) => void) | null = null; private exportCompleteCb: ((dto: McxExportCompleteDto) => void) | null = null;
   private midiLearnProfilesCb: ((catalogJson: string) => void) | null = null; private midiLearnAutoDetectCb: ((ev: { device: string; displayName: string; reason: string; portName: string; profileJson: string }) => void) | null = null;
 
   constructor() {
@@ -67,6 +66,7 @@ export class McxHostBridge {
       onSystemSettings: (s) => this.settingsCb?.(s), onMidiDevices: (dto) => this.midiDevicesCb?.(dto),
       onMidiLearnProfiles: (j) => this.midiLearnProfilesCb?.(j), onMidiLearnAutoDetect: (ev) => this.midiLearnAutoDetectCb?.(ev),
       onPartPatternState: (p, j) => this.partPatternCb?.(p, j), onExportComplete: (dto) => this.exportCompleteCb?.(dto),
+      onSequenceList: (j) => nativeSequenceEvents.emit({ type: 'sequenceList', catalogJson: j }), onSequenceSaved: (e) => nativeSequenceEvents.emit({ type: 'sequenceSaved', ...e }), onSequenceLoaded: (e) => nativeSequenceEvents.emit({ type: 'sequenceLoaded', ...e }),
       onWavRendered: (dto) => { const r = dto.requestId !== undefined ? this.wavPending.get(dto.requestId) : undefined; if (r && dto.requestId !== undefined) { this.wavPending.delete(dto.requestId); r(dto); } },
     };
     if (this.isNative) {

@@ -12,6 +12,7 @@ import { formatSlotLabel, SLOTS_PER_BANK } from '../ui/McxBankLayout';
 import { McxSavePresetModal } from '../ui/McxSavePresetModal';
 import type { McxAppState } from './McxAppState';
 import { createGlobalLfoBridgeAdapter, GLOBAL_LFO1_DESTS, GLOBAL_LFO2_DESTS } from './McxPianoRollSync';
+import { mountPianoRollSequenceBar } from './McxSequenceLibraryWiring';
 import { createFxRackBridge, loadBankDrawerItem, loadUserPresetsLocal, persistAndNotifyPresetSave } from './McxSessionHydrator';
 
 export const buildProbeDestinations = () => [
@@ -164,6 +165,7 @@ export function createStudioModals(bridge: McxHostBridge, state: McxAppState) {
     onOpenGroove: (partIdx?: number) => state.refs.grooveModal?.open(partIdx ?? state.focusedPart),
     onExportMidi: () => state.refs.onOpenExport?.(),
   });
+  mountPianoRollSequenceBar(pianoRollModal as any, bridge, state);
 
   const grooveModal = new GrooveShuffleModal({
     locale: getLocale(),

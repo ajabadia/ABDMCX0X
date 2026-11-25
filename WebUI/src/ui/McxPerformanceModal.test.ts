@@ -45,6 +45,7 @@ describe('McxPerformanceModal (Bloque D integration)', () => {
     expect(modal.isOpen()).toBe(true);
     expect(modal.deck.el.querySelectorAll('[data-slot-card]:not(.is-disabled)')).toHaveLength(10);
     expect(modal.deck.el.querySelector('.mcx-perf-track-strip')).not.toBeNull();
+    expect(modal.deck.el.querySelector('.stick-recorder-bar')).toBeNull();
 
     state.focusPart(1);
     expect(modal.deck.el.querySelectorAll('[data-slot-card]:not(.is-disabled)')).toHaveLength(8);
@@ -73,7 +74,8 @@ describe('McxPerformanceModal (Bloque D integration)', () => {
     const modal = new McxPerformanceModal({ bridge, state, getCatalog: () => DEFAULT_ENGINE_CATALOG });
     modal.open();
     modal.deck.setEditMode(true);
-    (modal.deck.el.querySelector('[data-act="learn-slot"][data-slot="8"]') as HTMLElement)?.click();
+    (modal.deck.el.querySelector('[data-edit-slot="8"]') as HTMLElement)?.click();
+    (document.body.querySelector('.abd-perf-picker [data-picker-act="learn"]') as HTMLElement)?.click();
     expect(modal.handleExternalParamTouched(1, 'drive')).toBe(true);
     expect(modal.deck.el.querySelector('[data-sub-slot="8"]')?.textContent).toBe('Overdrive Gain');
 

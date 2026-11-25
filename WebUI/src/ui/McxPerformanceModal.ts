@@ -46,6 +46,7 @@ export class McxPerformanceModal {
     this.bridge = opts.bridge; this.state = opts.state; this.getCatalog = opts.getCatalog; this.onToggleOpen = opts.onToggleOpen;
     this.deck = new PerformanceDeck(document.body, {
       layout: 'modeless', inlineEdit: true, hasPinToggle: true, hasFooterSlot: true, hasVoiceLimit: false,
+      stickOptions: { variant: 'nuke-orb', size: 210, hasRecorder: false, showHeader: false, showLayers: false, readout: true },
       onClose: () => this.onToggleOpen?.(false),
       onPinChange: (pinned) => { this.pinnedPart = pinned ? this.state.focusedPart : null; this.syncFromAppState(); },
       onReEnableAuto: () => this.reEnableAutomationOverrides(),

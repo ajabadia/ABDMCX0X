@@ -1,6 +1,7 @@
 #include "../Source/Core/McxPadLayerSelector.h"
 #include "Core/McxMidiLearnDiskLibrary.h"
 #include "DSP/Core/McxEngine.h"
+#include "Sequencer/McxPatternSequencer.h"
 #include "Sequencer/McxSongAndScenes.h"
 
 #include <algorithm>
@@ -167,6 +168,44 @@ int main()
               "T4c: Pad layer config accessors copy the config and guard out-of-range indices");
         e.releasePartNoteOff(0, 36);
         check(rec.offNote == 40, "T4d: Note-off releases the layer-resolved note held in the latch");
+    }
+
+    // T5: 16 hashed motionLanes in McxPatternSequencer (recordLiveMotion + onMotionHashed)
+    {
+        struct MotionCapture { int calls = 0; std::uint32_t lastHash = 0; float lastVal = 0.0f; } cap {};
+        McxPatternSequencer seq;
+        seq.prepare(44100.0);
+        seq.setRecording(true);
+        for (int i = 0; i < McxPatternSequencer::kMaxMotionLanes; ++i)
+        {
+            const std::string name = "perfParam" + std::to_string(i);
+            const auto h = McxPatternSequencer::hashMotionParamId(name);
+            (void)seq.recordLiveMotion(0, h, -1, 0.1f + 0.05f * static_cast<float>(i), (i % 2) == 1);
+        }
+        McxSequencerCallbacks cbs {};
+        cbs.ctx = &cap;
+        cbs.onMotionHashed = [](void* ctx, int part, std::uint32_t h, float v, std::int32_t) noexcept {
+            if (part == 0 && h != 0u) { auto* c = static_cast<MotionCapture*>(ctx); ++c->calls; c->lastHash = h; c->lastVal = v; }
+        };
+        seq.start(true);
+        seq.processBlock(512, cbs, 0);
+        check(cap.calls == McxPatternSequencer::kMaxMotionLanes && cap.lastHash != 0u,
+              "T5: 16 hashed motionLanes record RT-safe and dispatch via onMotionHashed");
+    }
+
+    // T6: Host Sync vs Internal toggle
+    {
+        McxEngine e;
+        e.prepare(44100.0);
+        e.setMasterTempoBpm(120.0f);
+        e.setHostSyncEnabled(false);
+        e.syncHostTransport(true, 142.0, 2.0, true);
+        const bool ignoredWhenInternal = std::abs(e.getMasterTempoBpm() - 120.0f) < 0.01f && !e.isSequencerRunning();
+        e.setHostSyncEnabled(true);
+        e.syncHostTransport(true, 142.0, 2.0, true);
+        const bool syncedWhenHost = std::abs(e.getMasterTempoBpm() - 142.0f) < 0.01f && e.isSequencerRunning();
+        check(ignoredWhenInternal && syncedWhenHost,
+              "T6: setHostSyncEnabled(false) stays in Internal mode; true follows DAW BPM & transport");
     }
 
     std::printf("Phase 15 Tests: %d passed, %d failed\n", gPassed, gFailed);

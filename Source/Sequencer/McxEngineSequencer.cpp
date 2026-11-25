@@ -290,7 +290,7 @@ void McxEngine::setSequencerPlaying(bool playing, bool resetToZero) noexcept
 
 void McxEngine::syncHostTransport(bool hostPlaying, double hostBpm, double hostPpqPos, bool ppqValid) noexcept
 {
-    if (!sequencer_) return;
+    if (!sequencer_ || !hostSyncEnabled_.load(std::memory_order_acquire)) return;
     if (hostBpm >= 20.0 && hostBpm <= 300.0)
         setMasterTempoBpm(static_cast<float>(hostBpm));
 

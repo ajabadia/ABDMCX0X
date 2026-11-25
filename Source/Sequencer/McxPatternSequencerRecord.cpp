@@ -167,6 +167,16 @@ void McxPatternSequencer::recordLiveNoteOff(int partIdx, std::uint8_t note) noex
     recordedPatternRev_.fetch_add(1u, std::memory_order_release);
 }
 
+bool McxPatternSequencer::recordLiveMotion(int partIdx, std::uint32_t paramHash, int legacyParamId,
+                                           float value, bool stepInterp) noexcept
+{
+    if (!storage_ || !recording_.load(std::memory_order_relaxed) || countInRemainingTicks_ > 0) return false;
+    if (!addStagingMotionHashed(partIdx, paramHash, legacyParamId, currentTick_, value, stepInterp)) return false;
+    commitStagingPart(partIdx);
+    recordedPatternRev_.fetch_add(1u, std::memory_order_release);
+    return true;
+}
+
 int McxPatternSequencer::serializePartPatternJson(int partIdx, char* outBuf, int maxBytes) const noexcept
 {
     if (!storage_ || !outBuf || maxBytes < 64 || partIdx < 0 || partIdx >= kNumParts) return 0;

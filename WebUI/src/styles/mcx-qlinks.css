@@ -1,0 +1,80 @@
+/**
+ * ABDMCX0X -- mcx-qlinks.css
+ * Compact collapsible contextual Q-Links strip (100% tokenized, 0 #hex).
+ */
+
+.mcx-qlinks-btn {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-panel-border);
+  background: var(--color-panel-surface-elevated, var(--color-surface));
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+
+.mcx-qlinks-btn.is-active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.mcx-qlinks-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  padding: 4px var(--space-2, 8px);
+  background: var(--color-panel-surface, var(--color-surface-dim));
+  border-bottom: 1px solid var(--color-panel-border-dim, var(--color-border));
+  flex-wrap: wrap;
+}
+
+.mcx-qlinks-bar[hidden] { display: none; }
+
+.mcx-qlinks-ctx-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.mcx-qlinks-ctx-btn.is-active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.mcx-qlinks-knobs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2, 8px);
+  flex: 1;
+  min-width: 280px;
+}
+
+.mcx-qlinks-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  background: var(--color-panel-bg, var(--color-surface));
+  border: 1px solid var(--color-panel-border-dim, var(--color-border));
+  border-radius: var(--radius-sm);
+}
+
+.mcx-qlinks-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+
+.mcx-qlinks-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--color-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mcx-qlinks-val {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--color-accent);
+}

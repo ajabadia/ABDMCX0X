@@ -170,10 +170,12 @@ void McxPatternSequencer::stepSingleTick(const McxSequencerCallbacks& cbs, std::
         const auto u = static_cast<std::size_t>(p);
         const auto slot = static_cast<std::size_t>(storage_->activeSlot[u].load(std::memory_order_acquire) & 1u);
         const auto& pat = storage_->buffers[u][slot];
-        const bool hasMotion = (pat.motionLanes[0].paramId >= 0 && pat.motionLanes[0].count > 0)
-                            || (pat.motionLanes[1].paramId >= 0 && pat.motionLanes[1].count > 0)
-                            || (pat.motionLanes[2].paramId >= 0 && pat.motionLanes[2].count > 0)
-                            || (pat.motionLanes[3].paramId >= 0 && pat.motionLanes[3].count > 0);
+        bool hasMotion = false;
+        for (int l = 0; l < kMaxMotionLanes; ++l)
+        {
+            const auto& lane = pat.motionLanes[static_cast<std::size_t>(l)];
+            if ((lane.paramId >= 0 || lane.paramHash != 0u) && lane.count > 0) { hasMotion = true; break; }
+        }
         if (pat.eventCount <= 0 && !hasMotion)
             continue;
 
@@ -196,16 +198,19 @@ void McxPatternSequencer::stepSingleTick(const McxSequencerCallbacks& cbs, std::
             }
         }
 
-        for (int l = 0; l < 4; ++l)
+        for (int l = 0; l < kMaxMotionLanes; ++l)
         {
             const auto& lane = pat.motionLanes[static_cast<std::size_t>(l)];
-            if (lane.paramId < 0 || lane.count <= 0) continue;
+            if ((lane.paramId < 0 && lane.paramHash == 0u) || lane.count <= 0) continue;
             for (int m = 0; m < lane.count; ++m)
             {
                 const auto& pt = lane.points[static_cast<std::size_t>(m)];
-                if ((pt.tick % totalTicks) == tick && cbs.onMotion)
+                if ((pt.tick % totalTicks) == tick)
                 {
-                    cbs.onMotion(cbs.ctx, p, lane.paramId, pt.value, sampleOffset);
+                    if (lane.paramId >= 0 && cbs.onMotion)
+                        cbs.onMotion(cbs.ctx, p, lane.paramId, pt.value, sampleOffset);
+                    if (lane.paramHash != 0u && cbs.onMotionHashed)
+                        cbs.onMotionHashed(cbs.ctx, p, lane.paramHash, pt.value, sampleOffset);
                     break;
                 }
             }
@@ -222,6 +227,52 @@ void McxPatternSequencer::stepSingleTick(const McxSequencerCallbacks& cbs, std::
     const int ticksPerBar = std::max(1, 4 * ppq);
     if ((currentTick_ % ticksPerBar) == 0)
         barBoundaryPending_ = true;
+}
+
+void McxPatternSequencer::syncFromHostTransport(bool hostPlaying, double hostBpm, double hostPpqPos, bool ppqValid,
+                                                const McxSequencerCallbacks& cbs, McxMidiClockEmitter* midiClock,
+                                                McxMidiOutQueue<1024>* outQ) noexcept
+{
+    if (hostBpm >= 20.0 && hostBpm <= 300.0)
+        setBpm(hostBpm);
+
+    const int totalTicks = std::max(1, publishedTotalTicks_.load(std::memory_order_relaxed));
+    const int ppq = ppq_.load(std::memory_order_relaxed);
+
+    if (hostPlaying && !prevHostPlaying_)
+    {
+        if (ppqValid && hostPpqPos >= 0.0)
+        {
+            currentTick_ = static_cast<int>(std::llround(hostPpqPos * static_cast<double>(ppq))) % totalTicks;
+            sampleCursor_ = 0.0;
+            barBoundaryPending_ = false;
+        }
+        start(!ppqValid);
+        if (midiClock)
+        {
+            if (ppqValid && hostPpqPos > 0.01) midiClock->emitContinue(outQ, 0);
+            else midiClock->emitStart(outQ, 0);
+        }
+    }
+    else if (!hostPlaying && prevHostPlaying_)
+    {
+        stop(cbs, 0);
+        if (midiClock) midiClock->emitStop(outQ, 0);
+    }
+    else if (hostPlaying && ppqValid && hostPpqPos >= 0.0)
+    {
+        const int hostTick = static_cast<int>(std::floor(hostPpqPos * static_cast<double>(ppq))) % totalTicks;
+        int dist = std::abs(hostTick - currentTick_);
+        if (dist > totalTicks / 2) dist = totalTicks - dist;
+        if (dist > 4)
+        {
+            releaseAllActiveNotes(cbs, 0);
+            currentTick_ = hostTick;
+            sampleCursor_ = 0.0;
+            barBoundaryPending_ = false;
+        }
+    }
+    prevHostPlaying_ = hostPlaying;
 }
 
 } // namespace abdmcx

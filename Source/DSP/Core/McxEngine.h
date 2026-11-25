@@ -212,6 +212,8 @@ public:
     void setSequencerRecordConfig(int mode01, int countInBars, int quantizeSteps) noexcept;
     void recordLiveInputNoteOn(int partIndex, int midiNote, float velocity) noexcept;
     void recordLiveInputNoteOff(int partIndex, int midiNote) noexcept;
+    void setHostSyncEnabled(bool enabled) noexcept { hostSyncEnabled_.store(enabled, std::memory_order_release); }
+    [[nodiscard]] bool isHostSyncEnabled() const noexcept { return hostSyncEnabled_.load(std::memory_order_acquire); }
     void syncHostTransport(bool hostPlaying, double hostBpm, double hostPpqPos, bool ppqValid) noexcept;
     [[nodiscard]] bool isSequencerRunning() const noexcept;
     [[nodiscard]] bool isSequencerPaused() const noexcept;
@@ -279,21 +281,15 @@ private:
     McxMidiClockEmitter midiClock_ {};
     std::unique_ptr<McxPatternSequencer> sequencer_;
     std::unique_ptr<McxSongAndScenes> songAndScenes_;
-    float kickDuckEnvelope_ { 0.0f };
-    float audioDuckEnvelope_ { 0.0f };
-    bool audioDuckEnabled_ { true };
-    bool midiDuckEnabled_ { true };
-    bool manualDuckGate_ { false };
-    bool prevDuckTriggered_ { false };
+    float kickDuckEnvelope_ { 0.0f }, audioDuckEnvelope_ { 0.0f };
+    bool audioDuckEnabled_ { true }, midiDuckEnabled_ { true }, manualDuckGate_ { false }, prevDuckTriggered_ { false }, fxTempoSync_ { true };
     McxSidechainConfig scConfig_ {};
     McxSidechainHpfState scHpfState_ {};
-    bool fxTempoSync_ { true };
     std::array<bool, 4> fxGates_ { false, false, false, false };
-    std::array<float, 2> lfoPhase01_ { 0.0f, 0.0f };
-    std::array<float, 2> lfoValueBipolar_ { 0.0f, 0.0f };
+    std::array<float, 2> lfoPhase01_ { 0.0f, 0.0f }, lfoValueBipolar_ { 0.0f, 0.0f };
     std::uint32_t lfoRng_ { 0x12345678u };
-    double prevHostPpqPos_ { -1.0 };
-    bool prevHostPlaying_ { false };
+    double prevHostPpqPos_ { -1.0 }; bool prevHostPlaying_ { false };
+    std::atomic<bool> hostSyncEnabled_ { true };
 
     std::array<float, McxOutputAndFx::kMaxChunk> dryL_ {}, dryR_ {}, choL_ {}, choR_ {}, revL_ {}, revR_ {};
     std::array<float, McxOutputAndFx::kMaxChunk> delL_ {}, delR_ {}, auxL_ {}, auxR_ {}, partL_ {}, partR_ {};

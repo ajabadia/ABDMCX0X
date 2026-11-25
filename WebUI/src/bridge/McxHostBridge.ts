@@ -139,6 +139,7 @@ export class McxHostBridge {
   public requestPartPattern(part: number): void { this.sendCommand({ type: 'getPartPattern', part }, { type: 'GET_PART_PATTERN', part }); }
   public setSequencerBars(bars: number): void { this.sendCommand({ type: 'setSequencerBars', bars }, { type: 'SET_SEQ_BARS', bars }); }
   public setSequencerLoop(loop: boolean): void { this.sendCommand({ type: 'setSeqLoop', loop }, { type: 'SET_SEQ_LOOP', loop }); }
+  public setHostSync(enabled: boolean): void { if (this.isNative) this.postNative({ type: 'setHostSync', enabled }); }
   public setGroove(part: number, cfg: { mode: string; algorithm: string; resolution: string; amount: number }): void { if (this.isNative) this.postNative({ type: 'setGroove', part, ...cfg }); else this.wasm?.setGroove(part, cfg); }
   public setPartPattern(part: number, seq: { bars?: number; ppq?: number; mode?: string; notes?: any[]; motion?: Record<string, any[]> }): void { if (this.isNative) this.postNative({ type: 'setPattern', part, bars: seq.bars ?? 1, ppq: seq.ppq ?? 96, notes: seq.notes ?? [], motion: seq.motion ?? {} }); else this.wasm?.setPartPattern(part, seq); }
   public requestEngineCatalog(): void { this.sendCommand({ type: 'getEngineCatalog' }, { type: 'GET_ENGINE_CATALOG' }); }
@@ -178,10 +179,7 @@ export class McxHostBridge {
   public setPartInsertSlot(part: number, slot: number): void { this.sendCommand({ type: 'setPartInsert', part, slot }, { type: 'SET_PART_INSERT', part, slot }); }
   public setSendSlotTarget(bus: number, slot: number): void { this.sendCommand({ type: 'setSendSlotTarget', bus, slot }, { type: 'SET_SEND_SLOT_TARGET', bus, slot }); }
   public setSlotChainTarget(slot: number, target: number): void { this.sendCommand({ type: 'setSlotChainTarget', slot, target }, { type: 'SET_SLOT_CHAIN_TARGET', slot, target }); }
-  public saveExportFileBase64(kind: string, extension: string, bytes: Uint8Array): void {
-    if (!this.isNative) return;
-    this.postNative({ type: 'saveExportFileBase64', kind, extension, base64: arrayBufferToBase64(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer) });
-  }
+  public saveExportFileBase64(kind: string, extension: string, bytes: Uint8Array): void { if (this.isNative) this.postNative({ type: 'saveExportFileBase64', kind, extension, base64: arrayBufferToBase64(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer) }); }
   public async renderWavOffline(opts: McxWavRenderOptionsDto): Promise<McxWavRenderedDto | null> {
     if (this.isNative) { this.postNative({ type: 'renderWavOffline', ...opts }); return null; }
     if (!this.wasm) return null;

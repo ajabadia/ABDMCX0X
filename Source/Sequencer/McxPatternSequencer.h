@@ -9,6 +9,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <string_view>
 
 namespace abdmcx
 {
@@ -19,6 +20,7 @@ struct McxSequencerCallbacks
     void (*onNoteOn)(void* ctx, int part, std::uint8_t note, std::uint8_t vel, bool slide, std::int32_t sampleOffset) noexcept { nullptr };
     void (*onNoteOff)(void* ctx, int part, std::uint8_t note, std::int32_t sampleOffset) noexcept { nullptr };
     void (*onMotion)(void* ctx, int part, int paramId, float value, std::int32_t sampleOffset) noexcept { nullptr };
+    void (*onMotionHashed)(void* ctx, int part, std::uint32_t paramHash, float value, std::int32_t sampleOffset) noexcept { nullptr };
     bool (*onBarBoundary)(void* ctx, std::int32_t sampleOffset) noexcept { nullptr };
 };
 
@@ -33,7 +35,20 @@ public:
     static constexpr int kNumParts = 64;
     static constexpr int kMaxEventsPerPart = 256;
     static constexpr int kMaxMotionPoints = 256;
+    static constexpr int kMaxMotionLanes = 16;
     static constexpr int kDefaultPpq = 96;
+
+    [[nodiscard]] static constexpr std::uint32_t hashMotionParamId(std::string_view key) noexcept
+    {
+        if (key.empty()) return 0u;
+        std::uint32_t h = 2166136261u;
+        for (unsigned char c : key)
+        {
+            h ^= c;
+            h *= 16777619u;
+        }
+        return h != 0u ? h : 1u;
+    }
 
     enum class RecordMode : std::uint8_t
     {
@@ -48,6 +63,8 @@ public:
     struct MotionLane
     {
         int paramId { -1 };
+        std::uint32_t paramHash { 0u };
+        bool stepInterp { false };
         int count { 0 };
         std::array<MotionPoint, kMaxMotionPoints> points {};
     };
@@ -56,7 +73,7 @@ public:
     {
         int eventCount { 0 };
         std::array<PatternEvent, kMaxEventsPerPart> events {};
-        std::array<MotionLane, 4> motionLanes {};
+        std::array<MotionLane, kMaxMotionLanes> motionLanes {};
     };
 
     McxPatternSequencer() noexcept;
@@ -74,6 +91,8 @@ public:
     bool addStagingEvent(int partIdx, int startTick, int durationTicks,
                          std::uint8_t note, std::uint8_t velocity, bool slide) noexcept;
     bool addStagingMotion(int partIdx, int laneIdx, int paramId, int tick, float value) noexcept;
+    bool addStagingMotionHashed(int partIdx, std::uint32_t paramHash, int legacyParamId,
+                                int tick, float value, bool stepInterp = false) noexcept;
     void commitStagingPart(int partIdx) noexcept;
     void setStep(int partIdx, int step0to15, bool active,
                  std::uint8_t velocity, bool slide, std::uint8_t note) noexcept;
@@ -111,6 +130,8 @@ public:
 
     void recordLiveNoteOn(int partIdx, std::uint8_t note, std::uint8_t vel) noexcept;
     void recordLiveNoteOff(int partIdx, std::uint8_t note) noexcept;
+    bool recordLiveMotion(int partIdx, std::uint32_t paramHash, int legacyParamId,
+                          float value, bool stepInterp = false) noexcept;
     int serializePartPatternJson(int partIdx, char* outBuf, int maxBytes) const noexcept;
 
     void syncFromHostTransport(bool hostPlaying,

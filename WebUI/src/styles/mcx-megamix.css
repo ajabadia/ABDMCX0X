@@ -1,0 +1,67 @@
+/**
+ * ABDMCX0X -- mcx-megamix.css
+ * Modeless bar-quantized Megamix dialog styles (100% tokenized, 0 #hex).
+ */
+
+dialog.mcx-megamix-dialog {
+  position: fixed;
+  margin: 0;
+  padding: 0;
+  top: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(92vw, 720px);
+  background: var(--color-panel-bg, var(--color-surface));
+  color: var(--color-text-main);
+  border: 1px solid var(--color-panel-border-strong, var(--color-border));
+  border-top: 2px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-elevation-3);
+  z-index: 125;
+  overflow: hidden;
+}
+
+dialog.mcx-megamix-dialog:not([open]) { display: none; }
+
+.mcx-megamix-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  background: var(--color-panel-surface, var(--color-surface-dim));
+  border-bottom: 1px solid var(--color-panel-border-dim);
+  cursor: move;
+}
+
+.mcx-megamix-title { font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }
+.mcx-megamix-controls { display: flex; align-items: center; gap: var(--space-1); flex-wrap: wrap; }
+
+.mcx-megamix-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.mcx-megamix-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-2);
+  background: var(--color-panel-surface, var(--color-surface-dim));
+  border: 1px solid var(--color-panel-border);
+  border-radius: var(--radius-sm);
+}
+
+.mcx-megamix-card.is-active { border-color: var(--color-accent); box-shadow: 0 0 0 1px var(--color-accent); }
+.mcx-megamix-card.is-queued { border-color: var(--color-warning, var(--color-accent)); animation: mcx-mx-blink 0.9s ease-in-out infinite; }
+.mcx-megamix-card.is-empty { opacity: 0.72; }
+
+.mcx-megamix-slot-top { display: flex; justify-content: space-between; align-items: center; font-family: var(--font-mono); font-size: 10px; }
+.mcx-megamix-name { font-size: 10.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mcx-megamix-meta { font-family: var(--font-mono); font-size: 9px; color: var(--color-text-dim); }
+.mcx-megamix-acts { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
+
+@keyframes mcx-mx-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) { .mcx-megamix-card.is-queued { animation: none; } }

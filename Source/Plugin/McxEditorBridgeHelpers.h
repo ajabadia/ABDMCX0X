@@ -113,6 +113,11 @@ inline bool handleSequencerJsEvent(McxAudioProcessor& proc, const juce::String& 
                                   !obj.hasProperty("reset") || static_cast<bool>(obj.getProperty("reset")));
         return true;
     }
+    if (type == "setHostSync")
+    {
+        proc.engine().setHostSyncEnabled(static_cast<bool>(obj.getProperty("enabled")));
+        return true;
+    }
     if (type == "seqSeekBars")
     {
         McxUiCommand cmd {};

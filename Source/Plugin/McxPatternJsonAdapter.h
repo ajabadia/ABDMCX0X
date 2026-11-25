@@ -85,14 +85,17 @@ inline void applyPatternDtoToEngine(McxEngine& engine, int partIdx, const juce::
             int laneIdx = 0;
             for (const auto& prop : mObj->getProperties())
             {
-                if (laneIdx >= 4) break;
-                const int paramId = detail::mapMotionTargetNameToParamId(prop.name.toString());
-                if (paramId < 0 || !prop.value.isArray()) continue;
+                if (laneIdx >= McxPatternSequencer::kMaxMotionLanes) break;
+                const auto keyStr = prop.name.toString();
+                const int paramId = detail::mapMotionTargetNameToParamId(keyStr);
+                const auto pHash = McxPatternSequencer::hashMotionParamId(keyStr.toStdString());
+                if ((paramId < 0 && pHash == 0u) || !prop.value.isArray()) continue;
                 const auto* pts = prop.value.getArray();
                 if (!pts) continue;
 
                 auto& lane = pat.motionLanes[static_cast<std::size_t>(laneIdx++)];
                 lane.paramId = paramId;
+                lane.paramHash = pHash;
                 for (const auto& ptVar : *pts)
                 {
                     if (!ptVar.isObject() || lane.count >= McxPatternSequencer::kMaxMotionPoints)

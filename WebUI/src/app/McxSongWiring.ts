@@ -8,6 +8,8 @@ import type { McxHostBridge, McxTelemetry } from '../bridge/McxHostBridge';
 import { McxSongBridge, type McxSongScenesStateDto } from '../bridge/McxSongBridge';
 import { McxSceneBar } from '../ui/McxSceneBar';
 import { McxSongDrawer } from '../ui/McxSongDrawer';
+import { McxMegamixModal } from '../ui/McxMegamixModal';
+import { McxMegamixController } from './McxMegamixController';
 import { setBankMuted, setBankSoloed } from '../ui/McxBankLayout';
 import type { McxAppState } from './McxAppState';
 import { McxQuantizedMuteController } from './McxQuantizedMuteController';
@@ -56,6 +58,8 @@ export function mountSongAndScenesUi(bridge: McxHostBridge, state: McxAppState):
 
   const barHost = document.getElementById('mcx-scene-bar-host');
   const mainCol = document.querySelector<HTMLElement>('.mcx-main-col');
+  const megamixCtrl = new McxMegamixController(state, bridge, () => state.refs.megamixModal?.refresh());
+  state.refs.megamixModal = new McxMegamixModal(megamixCtrl, () => Boolean(state.refs.masterPanel?.getTransportState()?.playing));
 
   const openSongDrawer = (focusScene?: number, forceToggle = false) => {
     const d = state.refs.songDrawer;
@@ -104,6 +108,7 @@ export function mountSongAndScenesUi(bridge: McxHostBridge, state: McxAppState):
         state.setLcdLine2(songState.songMode ? 'SONG MODE: ON (ARRANGEMENT)' : 'SONG MODE: OFF (LIVE SCENES)');
       },
       onToggleSongDrawer: () => openSongDrawer(undefined, true),
+      onToggleMegamix: () => state.refs.megamixModal?.toggle(),
       onEditScene: (idx) => openSongDrawer(idx, false),
     });
     state.refs.sceneBar.setScenes(songState.scenes);
@@ -126,6 +131,7 @@ export function mountSongAndScenesUi(bridge: McxHostBridge, state: McxAppState):
 
   state.refs.onSongTelemetry = (tel: McxTelemetry) => {
     qMute.onTelemetry(tel);
+    if (tel.seqTick !== undefined) megamixCtrl.onTelemetryTick(tel.seqTick, Boolean(tel.seqPlaying));
     if (tel.activeScene === undefined) return;
     songState.activeScene = tel.activeScene;
     songState.queuedScene = tel.queuedScene ?? -1;

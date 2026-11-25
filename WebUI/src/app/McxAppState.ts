@@ -48,6 +48,8 @@ import type { McxRackColumn } from '../ui/McxRackColumn';
 import type { McxGlobalDrawer } from '../ui/McxGlobalDrawer';
 import type { McxSettingsModal } from '../ui/McxSettingsModal';
 import type { McxPerformanceModal } from '../ui/McxPerformanceModal';
+import type { McxQLinksBar } from '../ui/McxQLinksBar';
+import type { McxMegamixModal } from '../ui/McxMegamixModal';
 import type { PerformanceMapState } from '@abdsynths/shared/components/performance-map';
 import { createMixerCallbacks } from './McxMixerCallbacksFactory';
 import type { McxLiveTransposeHandle } from './McxLiveTranspose';
@@ -63,6 +65,8 @@ export interface McxUiRefs {
   pianoRollModal?: PianoRollModal | null; grooveModal?: GrooveShuffleModal | null;
   padModal?: MpcPadModal | null; arpModal?: GrooveArpeggiatorModal | null;
   performanceModal?: McxPerformanceModal | null;
+  qlinksBar?: McxQLinksBar | null;
+  megamixModal?: McxMegamixModal | null;
   keyboard?: {
     setPlayableNotes(notes: number[] | null): void; setScaleFilter?(type: string | null, root?: number): void;
     disableScaleFilter?(): void; setScaleSnapMode?(mode: 'block' | 'snap' | 'highlight'): void;
@@ -208,6 +212,7 @@ export class McxAppState {
     if (this.refs.pianoRollModal?.isOpen() || this.isRecording) this.syncPianoRollForPart(idx);
     if (this.refs.synthModal?.isOpen()) this.refs.synthModal.open(idx);
     if (this.refs.performanceModal?.isOpen()) this.refs.performanceModal.syncFromAppState();
+    this.refs.qlinksBar?.syncAutoContextFromUi();
   }
 
   public setSequencerRecording(rec: boolean): void {

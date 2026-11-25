@@ -14,6 +14,7 @@ export interface McxSceneBarOptions {
   onCaptureScene: (sceneIdx: number) => void;
   onToggleSongMode: () => void;
   onToggleSongDrawer: () => void;
+  onToggleMegamix?: () => void;
   onEditScene: (sceneIdx: number) => void;
 }
 
@@ -50,6 +51,7 @@ export class McxSceneBar {
         <button type="button" class="mcx-sbar-mode-btn" id="mcx-sbar-mode" aria-pressed="false" title="${t('mcx.songOpenBtnHint')}">${t('mcx.liveModeShort')}</button>
         <span class="mcx-sbar-status" id="mcx-sbar-status">S1 · Full</span>
         <button type="button" class="mcx-sbar-drawer-btn" id="mcx-sbar-drawer" aria-expanded="false" title="${t('mcx.songOpenBtnHint')}">SONG ${ICON_MENU}</button>
+        <button type="button" class="mcx-sbar-drawer-btn" id="mcx-sbar-mix" title="Megamix (Bar-Quantized Project Switcher)">MIX</button>
       </div>
       <div class="mcx-sbar-pads" role="group" aria-label="Scenes 1 to 8">${pads}</div>
     `;
@@ -58,6 +60,7 @@ export class McxSceneBar {
   private bindEvents(): void {
     this.root.querySelector('#mcx-sbar-mode')?.addEventListener('click', () => this.opts.onToggleSongMode());
     this.root.querySelector('#mcx-sbar-drawer')?.addEventListener('click', () => this.opts.onToggleSongDrawer());
+    this.root.querySelector('#mcx-sbar-mix')?.addEventListener('click', () => this.opts.onToggleMegamix?.());
     this.root.querySelector('.mcx-sbar-pads')?.addEventListener('click', (ev) => {
       const btn = (ev.target as HTMLElement).closest<HTMLElement>('[data-scene-pad]');
       if (!btn) return;

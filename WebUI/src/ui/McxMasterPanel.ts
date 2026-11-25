@@ -104,9 +104,12 @@ export class McxMasterPanel {
 
     const trMount = (document.getElementById('mcx-transport-mount') || this.container.querySelector('#mcx-master-transport-mount')) as HTMLElement | null;
     if (trMount) {
+      let initSync: 'host' | 'internal' = this.bridge.isNative ? 'host' : 'internal';
+      try { const s = localStorage.getItem('abdmcx0x.hostSync.v1'); if (s === 'host' || s === 'internal') initSync = s; } catch { /* ignore */ }
+      this.bridge.setHostSync?.(initSync === 'host');
       this.transport = new CompactTransportBar(trMount, {
-        orientation: 'navbar', showExtendedControls: true, initialBpm: this.opts.initialBpm ?? 120,
-        initialQuantizeSteps: this.opts.initialQuantizeSteps ?? 16,
+        orientation: 'navbar', showExtendedControls: true, showSyncToggle: true, initialSyncMode: initSync,
+        initialBpm: this.opts.initialBpm ?? 120, initialQuantizeSteps: this.opts.initialQuantizeSteps ?? 16,
         labels: { play: t('mcx.transportPlay') || 'Play', stop: t('mcx.transportStop') || 'Stop', record: t('mcx.transportRecord') || 'Record', loop: t('mcx.transportLoop') || 'Loop', metro: t('mcx.transportMetro') || 'Metro' },
         onReturnToZero: () => { this.bridge.returnSequencerToZero(); this.opts.setLcdLine2?.('TRANSPORT: RTZ'); },
         onRewind: () => { this.bridge.seekSequencerBars(-1); this.opts.setLcdLine2?.('TRANSPORT: REW -1 BAR'); },
@@ -123,6 +126,8 @@ export class McxMasterPanel {
         onLoop: (loop) => { this.bridge.setSequencerLoop(loop); this.opts.setLcdLine2?.(loop ? 'LOOP: ON' : 'LOOP: ONE-SHOT'); },
         onMetro: (metro) => this.opts.setLcdLine2?.(metro ? 'METRONOME: ON' : 'METRONOME: OFF'),
         onTempoChange: (bpm) => { this.bridge.setTempo(bpm); this.opts.onBpmChange?.(bpm); this.opts.setLcdLine2?.(`TEMPO: ${bpm.toFixed(1)} BPM`); },
+        onTapTempo: (bpm) => this.opts.setLcdLine2?.(`TAP TEMPO: ${bpm.toFixed(1)} BPM`),
+        onSyncModeChange: (mode) => { try { localStorage.setItem('abdmcx0x.hostSync.v1', mode); } catch { /* ignore */ } this.bridge.setHostSync?.(mode === 'host'); this.opts.setLcdLine2?.(`CLOCK SYNC: ${mode === 'host' ? 'HOST DAW' : 'INTERNAL'}`); },
         onTransportChange: this.opts.onTransportChange,
       });
     }

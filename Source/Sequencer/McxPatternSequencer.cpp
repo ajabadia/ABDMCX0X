@@ -101,13 +101,59 @@ bool McxPatternSequencer::addStagingEvent(int partIdx, int startTick, int durati
 
 bool McxPatternSequencer::addStagingMotion(int partIdx, int laneIdx, int paramId, int tick, float value) noexcept
 {
-    if (partIdx < 0 || partIdx >= kNumParts || laneIdx < 0 || laneIdx >= 4) return false;
+    if (partIdx < 0 || partIdx >= kNumParts || laneIdx < 0 || laneIdx >= kMaxMotionLanes) return false;
     auto& lane = storage_->staging[static_cast<std::size_t>(partIdx)].motionLanes[static_cast<std::size_t>(laneIdx)];
     lane.paramId = paramId;
     if (lane.count >= kMaxMotionPoints) return false;
 
     const int maxTicks = std::max(1, getTotalTicks());
     lane.points[static_cast<std::size_t>(lane.count++)] = { std::clamp(tick, 0, maxTicks - 1), value };
+    return true;
+}
+
+bool McxPatternSequencer::addStagingMotionHashed(int partIdx, std::uint32_t paramHash, int legacyParamId,
+                                                 int tick, float value, bool stepInterp) noexcept
+{
+    if (partIdx < 0 || partIdx >= kNumParts || (paramHash == 0u && legacyParamId < 0)) return false;
+    auto& lanes = storage_->staging[static_cast<std::size_t>(partIdx)].motionLanes;
+    MotionLane* target = nullptr;
+    for (auto& lane : lanes)
+    {
+        if ((paramHash != 0u && lane.paramHash == paramHash)
+            || (legacyParamId >= 0 && lane.paramId == legacyParamId))
+        {
+            target = &lane;
+            break;
+        }
+    }
+    if (target == nullptr)
+    {
+        for (auto& lane : lanes)
+        {
+            if (lane.paramHash == 0u && lane.paramId < 0)
+            {
+                target = &lane;
+                break;
+            }
+        }
+    }
+    if (target == nullptr) return false;
+
+    target->paramHash = paramHash;
+    target->paramId = legacyParamId;
+    target->stepInterp = stepInterp;
+
+    const int maxTicks = std::max(1, getTotalTicks());
+    const int t = ((tick % maxTicks) + maxTicks) % maxTicks;
+    const float v = std::clamp(value, 0.0f, 1.0f);
+    for (int i = 0; i < target->count; ++i)
+    {
+        auto& pt = target->points[static_cast<std::size_t>(i)];
+        if (pt.tick == t) { pt.value = v; return true; }
+        if (std::abs(pt.tick - t) < 6 && std::abs(pt.value - v) < 0.004f) return true;
+    }
+    if (target->count >= kMaxMotionPoints) return false;
+    target->points[static_cast<std::size_t>(target->count++)] = { t, v };
     return true;
 }
 
@@ -218,52 +264,6 @@ void McxPatternSequencer::pause() noexcept
         storage_->activeNoteCount[u] = 0;
     }
     publishTelemetry();
-}
-
-void McxPatternSequencer::syncFromHostTransport(bool hostPlaying, double hostBpm, double hostPpqPos, bool ppqValid,
-                                                const McxSequencerCallbacks& cbs, McxMidiClockEmitter* midiClock,
-                                                McxMidiOutQueue<1024>* outQ) noexcept
-{
-    if (hostBpm >= 20.0 && hostBpm <= 300.0)
-        setBpm(hostBpm);
-
-    const int totalTicks = std::max(1, publishedTotalTicks_.load(std::memory_order_relaxed));
-    const int ppq = ppq_.load(std::memory_order_relaxed);
-
-    if (hostPlaying && !prevHostPlaying_)
-    {
-        if (ppqValid && hostPpqPos >= 0.0)
-        {
-            currentTick_ = static_cast<int>(std::llround(hostPpqPos * static_cast<double>(ppq))) % totalTicks;
-            sampleCursor_ = 0.0;
-            barBoundaryPending_ = false;
-        }
-        start(!ppqValid);
-        if (midiClock)
-        {
-            if (ppqValid && hostPpqPos > 0.01) midiClock->emitContinue(outQ, 0);
-            else midiClock->emitStart(outQ, 0);
-        }
-    }
-    else if (!hostPlaying && prevHostPlaying_)
-    {
-        stop(cbs, 0);
-        if (midiClock) midiClock->emitStop(outQ, 0);
-    }
-    else if (hostPlaying && ppqValid && hostPpqPos >= 0.0)
-    {
-        const int hostTick = static_cast<int>(std::floor(hostPpqPos * static_cast<double>(ppq))) % totalTicks;
-        int dist = std::abs(hostTick - currentTick_);
-        if (dist > totalTicks / 2) dist = totalTicks - dist;
-        if (dist > 4)
-        {
-            releaseAllActiveNotes(cbs, 0);
-            currentTick_ = hostTick;
-            sampleCursor_ = 0.0;
-            barBoundaryPending_ = false;
-        }
-    }
-    prevHostPlaying_ = hostPlaying;
 }
 
 } // namespace abdmcx

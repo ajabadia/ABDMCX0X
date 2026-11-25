@@ -8,6 +8,7 @@ import type { McxHostBridge } from '../bridge/McxHostBridge';
 import { McxRackSlotBridge } from '../bridge/McxRackSlotBridge';
 import type { McxGlobalDrawer } from '../ui/McxGlobalDrawer';
 import { McxMasterPanel } from '../ui/McxMasterPanel';
+import { McxQLinksBar } from '../ui/McxQLinksBar';
 import { McxRackColumn } from '../ui/McxRackColumn';
 import type { McxAppState } from './McxAppState';
 import type { createStudioModals } from './McxModalsFactory';
@@ -126,6 +127,10 @@ export function mountRackAndMasterUi(
         state.refs.stepStrip?.setTransportRunning(st.playing, st.bpm);
       },
     });
+  }
+  const qlHost = byId('mcx-qlinks-host');
+  if (qlHost) {
+    state.refs.qlinksBar = new McxQLinksBar({ hostEl: qlHost, bridge, state, toggleBtn: byId('mcx-qlinks-btn') });
   }
   applySideColStates();
 }

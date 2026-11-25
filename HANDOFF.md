@@ -1,10 +1,24 @@
 # HANDOFF — ABDMCX0X
 
-> **Última actualización:** 2026-11-20 · **Estado actual:** **Plan de Saneamiento Pre-Fase 13 (Oleadas P0–P4) COMPLETADO Y VERIFICADO (`12/12` CTest, `tsc` 0 errores, `ABDMCX0X` Vitest `3/3`, `ABDShared` `pianoRollModal` `10/10`, Vite `237` módulos, JUCE 9 Standalone/VST3 y WASM). Listo para Fase 13 (`64` pistas) tras verificación visual final a `1280x720`.**
+> **Última actualización:** 2026-11-25 · **Estado actual:** **Fases 0–14 (`64` pistas + Emax II), Print→SEQ, Sequences Library, `PerformanceDeck` + Picker modal (`14/14` specs), Autodetección MIDI Learn en disco, y Bloque 5 completo (Track/Bank Mute `Q·BAR`, `16` `motionLanes` por hash `uint32_t`, Tap Tempo + `SYNC: HOST|INT`, Q-Links contextuales y Megamix cuantizado al compás) implementados.** Compilación C++20 + CTest pendiente de ejecución del usuario (`.\build.bat full`).
 
 ---
 
-## 1. Estado Actual de Verificaciones y Componentes
+## 0. Estado Actualizado (2026-11-25)
+
+- **Arquitectura multi-motor y secuenciador:** `64` pistas en 4 bancos (`A..D`), motores `StructuredRompler` (Z-Plane + efectos), `EmaxSynth` (EMAX / Emax II `.EB2`/`.EM2`), `LinearArithmetic`, `Mcs48Synth` (TR-707/727) y `Tb303Synth`, además de `Print→SEQ` y **Sequences Library** (browsing `.mcxseq`/`.mid` + importación/exportación MIDI/SF2).
+- **Performance en directo (Bloque 3B + Bloque 5):**
+  - **`PerformanceDeck` (`Nuke`) compartido en `ABDShared/Components/PerformanceDeck/`:** estilo circular Nuke, transporte inferior junto a `M/S`, diálogo modal de selección agrupada y buscable por literal (`PerformanceParamPickerModal.ts`), desfase visual de latido en modo `Edit` y **specs completas de Nuke en los `14/14` engines** en `Docs/specs/ENGINE_CREATION_GUIDE.md`.
+  - **Mutación / Capas / Carriles C++20:** `McxQuantizedMuteState.h` (`Q·BAR`), `McxPadLayerSelector.h` (Velocity Zones / Round-Robin / Random), `McxPatternSequencer.h` ampliado a **`16` `motionLanes` RT-safe** por hash `uint32_t` FNV-1a de `paramId`, y toggle **`SYNC: HOST | INT`** en `McxEngine::setHostSyncEnabled(...)` (`Tests/McxPhase15LivePerfTests.cpp` T1–T6).
+  - **Transporte y Performance UI:** `CompactTransportBar` + `McxMasterPanel` con **Tap Tempo** dedicado y **`SYNC: HOST | INT`**; barra colapsable de **4 Q-Links contextuales** (`McxQLinksBar.ts`: `MIX|TONE|RACK|PADS|MST` + `AUTO`); y diálogo modeless **Megamix cuantizado al compás** (`McxMegamixController.ts` + `McxMegamixModal.ts`: 8 slots `.mcxprj`, `Q: 1B|2B|4B`, `BPM: LOCK|PROJ`).
+- **Pendientes activos priorizados (ver `ROADMAP.md`):**
+  1. Hardware Externo (`H1–H4`): integración con `ABDShared/Code/HardwareMidiDetect`, `HardwareDrivers` y `LiveSysExInspector`.
+  2. Chord Mode / Harmonizer (`McxChordGenerator` + pad chords) y Slice 2 de `BankManager` compartido.
+  3. Soporte nativo `REX2` / `.rcy` (wrapper SDK REX), salidas DAW multi-out (`16×2`), validación `pluginval` strictness 5+, e integración final de DSP `ABDMCX0X` en `ABDAudioLab`.
+
+---
+
+## 1. Estado Actual de Verificaciones y Componentes (Snapshot 2026-11-20)
 - **Novedades de esta Sesión (Armario Rack FX 19'', Ducking Dual y Hoja de Ruta 64 Pistas):**
   - **Limpieza y Reorganización de Cabecera (Navbar) y Barra LCD Superior:**
     * En [`McxNavbar.ts`](WebUI/src/ui/McxNavbar.ts) (173 lín.), se retiraron el selector de temas (`#nav-theme-select`), el botón de claro/oscuro (`#btn-scheme`), el selector de idiomas (`#btn-locale`), el botón de pánico (`#btn-panic`) y el botón de ajustes (`#btn-settings`) de la barra de navegación; todas estas funciones permanecen intactas y accesibles canónicamente a través del menú *Edición* (`Ajustes Globales...` con `Ctrl+,`, `Esc`, etc.).

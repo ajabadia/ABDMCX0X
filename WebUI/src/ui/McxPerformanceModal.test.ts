@@ -13,6 +13,8 @@ function makeMockBridge() {
     setTempo: vi.fn(),
     setPartPattern: vi.fn(),
     setBankLayout: vi.fn(),
+    setTransportPlaying: vi.fn(),
+    pauseSequencer: vi.fn(),
     requestPartEngineState: vi.fn(),
     requestPartPresets: vi.fn(),
     sendCommand: vi.fn(),
@@ -46,6 +48,12 @@ describe('McxPerformanceModal (Bloque D integration)', () => {
     expect(modal.deck.el.querySelectorAll('[data-slot-card]:not(.is-disabled)')).toHaveLength(10);
     expect(modal.deck.el.querySelector('.mcx-perf-track-strip')).not.toBeNull();
     expect(modal.deck.el.querySelector('.stick-recorder-bar')).toBeNull();
+    (modal.deck.el.querySelector('[data-tr-act="play"]') as HTMLElement)?.click();
+    expect(bridge.setTransportPlaying).toHaveBeenCalledWith(true, false);
+    (modal.deck.el.querySelector('[data-tr-act="pause"]') as HTMLElement)?.click();
+    expect(bridge.pauseSequencer).toHaveBeenCalledTimes(1);
+    (modal.deck.el.querySelector('[data-tr-act="rec"]') as HTMLElement)?.click();
+    expect(state.isRecording).toBe(true);
 
     state.focusPart(1);
     expect(modal.deck.el.querySelectorAll('[data-slot-card]:not(.is-disabled)')).toHaveLength(8);

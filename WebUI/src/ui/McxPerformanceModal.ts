@@ -41,6 +41,8 @@ export class McxPerformanceModal {
   private lastTick = 0;
   private lastTotalTicks = 384;
   private isPlaying = false;
+  private isPaused = false;
+  private lastRec = false;
 
   constructor(opts: McxPerformanceModalOptions) {
     this.bridge = opts.bridge; this.state = opts.state; this.getCatalog = opts.getCatalog; this.onToggleOpen = opts.onToggleOpen;
@@ -64,6 +66,9 @@ export class McxPerformanceModal {
       onMixerParam: (k, val) => { const p = this.getTargetPart(); (this.state.partsState[p] as any)[k] = val; this.bridge.setParam(p, k, val); },
       onToggleMute: () => cbs.onToggleMute(this.getTargetPart()),
       onToggleSolo: () => cbs.onToggleSolo(this.getTargetPart()),
+      onPlay: () => { if (this.isPlaying && !this.isPaused) { this.isPlaying = false; this.isPaused = false; this.bridge.setTransportPlaying(false, true); } else { this.bridge.setTempo(this.state.globalSettings.standaloneBpm || 120); this.isPlaying = true; this.isPaused = false; this.bridge.setTransportPlaying(true, false); } this.syncTransportUi(); },
+      onPause: () => { this.isPaused = !this.isPaused; this.bridge.pauseSequencer(); this.syncTransportUi(); },
+      onToggleRecord: () => { this.state.setSequencerRecording(!this.state.isRecording); this.syncTransportUi(); },
       onCycleOverrideMode: () => { this.motion.setOverrideMode(this.motion.overrideMode === 'override' ? 'auto-return' : 'override'); this.syncStrip(); },
       onCycleRecordMode: () => { this.motion.setRecordMode(this.motion.recordMode === 'touch' ? 'latch' : 'touch'); this.syncStrip(); },
       onCycleTakeoverMode: () => { this.motion.setTakeoverMode(this.motion.takeoverMode === 'scale' ? 'pickup' : (this.motion.takeoverMode === 'pickup' ? 'jump' : 'scale')); this.syncStrip(); },
@@ -106,9 +111,12 @@ export class McxPerformanceModal {
     this.syncStrip();
   }
 
+  public syncTransportUi(): void { this.lastRec = this.state.isRecording; this.trackStrip.syncTransport(this.isPlaying, this.isPaused, this.state.isRecording); }
+
   private syncStrip(): void {
     const ps = this.state.partsState[this.getTargetPart()];
     if (ps) this.trackStrip.sync(ps, { overrideMode: this.motion.overrideMode, recordMode: this.motion.recordMode, takeoverMode: this.motion.takeoverMode });
+    this.syncTransportUi();
   }
 
   private persistPartMap(map: PerformanceMapState): void {
@@ -144,8 +152,10 @@ export class McxPerformanceModal {
     this.deck.setAutomationOverride(false);
   }
 
-  public onTelemetryTick(tick: number, playing: boolean, totalTicks = 384): void {
-    this.lastTick = tick; this.isPlaying = playing; this.lastTotalTicks = Math.max(1, totalTicks);
+  public onTelemetryTick(tick: number, playing: boolean, totalTicks = 384, paused = false): void {
+    const chg = playing !== this.isPlaying || paused !== this.isPaused || this.state.isRecording !== this.lastRec;
+    this.lastTick = tick; this.isPlaying = playing; this.isPaused = paused; this.lastTotalTicks = Math.max(1, totalTicks);
+    if (chg) this.syncTransportUi();
     if (!playing) return;
     const p = this.getTargetPart(), motionStore = this.state.partsState[p]?.sequence?.motion; if (!motionStore) return;
     const updates = this.motion.stepPlayback(p, tick, this.lastTotalTicks, motionStore,

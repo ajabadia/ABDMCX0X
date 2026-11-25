@@ -37,6 +37,34 @@
   accent-color: var(--perf-accent, var(--color-accent));
 }
 
+.mcx-perf-strip-div {
+  width: 1px;
+  height: 14px;
+  background: var(--color-panel-border, var(--color-border));
+  margin: 0 2px;
+}
+
+.mcx-perf-tr-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mcx-perf-tr-play.is-active {
+  border-color: var(--perf-accent, var(--color-accent));
+  color: var(--perf-accent, var(--color-accent));
+}
+
+.mcx-perf-tr-pause.is-active {
+  border-color: var(--color-warning, var(--color-accent));
+  color: var(--color-warning, var(--color-accent));
+}
+
+.mcx-perf-tr-rec.is-active {
+  border-color: var(--color-danger, var(--color-error, var(--color-accent)));
+  color: var(--color-danger, var(--color-error, var(--color-accent)));
+}
+
 .mcx-perf-strip-sep {
   flex: 1;
   min-width: 8px;

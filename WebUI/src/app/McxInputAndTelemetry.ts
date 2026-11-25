@@ -106,7 +106,7 @@ export function bindTelemetry(bridge: McxHostBridge, state: McxAppState, scopeVi
     state.refs.onSongTelemetry?.(tel);
     state.refs.masterPanel?.updateMeter(tel.peakL, tel.peakR);
     state.refs.synthModal?.updateTelemetry?.(tel);
-    state.refs.performanceModal?.onTelemetryTick(tel.seqTick ?? 0, Boolean(tel.seqPlaying), tel.seqTotalTicks ?? 384);
+    state.refs.performanceModal?.onTelemetryTick(tel.seqTick ?? 0, Boolean(tel.seqPlaying), tel.seqTotalTicks ?? 384, Boolean(tel.seqPaused));
 
     if (tel.seqPlaying !== undefined) {
       const playing = Boolean(tel.seqPlaying);

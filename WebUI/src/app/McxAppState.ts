@@ -216,6 +216,7 @@ export class McxAppState {
     this.bridge.setParam(this.focusedPart, 'seqRecording', this.isRecording ? 1 : 0);
     this.refs.masterPanel?.setRecording(this.isRecording);
     this.refs.pianoRollModal?.setRecording?.(this.isRecording);
+    this.refs.performanceModal?.syncTransportUi?.();
   }
 
   public setRecordConfig(patch: { mode?: 'overdub' | 'replace'; countInBars?: number; quantizeSteps?: number }): void {

@@ -20,7 +20,7 @@ export class BridgeWasm {
   private workletNode: AudioWorkletNode | null = null;
   private isReady = false;
   private initPromise: Promise<boolean> | null = null;
-  private pending: Array<Record<string, unknown>> = [];
+  private pending: Array<{ msg: Record<string, unknown>; transfer?: Transferable[] }> = [];
   private onTelemetryCb: ((t: McxTelemetry) => void) | null = null;
   private onStatusCb: ((status: 'idle' | 'loading' | 'ready' | 'error', detail?: string) => void) | null = null;
   private onBankLoadedCb: ((ok: boolean, sizeBytes: number) => void) | null = null;
@@ -45,19 +45,25 @@ export class BridgeWasm {
     if (typeof window === 'undefined') return;
     const unlock = () => {
       const isNative = Boolean((window as any).__JUCE__?.backend || (window as any).chrome?.webview?.postMessage);
-      if (!isNative) void this.initAudio();
-      window.removeEventListener('pointerdown', unlock, true);
-      window.removeEventListener('keydown', unlock, true);
+      if (isNative) {
+        window.removeEventListener('pointerdown', unlock, true);
+        window.removeEventListener('keydown', unlock, true);
+        return;
+      }
+      if (this.audioCtx?.state === 'suspended') void this.audioCtx.resume().catch(() => {});
+      if (!this.isReady && !this.initPromise) void this.initAudio();
+      if (this.isReady && this.audioCtx?.state === 'running') {
+        window.removeEventListener('pointerdown', unlock, true);
+        window.removeEventListener('keydown', unlock, true);
+      }
     };
     window.addEventListener('pointerdown', unlock, true);
     window.addEventListener('keydown', unlock, true);
   }
 
   public async initAudio(): Promise<boolean> {
-    if (this.isReady) {
-      if (this.audioCtx?.state === 'suspended') await this.audioCtx.resume().catch(() => {});
-      return true;
-    }
+    if (this.audioCtx?.state === 'suspended') void this.audioCtx.resume().catch(() => {});
+    if (this.isReady) return true;
     if (this.initPromise) return this.initPromise;
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (typeof AudioCtx !== 'function') return false;
@@ -86,7 +92,7 @@ export class BridgeWasm {
     try {
       const ctx = new AudioCtx({ latencyHint: 'interactive' });
       this.audioCtx = ctx;
-      if (ctx.state === 'suspended') await ctx.resume();
+      if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
 
       await this.addWorkletFirst(ctx, ['./wasm/mcx0xWorklet.js', '/wasm/mcx0xWorklet.js', './src/wasm/mcx0xWorklet.js']);
       const wasmRes = await this.fetchFirst(['./wasm/mcx0x_dsp.wasm', '/wasm/mcx0x_dsp.wasm', './src/wasm/mcx0x_dsp.wasm']);
@@ -99,16 +105,23 @@ export class BridgeWasm {
       node.connect(ctx.destination);
 
       return await new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => {
+          if (this.isReady) return;
+          this.onStatusCb?.('error', 'WASM init timeout');
+          resolve(false);
+        }, 10000);
         node.port.onmessage = (ev) => {
           const msg = ev.data;
           if (!msg) return;
           if (msg.type === 'WASM_READY') {
+            clearTimeout(timer);
             this.isReady = true;
             this.onStatusCb?.('ready', `${msg.sampleRate} Hz`);
-            for (const queued of this.pending) node.port.postMessage(queued);
+            for (const q of this.pending) node.port.postMessage(q.msg, q.transfer ?? []);
             this.pending = [];
             resolve(true);
           } else if (msg.type === 'WASM_ERROR') {
+            clearTimeout(timer);
             this.onStatusCb?.('error', msg.message); resolve(false);
           } else if (msg.type === 'TELEMETRY') {
             this.onTelemetryCb?.(parseTelemetryPayload(msg));
@@ -140,8 +153,12 @@ export class BridgeWasm {
       if (this.audioCtx?.state === 'suspended') void this.audioCtx.resume().catch(() => {});
       this.workletNode.port.postMessage(msg, transfer ?? []);
     } else {
-      if (this.pending.length < 128) this.pending.push(msg);
-      if (msg.type === 'NOTE_ON') void this.initAudio();
+      if (this.pending.length < 128) this.pending.push({ msg, transfer });
+      if (
+        msg.type === 'NOTE_ON' || msg.type === 'INDEX_BANK' || msg.type === 'LOAD_BANK'
+        || msg.type === 'LOAD_FACTORY_PRESET' || msg.type === 'SELECT_ENGINE'
+        || msg.type === 'SET_ENGINE_PARAM' || msg.type === 'GET_ENGINE_STATE'
+      ) void this.initAudio();
     }
   }
 
@@ -160,8 +177,11 @@ export class BridgeWasm {
   public loadFactoryPreset(part: number, presetIndex: number): void { this.post({ type: 'LOAD_FACTORY_PRESET', part, presetIndex }); }
   public setPartEngineParam(part: number, key: string, value: number): void { this.post({ type: 'SET_ENGINE_PARAM', part, key, value }); }
   public requestPartEngineState(part: number): void { this.post({ type: 'GET_ENGINE_STATE', part }); }
-  public loadBankItemOnDemand(part: number, bankSlot: number, kind: 'tone' | 'drum_kit', itemIndex: number): void {
-    this.post({ type: 'LOAD_BANK_ITEM', part, bankSlot, kind, itemIndex });
+  public setPartEngineStateJson(part: number, stateJson: string): void { this.post({ type: 'SET_ENGINE_STATE_JSON', part, stateJson }); }
+  public loadBankItemOnDemand(
+    part: number, bankSlot: number, kind: 'tone' | 'drum_kit' | 'partial_wave' | 'drum_wave', itemIndex: number, targetIndex = 0
+  ): void {
+    this.post({ type: 'LOAD_BANK_ITEM', part, bankSlot, kind, itemIndex, targetIndex });
   }
   public collectUnusedWaves(): void { this.post({ type: 'COLLECT_WAVES' }); }
   public setGroove(part: number, cfg: { mode: string; algorithm: string; resolution: string; amount: number }): void {
@@ -172,7 +192,7 @@ export class BridgeWasm {
       resolution: cfg.resolution === '1/8' ? 1 : 0, amount: cfg.amount,
     });
   }
-  public setPartPattern(part: number, seq: { bars?: number; ppq?: number; notes?: any[]; motion?: Record<string, any[]> }): void {
+  public setPartPattern(part: number, seq: { bars?: number; ppq?: number; mode?: string; notes?: any[]; motion?: Record<string, any[]> }): void {
     this.post({ type: 'SET_PATTERN', part, bars: seq.bars ?? 1, ppq: seq.ppq ?? 96, notes: seq.notes ?? [], motion: seq.motion ?? {} });
   }
 }

@@ -37,6 +37,11 @@ std::string McxBankManagerBridge::serializeToJson(const McxEngine& engine,
        << engine.getOutputAndFx().getSendSlotTarget(1) << ", "
        << engine.getOutputAndFx().getSendSlotTarget(2) << ", "
        << engine.getOutputAndFx().getSendSlotTarget(3) << "],\n";
+    {
+        char rackBuf[4096] {};
+        engine.getOutputAndFx().getChassis().serializeJson(rackBuf, sizeof(rackBuf));
+        ss << "  \"rackChassis\": " << (rackBuf[0] ? rackBuf : "{}") << ",\n";
+    }
     ss << "  \"hardwareProfile\": \"" << bridge.getProfile().id << "\",\n";
     ss << "  \"latencyMs\": " << bank_json::floatToStr(bridge.getLatencyCompensator().getLatencyMs()) << ",\n";
     ss << "  \"bankLayout\": " << engine.serializeBankLayoutJson() << ",\n";
@@ -110,6 +115,9 @@ bool McxBankManagerBridge::deserializeFromJson(McxEngine& engine,
             cur = comma + 1;
         }
     }
+    const std::string rackJson = extractJsonObjectField(header, "rackChassis");
+    if (!rackJson.empty())
+        (void)engine.getOutputAndFx().getChassis().deserializeJson(rackJson.c_str());
 
     bridge.setProfileById(bank_json::findString(header, "hardwareProfile", "generic_midi"));
     bridge.getLatencyCompensator().setLatencyMs(bank_json::findFloat(header, "latencyMs", 0.0f));

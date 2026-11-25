@@ -89,6 +89,7 @@ public:
     int mountBankFromFile(const std::string& filePath);
     bool loadIndexedBankTone(int bankSlot, int toneIdx, int partIdx);
     bool loadIndexedBankKit(int bankSlot, int kitIdx, int partIdx);
+    bool assignIndexedBankWave(int bankSlot, int waveIdx, bool isDrumSlot, int targetIdx, int partIdx);
     void resetToFactory();
     void enqueueResetToFactory(int partIdx = 0);
     bool loadBankFromMemory(const std::uint8_t* data, std::size_t sizeBytes);

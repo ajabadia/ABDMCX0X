@@ -5,10 +5,12 @@
  * Strict line limit: < 200 lines.
  */
 
+import { hideCoverHoverPopover } from '@abdsynths/shared/components';
 import { attachDialogDrag, bringToFront } from '@abdsynths/shared/diagnostic-probe';
+import { ensureEngineWaveDependencies } from '../app/McxSoundBankManager';
 import type { McxEngineDescriptorDto, McxHostBridge, McxMidiDevicesDto, McxPartPresetsDto } from '../bridge/McxHostBridge';
-import { DEFAULT_ENGINE_CATALOG, getFallbackPresetsForEngine } from './McxEngineCatalogDefaults';
-import { buildRouteModalHtml } from './McxInstrumentRouteModalView';
+import { DEFAULT_ENGINE_CATALOG } from './McxEngineCatalogDefaults';
+import { buildRouteModalHtml, wireRouteCoverPopups } from './McxInstrumentRouteModalView';
 import type { McxPartUiState } from './McxMixerConsole';
 
 export interface McxInstrumentRouteModalOptions {
@@ -38,15 +40,16 @@ export class McxInstrumentRouteModal {
     this.onEscKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape' && this.dialog.open) this.close(); };
 
     this.dialog.addEventListener('close', () => {
-      this.dialog.returnValue = '';
-      window.removeEventListener('keydown', this.onEscKey);
-      this.opts.onPartUpdated(this.currentPart);
+      this.dialog.returnValue = ''; window.removeEventListener('keydown', this.onEscKey); this.opts.onPartUpdated(this.currentPart);
     });
   }
 
   public syncTheme(): void {
     const theme = document.documentElement.getAttribute('data-theme');
     if (theme) this.dialog.setAttribute('data-theme', theme);
+    if (this.dialog.open) {
+      this.render();
+    }
   }
 
   public open(partIdx: number): void {
@@ -69,17 +72,15 @@ export class McxInstrumentRouteModal {
   }
 
   public close(): void {
+    hideCoverHoverPopover();
     window.removeEventListener('keydown', this.onEscKey);
     if (!this.dialog.open) return;
     if (typeof this.dialog.close === 'function') this.dialog.close();
     else this.dialog.removeAttribute('open');
   }
-
   public setLocale(): void { if (this.dialog.open) this.render(); }
-  public destroy(): void { window.removeEventListener('keydown', this.onEscKey); this.dialog.remove(); }
-
+  public destroy(): void { hideCoverHoverPopover(); window.removeEventListener('keydown', this.onEscKey); this.dialog.remove(); }
   public getEngineCatalog(): McxEngineDescriptorDto[] { return this.catalog; }
-
   public setEngineCatalog(engines: McxEngineDescriptorDto[]): void {
     if (engines.length > 0) this.catalog = engines;
     if (this.dialog.open) this.render();
@@ -98,15 +99,14 @@ export class McxInstrumentRouteModal {
 
   private render(): void {
     const p = this.currentPart, ps = this.opts.getPartState(p);
-    const engIdx = ps.engineTypeIndex ?? ((ps.routeMode ?? 0) === 1 ? 1 : 0);
-    const presets = this.presetsByPart.get(p)?.presets ?? getFallbackPresetsForEngine(engIdx);
-    this.dialog.innerHTML = buildRouteModalHtml(p, ps, this.catalog, presets, this.getDevices());
+    this.dialog.innerHTML = buildRouteModalHtml(p, ps, this.catalog, [], this.getDevices());
+    wireRouteCoverPopups(this.dialog, this.catalog);
     const head = this.dialog.querySelector<HTMLElement>('.mcx-route-head');
     if (head) attachDialogDrag(this.dialog, head);
-    this.bindEvents(presets);
+    this.bindEvents();
   }
 
-  private bindEvents(presets: Array<{ index: number; name: string }>): void {
+  private bindEvents(): void {
     const p = this.currentPart, ps = this.opts.getPartState(p), b = this.opts.bridge;
     const tag = `P${String(p + 1).padStart(2, '0')}`;
     this.dialog.querySelectorAll<HTMLElement>('[data-act="close"]').forEach((el) => el.addEventListener('click', () => this.close()));
@@ -124,64 +124,55 @@ export class McxInstrumentRouteModal {
         const mode = parseInt(btn.dataset.route ?? '0', 10);
         ps.routeMode = mode; b.setParam(p, 'routeMode', mode);
         if (mode === 1) {
-          ps.engineTypeIndex = 1; ps.engineTypeId = 'external_midi'; b.selectPartEngineType(p, 1);
+          ps.engineTypeIndex = 1; ps.engineTypeId = 'external_midi';
+          ps.name = 'External MIDI'; ps.coverUrl = undefined; ps.soundBankId = undefined; ps.soundBankName = undefined; ps.factoryPresetIndex = undefined;
+          b.selectPartEngineType(p, 1);
         } else if (ps.engineTypeIndex === 1 || ps.engineTypeId === 'external_midi') {
-          ps.engineTypeIndex = 0; ps.engineTypeId = 'structured_rompler'; b.selectPartEngineType(p, 0);
+          ps.engineTypeIndex = 0; ps.engineTypeId = 'structured_rompler';
+          ps.name = ''; ps.coverUrl = undefined; ps.soundBankId = undefined; ps.soundBankName = undefined; ps.factoryPresetIndex = undefined;
+          b.selectPartEngineType(p, 0); b.requestPartEngineState(p);
         }
         b.requestPartPresets(p);
         this.opts.setLcdLine2(`${tag} DESTINO: ${mode === 1 ? 'EXT MIDI' : mode === 2 ? 'A+B LAYER' : 'INTERNAL'}`);
         this.opts.onPartUpdated(p); this.render();
       });
     });
-    this.dialog.querySelector<HTMLSelectElement>('#mcx-route-engine')?.addEventListener('change', (ev) => {
-      const idx = parseInt((ev.target as HTMLSelectElement).value, 10), desc = this.catalog.find((e) => e.index === idx);
+    const selectEngine = (idx: number): void => {
+      const desc = this.catalog.find((e) => e.index === idx);
       ps.engineTypeIndex = idx; ps.engineTypeId = desc?.typeId || ps.engineTypeId;
-      b.selectPartEngineType(p, idx);
+      ps.name = ''; ps.coverUrl = undefined; ps.soundBankId = undefined; ps.soundBankName = undefined; ps.factoryPresetIndex = undefined;
+      b.selectPartEngineType(p, idx); ensureEngineWaveDependencies(desc?.typeId, b);
       if (desc?.supportsDrumMode === false) { ps.kind = 'chromatic'; b.setParam(p, 'partKind', 0); }
       else if (desc?.supportsChromaticMode === false) { ps.kind = 'drum_map'; b.setParam(p, 'partKind', 1); }
-      b.requestPartPresets(p);
+      b.requestPartPresets(p); b.requestPartEngineState(p);
       this.opts.setLcdLine2(`${tag} MOTOR: ${desc?.displayName ?? idx}`);
       this.opts.onPartUpdated(p); this.render();
-    });
-    this.dialog.querySelector<HTMLSelectElement>('#mcx-route-preset')?.addEventListener('change', (ev) => {
-      const presetIdx = parseInt((ev.target as HTMLSelectElement).value, 10);
-      if (presetIdx < 0) return;
-      b.loadFactoryPreset(p, presetIdx);
-      ps.factoryPresetIndex = presetIdx;
-      const found = presets.find((pr) => pr.index === presetIdx);
-      if (found) ps.name = found.name;
-      if ((ps.engineTypeIndex ?? 0) === 0) {
-        ps.kind = presetIdx >= 16 ? 'drum_map' : 'chromatic';
-        b.setParam(p, 'partKind', presetIdx >= 16 ? 1 : 0);
-      }
-      this.opts.setLcdLine2(`${tag} PRESET: ${ps.name || presetIdx}`);
-      this.opts.onPartUpdated(p); this.render();
+    };
+    this.dialog.querySelectorAll<HTMLButtonElement>('[data-engine-idx]').forEach((btn) => btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.engineIdx ?? '', 10); if (!Number.isNaN(idx)) selectEngine(idx);
+    }));
+    this.dialog.querySelector<HTMLSelectElement>('#mcx-route-engine')?.addEventListener('change', (ev) => {
+      selectEngine(parseInt((ev.target as HTMLSelectElement).value, 10));
     });
     this.dialog.querySelector<HTMLSelectElement>('#mcx-route-in-port')?.addEventListener('change', (ev) => {
       const portIdx = parseInt((ev.target as HTMLSelectElement).value, 10);
       const dev = portIdx > 0 ? this.getDevices().inputs.find((d) => d.portIndex === portIdx) : undefined;
-      ps.midiInPortIndex = portIdx;
-      ps.midiInDeviceName = dev?.name ?? '';
+      ps.midiInPortIndex = portIdx; ps.midiInDeviceName = dev?.name ?? '';
       if (dev && !dev.enabled && b.isNative) b.setMidiDeviceEnabled('input', dev.id, true);
       b.setPartMidiDevice(p, 'input', portIdx, dev?.name ?? '');
       this.opts.setLcdLine2(`${tag} MIDI IN: ${dev ? dev.name : portIdx === 0 ? 'DAW' : 'SEQ'}`);
-      this.opts.onPartUpdated(p);
-      this.render();
+      this.opts.onPartUpdated(p); this.render();
     });
     this.dialog.querySelector<HTMLSelectElement>('#mcx-route-port')?.addEventListener('change', (ev) => {
       const portIdx = parseInt((ev.target as HTMLSelectElement).value, 10);
       const dev = portIdx > 0 ? this.getDevices().outputs.find((d) => d.portIndex === portIdx) : undefined;
-      ps.midiPortIndex = portIdx;
-      ps.midiOutDeviceName = dev?.name ?? '';
+      ps.midiPortIndex = portIdx; ps.midiOutDeviceName = dev?.name ?? '';
       if (dev && !dev.enabled && b.isNative) b.setMidiDeviceEnabled('output', dev.id, true);
       b.setPartMidiDevice(p, 'output', portIdx, dev?.name ?? '');
       this.opts.setLcdLine2(`${tag} MIDI OUT: ${dev ? dev.name : 'DAW'}`);
-      this.opts.onPartUpdated(p);
-      this.render();
+      this.opts.onPartUpdated(p); this.render();
     });
-    this.dialog.querySelector('[data-act="refresh-midi"]')?.addEventListener('click', () => {
-      b.refreshMidiDevices();
-    });
+    this.dialog.querySelector('[data-act="refresh-midi"]')?.addEventListener('click', () => b.refreshMidiDevices());
     this.dialog.querySelector<HTMLSelectElement>('#mcx-route-ch')?.addEventListener('change', (ev) => {
       const ch = parseInt((ev.target as HTMLSelectElement).value, 10);
       ps.midiChannel = ch; b.setParam(p, 'partMidiChannel', ch);
@@ -198,8 +189,8 @@ export class McxInstrumentRouteModal {
       const note = ps.kind === 'drum_map' ? 36 : 60;
       b.noteOn(p, note, 0.85); setTimeout(() => b.noteOff(p, note), 280);
     });
-    this.dialog.querySelector('[data-act="open-tone"]')?.addEventListener('click', () => {
+    this.dialog.querySelectorAll<HTMLElement>('[data-act="open-tone"]').forEach((el) => el.addEventListener('click', () => {
       this.close(); this.opts.onOpenToneDrawer(p);
-    });
+    }));
   }
 }

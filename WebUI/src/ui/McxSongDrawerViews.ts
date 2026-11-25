@@ -103,6 +103,7 @@ export function buildSongDrawerShellHtml(): string {
           <button type="button" class="mcx-seg-btn" id="mcx-song-mode-song">${t('mcx.songModeLabel')}</button>
         </div>
         <button type="button" class="mcx-song-pill-btn is-active" id="mcx-song-loop-btn" aria-pressed="true">${t('mcx.songLoopLabel')}</button>
+        <button type="button" class="mcx-song-pill-btn" id="mcx-song-export-btn" title="Export MIDI / WAV">EXPORT</button>
         <button type="button" class="mcx-drawer-close-btn" id="mcx-song-close-btn" title="${t('mcx.closeDrawer')}">${ICON_CLOSE}</button>
       </div>
     </div>

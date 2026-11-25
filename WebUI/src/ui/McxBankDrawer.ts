@@ -15,9 +15,9 @@ import { renderCatalogGrid, renderCatalogTable } from './McxBankDrawerViews';
 import { t } from '../i18n/mcxI18n';
 
 export interface McxCatalogItem {
-  id: string; name: string; sublibrary?: string; categoryName?: string; categoryId?: number;
+  id: string; name: string; sublibrary?: string; subBank?: string; categoryName?: string; categoryId?: number;
   engineKind?: string; itemType?: number; filePath?: string; thumbnailUrl?: string; isFavorite?: boolean;
-  factoryPresetIndex?: number; bankId?: string; bankSlotKind?: string; bankItemIndex?: number; snapshot?: Record<string, any>;
+  factoryPresetIndex?: number; bankId?: string; bankSlotIndex?: number; bankSlotKind?: string; bankItemIndex?: number; snapshot?: Record<string, any>;
 }
 
 export interface McxBankDrawerCallbacks {
@@ -47,7 +47,7 @@ export class McxBankDrawer {
   private initShell(): void {
     this.shell = createBankShell({
       title: 'ABDMCX0X BANK MANAGER',
-      badge: '64 PARTS',
+      badge: 'ROMPLER / PCM',
       tabs: [
         { id: 'models', label: t('mcx.bankTabModels'), iconHtml: BANK_ICONS.database },
         { id: 'parts', label: t('mcx.bankTabParts'), iconHtml: BANK_ICONS.sliders },
@@ -80,6 +80,10 @@ export class McxBankDrawer {
     this.renderToolbar();
   }
 
+  public syncToolbar(): void {
+    if (this.isOpen) this.renderToolbar();
+  }
+
   private renderToolbar(): void {
     const targetPart = this.cb.getTargetPart();
     const partOpts = this.cb.getPlacedParts?.()
@@ -110,17 +114,8 @@ export class McxBankDrawer {
       this.renderToolbar();
       this.render();
     });
-    this.shell.toolbarEl.querySelector('#mcx-bank-grid-btn')?.addEventListener('click', () => {
-      this.state.setViewMode('grid');
-      this.renderToolbar();
-      this.render();
-    });
-    this.shell.toolbarEl.querySelector('#mcx-bank-table-btn')?.addEventListener('click', () => {
-      this.state.setViewMode('table');
-      this.renderToolbar();
-      this.render();
-    });
-
+    this.shell.toolbarEl.querySelector('#mcx-bank-grid-btn')?.addEventListener('click', () => { this.state.setViewMode('grid'); this.renderToolbar(); this.render(); });
+    this.shell.toolbarEl.querySelector('#mcx-bank-table-btn')?.addEventListener('click', () => { this.state.setViewMode('table'); this.renderToolbar(); this.render(); });
     this.renderCategoryChips();
   }
 
@@ -129,38 +124,20 @@ export class McxBankDrawer {
     if (!row) return;
     const chips = [
       { id: 'all', label: t('common.all') || 'All', catClass: 'cat-0' },
-      ...CATEGORY_32_PALETTE.slice(0, 10).map((c) => ({
-        id: String(c.slot),
-        label: getBankCategoryLabel(c.slot),
-        catClass: c.catClass,
-      })),
+      ...CATEGORY_32_PALETTE.slice(0, 10).map((c) => ({ id: String(c.slot), label: getBankCategoryLabel(c.slot), catClass: c.catClass })),
     ];
     row.innerHTML = bankChipsHtml(chips, String(this.state.selectedCategory));
     this.chipsUnbind?.();
-    this.chipsUnbind = bindBankChips(row, (catId) => {
-      this.state.setCategory(catId);
-      this.renderCategoryChips();
-      this.render();
-    });
+    this.chipsUnbind = bindBankChips(row, (catId) => { this.state.setCategory(catId); this.renderCategoryChips(); this.render(); });
   }
 
   public open(targetPart?: number): void {
     if (typeof targetPart === 'number') this.cb.setTargetPart(targetPart);
-    this.renderToolbar();
-    this.render();
-    this.shell.element.classList.add('is-open');
-    this.isOpen = true;
+    this.renderToolbar(); this.render();
+    this.shell.element.classList.add('is-open'); this.isOpen = true;
   }
-
-  public close(): void {
-    this.shell.element.classList.remove('is-open');
-    this.isOpen = false;
-  }
-
-  public toggle(targetPart?: number): void {
-    if (this.isOpen) this.close();
-    else this.open(targetPart);
-  }
+  public close(): void { this.shell.element.classList.remove('is-open'); this.isOpen = false; }
+  public toggle(targetPart?: number): void { if (this.isOpen) this.close(); else this.open(targetPart); }
 
   private syncMergedItems(): void { this.items = [...this.userItems, ...this.libraryItems, ...this.factoryItems]; this.render(); }
   public setItems(items: McxCatalogItem[]): void { this.factoryItems = items; this.syncMergedItems(); }
@@ -168,14 +145,15 @@ export class McxBankDrawer {
   public setUserItems(items: McxCatalogItem[]): void { this.userItems = items; this.syncMergedItems(); }
 
   private render(): void {
-    const filtered = this.state.filterItems(this.items);
-    this.shell.setTabCount(this.shell.activeTab, filtered.length);
+    const byTab = (tab: string) => this.items.filter((it) => tab === 'banks'
+      ? (it.itemType === 3 || Boolean(it.bankId && !it.bankSlotKind))
+      : tab === 'models' ? it.itemType === 0
+      : tab === 'multis' ? it.itemType === 2
+      : (it.itemType === 1 || it.itemType === undefined || typeof it.factoryPresetIndex === 'number'));
+    const filtered = this.state.filterItems(byTab(this.state.activeTab || 'parts'));
+    (['models', 'parts', 'multis', 'banks'] as const).forEach((tId) => { this.shell.setTabCount(tId, this.state.filterItems(byTab(tId)).length); });
     this.cardUnbind?.();
-
-    if (this.state.viewMode === 'table') {
-      renderCatalogTable(this.shell.contentEl, filtered, this.cb);
-    } else {
-      this.cardUnbind = renderCatalogGrid(this.shell.contentEl, filtered, this.state, this.cb, () => this.render());
-    }
+    if (this.state.viewMode === 'table') renderCatalogTable(this.shell.contentEl, filtered, this.cb);
+    else this.cardUnbind = renderCatalogGrid(this.shell.contentEl, filtered, this.state, this.cb, () => this.render());
   }
 }

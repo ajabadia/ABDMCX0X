@@ -84,11 +84,16 @@ const char* getPartEngineStateJson(int partIdx)
     return sStateJson.c_str();
 }
 
+int setPartEngineStateJson(int partIdx, const char* jsonText)
+{
+    return abdmcx::wasm_internal::engine().deserializePartEngineStateJson(partIdx, jsonText ? jsonText : "") ? 1 : 0;
+}
+
 int indexBankFromMemory(const uint8_t* data, int sizeBytes)
 {
     if (data == nullptr || sizeBytes <= 0)
         return -1;
-    return abdmcx::wasm_internal::bankManager().mountBankFromMemory(data, static_cast<std::size_t>(sizeBytes), {}, true);
+    return abdmcx::wasm_internal::bankManager().mountBankFromMemory(data, static_cast<std::size_t>(sizeBytes), {}, true, &abdmcx::wasm_internal::engine().wavePool());
 }
 
 int getIndexedBankToneCount(int bankSlot)
@@ -115,6 +120,14 @@ int loadIndexedKitOnDemand(int bankSlot, int kitIdx, int partIdx)
 {
     return abdmcx::wasm_internal::bankManager().loadDrumKitToPart(
                bankSlot, kitIdx, abdmcx::wasm_internal::engine(), partIdx)
+               ? 1
+               : 0;
+}
+
+int assignIndexedWaveOnDemand(int bankSlot, int waveIdx, int isDrumSlot, int targetIdx, int partIdx)
+{
+    return abdmcx::wasm_internal::bankManager().assignWaveToPart(
+               bankSlot, waveIdx, isDrumSlot != 0, targetIdx, abdmcx::wasm_internal::engine(), partIdx)
                ? 1
                : 0;
 }
@@ -159,10 +172,15 @@ const char* getPartPresetsJson(int partIdx)
        << ",\"engineTypeId\":\"" << escWasmJson(eng.getPartEngineTypeId(p)) << "\""
        << ",\"currentPreset\":\"" << escWasmJson(eng.getPartDisplayPresetName(p)) << "\""
        << ",\"presets\":[";
+    const auto* partEng = eng.getPartSoundEngine(p);
     for (int i = 0; i < count; ++i)
     {
         if (i > 0) ss << ",";
-        ss << "{\"index\":" << i << ",\"name\":\"" << escWasmJson(eng.getPartFactoryPresetName(p, i)) << "\"}";
+        ss << "{\"index\":" << i << ",\"name\":\"" << escWasmJson(eng.getPartFactoryPresetName(p, i)) << "\"";
+        if (partEng != nullptr)
+            ss << ",\"categoryId\":" << partEng->getFactoryPresetCategory(i)
+               << ",\"isDrumMode\":" << (partEng->isFactoryPresetDrumMode(i) ? "true" : "false");
+        ss << "}";
     }
     ss << "]}";
     sPresets = ss.str();

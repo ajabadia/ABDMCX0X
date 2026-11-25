@@ -174,6 +174,21 @@ inline bool handleRackJsEvent(McxAudioProcessor& proc, const juce::String& type,
         proc.enqueueUiCommand(cmd);
         return true;
     }
+    if (type == "setSidechainConfig")
+    {
+        McxUiCommand cmd {};
+        cmd.type = McxUiCommand::Type::SetSidechainConfig;
+        cmd.paramId = static_cast<std::int16_t>(std::clamp<int>(static_cast<int>(obj.getProperty("sourcePart")), -1, McxEngine::kNumParts - 1));
+        cmd.argU8 = static_cast<bool>(obj.getProperty("hpfEnabled")) ? 1 : 0;
+        cmd.argU8b = static_cast<std::uint8_t>(std::clamp<int>(static_cast<int>(obj.getProperty("releaseSyncDiv")), 0, 3));
+        cmd.value = obj.hasProperty("hpfHz") ? static_cast<float>(obj.getProperty("hpfHz")) : 120.0f;
+        cmd.value2 = obj.hasProperty("depthDb") ? static_cast<float>(obj.getProperty("depthDb")) : -18.0f;
+        cmd.value3 = obj.hasProperty("attackMs") ? static_cast<float>(obj.getProperty("attackMs")) : 5.0f;
+        const float relMs = obj.hasProperty("releaseMs") ? static_cast<float>(obj.getProperty("releaseMs")) : 180.0f;
+        cmd.argU64 = static_cast<std::uint64_t>(std::clamp<long>(std::lround(std::clamp(relMs, 20.0f, 1000.0f) * 10.0f), 200L, 10000L));
+        proc.enqueueUiCommand(cmd);
+        return true;
+    }
     if (type == "setSeqLoop")
     {
         McxUiCommand cmd {};

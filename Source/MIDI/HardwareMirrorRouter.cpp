@@ -133,6 +133,36 @@ bool HardwareMirrorRouter::emitDrumKeyNrpn(std::uint8_t channel1to16,
     return emitNrpn(channel1to16, paramMsb, drumKeyNote, value, sampleOffset, portIndex);
 }
 
+McxMidiOutMessage HardwareMirrorRouter::makeRolandDt1SysEx(std::uint8_t deviceId,
+                                                            const std::uint8_t* modelId,
+                                                            std::size_t modelIdLen,
+                                                            const std::uint8_t* addr,
+                                                            std::size_t addrLen,
+                                                            const std::uint8_t* data,
+                                                            std::size_t dataLen,
+                                                            std::int32_t sampleOffset,
+                                                            std::uint8_t portIndex) noexcept
+{
+    McxMidiOutMessage msg {};
+    if (!modelId || !addr || (addrLen != 3 && addrLen != 4) || (!data && dataLen > 0)) return msg;
+    const std::size_t totalLen = 3 + modelIdLen + 1 + addrLen + dataLen + 2;
+    if (totalLen > sizeof(McxMidiOutMessage::bytes)) return msg;
+
+    msg.portIndex = portIndex; msg.priority = 2;
+    std::size_t pos = 0;
+    msg.bytes[pos++] = 0xF0; msg.bytes[pos++] = 0x41;
+    msg.bytes[pos++] = static_cast<std::uint8_t>(deviceId & 0x7Fu);
+    for (std::size_t i = 0; i < modelIdLen; ++i) msg.bytes[pos++] = static_cast<std::uint8_t>(modelId[i] & 0x7Fu);
+    msg.bytes[pos++] = 0x12;
+    const std::size_t cksumStart = pos;
+    for (std::size_t i = 0; i < addrLen; ++i) msg.bytes[pos++] = static_cast<std::uint8_t>(addr[i] & 0x7Fu);
+    for (std::size_t i = 0; i < dataLen; ++i) msg.bytes[pos++] = static_cast<std::uint8_t>(data[i] & 0x7Fu);
+    msg.bytes[pos++] = computeRolandDt1Checksum(&msg.bytes[cksumStart], addrLen + dataLen);
+    msg.bytes[pos++] = 0xF7;
+    msg.length = static_cast<std::uint8_t>(pos); msg.sampleOffset = sampleOffset;
+    return msg;
+}
+
 bool HardwareMirrorRouter::emitRolandDt1SysEx(std::uint8_t deviceId,
                                               const std::uint8_t* modelId,
                                               std::size_t modelIdLen,
@@ -143,35 +173,8 @@ bool HardwareMirrorRouter::emitRolandDt1SysEx(std::uint8_t deviceId,
                                               std::int32_t sampleOffset,
                                               std::uint8_t portIndex) noexcept
 {
-    if (!modelId || !addr || (addrLen != 3 && addrLen != 4) || (!data && dataLen > 0))
-        return false;
-
-    const std::size_t totalLen = 3 + modelIdLen + 1 + addrLen + dataLen + 2;
-    if (totalLen > sizeof(McxMidiOutMessage::bytes))
-        return false;
-
-    McxMidiOutMessage msg {};
-    msg.portIndex = portIndex;
-    msg.priority = 2;
-    std::size_t pos = 0;
-    msg.bytes[pos++] = 0xF0;
-    msg.bytes[pos++] = 0x41;
-    msg.bytes[pos++] = static_cast<std::uint8_t>(deviceId & 0x7Fu);
-    for (std::size_t i = 0; i < modelIdLen; ++i)
-        msg.bytes[pos++] = static_cast<std::uint8_t>(modelId[i] & 0x7Fu);
-    msg.bytes[pos++] = 0x12; // DT1
-
-    const std::size_t cksumStart = pos;
-    for (std::size_t i = 0; i < addrLen; ++i)
-        msg.bytes[pos++] = static_cast<std::uint8_t>(addr[i] & 0x7Fu);
-    for (std::size_t i = 0; i < dataLen; ++i)
-        msg.bytes[pos++] = static_cast<std::uint8_t>(data[i] & 0x7Fu);
-
-    msg.bytes[pos++] = computeRolandDt1Checksum(&msg.bytes[cksumStart], addrLen + dataLen);
-    msg.bytes[pos++] = 0xF7;
-    msg.length = static_cast<std::uint8_t>(pos);
-    msg.sampleOffset = sampleOffset;
-    return pushMessage(msg);
+    const auto msg = makeRolandDt1SysEx(deviceId, modelId, modelIdLen, addr, addrLen, data, dataLen, sampleOffset, portIndex);
+    return msg.length > 0 && pushMessage(msg);
 }
 
 } // namespace abdmcx

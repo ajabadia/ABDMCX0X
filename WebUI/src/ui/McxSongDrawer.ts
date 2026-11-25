@@ -26,6 +26,7 @@ export interface McxSongDrawerOptions {
   getBankLayout?: () => McxBankLayoutData;
   getPartsState?: () => McxPartUiState[];
   onStateMutated: () => void;
+  onOpenExport?: () => void;
   onClose?: () => void;
 }
 
@@ -142,6 +143,7 @@ export class McxSongDrawer {
     this.el.querySelector('#mcx-song-mode-live')?.addEventListener('click', () => { b.setSongMode(false); this.opts.getState().songMode = false; this.syncLiveStatus(); this.opts.onStateMutated(); });
     this.el.querySelector('#mcx-song-mode-song')?.addEventListener('click', () => { b.setSongMode(true); this.opts.getState().songMode = true; this.syncLiveStatus(); this.opts.onStateMutated(); });
     this.el.querySelector('#mcx-song-loop-btn')?.addEventListener('click', () => { const st = this.opts.getState(); st.songLoop = !st.songLoop; b.setSongLoop(st.songLoop); this.syncLiveStatus(); this.opts.onStateMutated(); });
+    this.el.querySelector('#mcx-song-export-btn')?.addEventListener('click', () => this.opts.onOpenExport?.());
 
     this.el.querySelector('#mcx-song-add-blk')?.addEventListener('click', () => {
       const st = this.opts.getState();

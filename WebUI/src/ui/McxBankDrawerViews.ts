@@ -10,6 +10,16 @@ import type { BankCatalogState } from '@abdsynths/shared/components/bank/bankCat
 import type { McxCatalogItem, McxBankDrawerCallbacks } from './McxBankDrawer';
 import { t } from '../i18n/mcxI18n';
 
+function dispatchItemSelect(cb: McxBankDrawerCallbacks, item: McxCatalogItem): void {
+  if (item.itemType === 2) {
+    cb.onSelectMultiPreset(item);
+  } else if (item.itemType === 0) {
+    cb.onSelectModel(cb.getTargetPart(), item);
+  } else {
+    cb.onSelectPartPreset(cb.getTargetPart(), item);
+  }
+}
+
 export function renderCatalogGrid(
   container: HTMLElement,
   items: McxCatalogItem[],
@@ -33,15 +43,19 @@ export function renderCatalogGrid(
   return bindBankCards(container, {
     onCardClick: (_slot, id) => {
       const item = items.find((x) => x.id === id);
-      if (item && state.autoAudition) cb.onAudition(cb.getTargetPart(), item);
+      if (item) dispatchItemSelect(cb, item);
     },
     onCardDblClick: (_slot, id) => {
       const item = items.find((x) => x.id === id);
-      if (item) cb.onSelectPartPreset(cb.getTargetPart(), item);
+      if (item) dispatchItemSelect(cb, item);
+    },
+    onAction: ({ id }) => {
+      const item = items.find((x) => x.id === id);
+      if (item) dispatchItemSelect(cb, item);
     },
     onAudition: ({ id }) => {
       const item = items.find((x) => x.id === id);
-      if (item) cb.onAudition(cb.getTargetPart(), item);
+      if (item) dispatchItemSelect(cb, item);
     },
     onFavorite: ({ id }) => {
       state.toggleFavorite(id);
@@ -62,7 +76,7 @@ export function renderCatalogTable(
       <td><span class="ndb-card-cat cat-${it.categoryId ?? 0}">${it.categoryName || getBankCategoryLabel(it.categoryId ?? 0)}</span></td>
       <td>${it.engineKind || 'ROM'}</td>
       <td>${it.sublibrary || 'Default'}</td>
-      <td><button type="button" class="btn btn-xs btn-audition" data-act="audition" data-id="${it.id}">${BANK_ICONS.audition}</button></td>
+      <td><button type="button" class="btn btn-xs btn-audition" data-act="load" data-id="${it.id}" title="Cargar">${BANK_ICONS.audition}</button></td>
     </tr>
   `).join('');
 
@@ -74,18 +88,18 @@ export function renderCatalogTable(
   `;
 
   container.addEventListener('click', (e) => {
-    const btn = (e.target as HTMLElement).closest('[data-act="audition"]');
+    const btn = (e.target as HTMLElement).closest('[data-act="load"], [data-act="audition"]');
     if (btn) {
       const id = btn.getAttribute('data-id');
       const item = items.find((x) => x.id === id);
-      if (item) cb.onAudition(cb.getTargetPart(), item);
+      if (item) dispatchItemSelect(cb, item);
       return;
     }
     const row = (e.target as HTMLElement).closest('tr');
     if (row) {
       const id = row.getAttribute('data-id');
       const item = items.find((x) => x.id === id);
-      if (item) cb.onSelectPartPreset(cb.getTargetPart(), item);
+      if (item) dispatchItemSelect(cb, item);
     }
   }, { once: true });
 }

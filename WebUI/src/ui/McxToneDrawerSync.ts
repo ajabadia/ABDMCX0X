@@ -4,6 +4,7 @@
  * Strict line limit: < 200 lines.
  */
 
+import { getEngineDrawerCapabilities } from '@abdsynths/shared/components/synth-engines';
 import type { McxEngineDescriptorDto, McxHostBridge, McxParamKey } from '../bridge/McxHostBridge';
 import { t } from '../i18n/mcxI18n';
 import { getShortEngineBadge } from './McxEngineCatalogDefaults';
@@ -12,11 +13,16 @@ import { buildMixTabHtml } from './McxToneTabMix';
 import { buildMidiFxTabHtml } from './McxToneTabMidiFx';
 import type { McxToneDrawerKnobsManager } from './McxToneDrawerKnobs';
 
-
 const PRE_KEYS = ['sendAPre', 'sendBPre', 'sendCPre', 'sendDPre'] as const;
 const SEND_KEYS: McxParamKey[] = ['reverbSend', 'chorusSend', 'delaySend', 'auxSend'];
 const OFFSET_KEYS: McxParamKey[] = ['cutoffOffset', 'resonanceOffset', 'envAttackOffset', 'envDecayOffset', 'envSustainOffset', 'envReleaseOffset', 'vibratoOffset'];
 const SEG_KEYS = ['portaMode', 'driveType'] as const;
+const MACRO_CAP_KEYS: McxParamKey[] = ['cutoffOffset', 'resonanceOffset', 'envAttackOffset', 'envDecayOffset', 'envReleaseOffset', 'vibratoOffset'];
+const MIX_CAP_MAP: ReadonlyArray<[McxParamKey, string]> = [
+  ['pitchCoarse', 'pitchCoarse'], ['pitchFine', 'pitchFine'], ['eqLowGain', 'eq'], ['eqMidGain', 'eq'],
+  ['eqHighGain', 'eq'], ['driveAmount', 'drive'], ['reverbSend', 'sends'], ['chorusSend', 'sends'],
+  ['delaySend', 'sends'], ['auxSend', 'sends'], ['partPan', 'pan'], ['partLevel', 'level'],
+];
 
 export function resetPartSemanticOffsets(bridge: McxHostBridge, partIdx: number, ps: McxPartUiState): void {
   for (const ok of OFFSET_KEYS) {
@@ -102,7 +108,7 @@ export function updateDrawerSendTelemetry(el: HTMLElement, peaks: number[], busM
 }
 
 export function syncToneDrawerDom(
-  el: HTMLElement, partIdx: number, ps: McxPartUiState, catalog: McxEngineDescriptorDto[]
+  el: HTMLElement, partIdx: number, ps: McxPartUiState, catalog: McxEngineDescriptorDto[], knobsMgr?: McxToneDrawerKnobsManager
 ): void {
   const isDrum = ps.kind === 'drum_map', routeMode = ps.routeMode ?? 0;
   const engIdx = ps.engineTypeIndex ?? (routeMode === 1 ? 1 : 0);
@@ -123,15 +129,28 @@ export function syncToneDrawerDom(
   setText('#mcx-drawer-engine-lbl', desc?.displayName || (routeMode === 1 ? 'External MIDI / Null Slot' : 'ABD Structured Rompler'));
 
   const isExternal = routeMode === 1 || engIdx === 1 || ps.engineTypeId === 'external_midi';
+  const typeId = desc?.typeId || ps.engineTypeId || (isExternal ? 'external_midi' : 'structured_rompler');
+  const caps = getEngineDrawerCapabilities(typeId, routeMode === 1) as unknown as Record<string, boolean>;
+  const disReason = routeMode === 1 ? t('mcx.knobExtInactive') : t('mcx.knobUnsupported');
+  const syncCap = (param: McxParamKey, ok: boolean) => {
+    knobsMgr?.setParamDisabled(param, !ok);
+    const cell = el.querySelector<HTMLElement>(`.synth-knob-cell[data-param="${param}"], .mcx-send-knob-cell[data-param="${param}"]`);
+    if (cell) { cell.classList.toggle('is-disabled', !ok); cell.setAttribute('aria-disabled', ok ? 'false' : 'true'); cell.title = ok ? '' : disReason; }
+    if (!ok) { const vEl = el.querySelector<HTMLElement>(`#val-${param}`); if (vEl) vEl.textContent = 'N/A'; }
+  };
+  for (const k of MACRO_CAP_KEYS) syncCap(k, Boolean(caps[k]));
+  for (const [param, capKey] of MIX_CAP_MAP) syncCap(param, Boolean(caps[capKey]));
+  [['.mcx-card-pitch', caps.pitchCoarse || caps.pitchFine], ['.mcx-card-eq', caps.eq], ['.mcx-card-drive', caps.drive], ['.mcx-card-sends', caps.sends]]
+    .forEach(([sel, ok]) => el.querySelector(sel as string)?.classList.toggle('is-disabled', !ok));
+  el.querySelectorAll<HTMLButtonElement>('.mcx-seg-btn[data-param="driveType"]').forEach((b) => { b.disabled = !caps.drive; });
+  el.querySelectorAll<HTMLButtonElement>('.mcx-seg-btn[data-param="portaMode"]').forEach((b) => { b.disabled = !caps.portaMode; });
+  el.querySelectorAll<HTMLButtonElement>('.mcx-pre-post-btn, [data-ch-mute]').forEach((b) => { b.disabled = !caps.sends; });
   el.querySelector('#mcx-engine-panel-slot')?.classList.toggle('is-hidden', isExternal);
   el.querySelector('#mcx-motor-external')?.classList.toggle('is-hidden', !isExternal);
   setText('#mcx-ext-midi-summary', `Puerto ${(ps.midiPortIndex ?? 0) + 1} · Canal ${String(ps.midiChannel || 1).padStart(2, '0')}`);
 
   const insertSel = el.querySelector<HTMLSelectElement>('#mcx-track-insert-select');
-  if (insertSel) {
-    insertSel.disabled = isExternal;
-    insertSel.value = String(isExternal ? -1 : (ps.insertSlot ?? -1));
-  }
+  if (insertSel) { insertSel.disabled = isExternal; insertSel.value = String(isExternal ? -1 : (ps.insertSlot ?? -1)); }
 
   setText('#drawer-ch-val', `CH ${String(ps.midiChannel || 1).padStart(2, '0')}`);
   const trActive = ps.followTranspose !== false && !isDrum;
@@ -169,10 +188,8 @@ export function syncInsertSelectOptions(el: HTMLElement, rackSlots?: Array<{ slo
   if (!sel) return;
   if (Array.isArray(rackSlots)) {
     const active = rackSlots.filter((b) => b && b.engine !== 0);
-    sel.innerHTML = [
-      `<option value="-1"${curSlot === -1 ? ' selected' : ''}>${t('mcx.mixNoInsert')}</option>`,
-      ...active.map((b) => `<option value="${b.slot}"${b.slot === curSlot ? ' selected' : ''}>${t('mcx.rackBay')} ${b.slot + 1}: ${b.name || b.algoId}</option>`),
-    ].join('');
+    sel.innerHTML = [`<option value="-1"${curSlot === -1 ? ' selected' : ''}>${t('mcx.mixNoInsert')}</option>`,
+      ...active.map((b) => `<option value="${b.slot}"${b.slot === curSlot ? ' selected' : ''}>${t('mcx.rackBay')} ${b.slot + 1}: ${b.name || b.algoId}</option>`)].join('');
   }
   sel.value = String(curSlot);
 }

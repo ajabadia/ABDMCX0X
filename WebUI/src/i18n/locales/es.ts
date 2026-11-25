@@ -41,6 +41,8 @@ export const mcxEs = {
     octaveDown: 'Bajar Octava',
     octUpShort: 'OCT +',
     octDownShort: 'OCT -',
+    transposeShort: 'TR',
+    liveTransposeHint: 'Transposición en vivo (mantén o pulsa + tecla; doble clic resetea · Alt+T)',
     cutoff: 'CORTE',
     resonance: 'RESO',
     attack: 'ATAQUE',

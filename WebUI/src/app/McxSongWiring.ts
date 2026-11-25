@@ -56,9 +56,11 @@ export function mountSongAndScenesUi(bridge: McxHostBridge, state: McxAppState):
         state.refs.sceneBar?.setScenes(songState.scenes);
         state.refs.sceneBar?.updateLiveState(songState.activeScene, songState.queuedScene, songState.songMode, songState.songBlockIdx, songState.songBarInBlock, songState.blocks.length);
       },
+      onOpenExport: () => state.refs.onOpenExport?.(),
       onClose: () => state.refs.sceneBar?.setDrawerOpen(false),
     });
   }
+  state.refs.getSongState = () => songState;
 
   if (barHost) {
     state.refs.sceneBar = new McxSceneBar({

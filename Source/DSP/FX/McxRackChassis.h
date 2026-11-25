@@ -9,6 +9,25 @@
 #include "DspEffects/DspMidasEQ.h"
 #include "DspEffects/DspFairComp.h"
 #include "DspEffects/DspMoodFilter.h"
+#include "DspEffects/DspRolandBossReverb.h"
+#include "DspEffects/DspRolandMultiChorus.h"
+#include "DspEffects/DspRolandToneEq.h"
+#include "DspEffects/DspRolandJvReverb.h"
+#include "DspEffects/DspRolandJvChorus.h"
+#include "DspEffects/DspRolandGsDelay.h"
+#include "DspEffects/DspMS2000ChorusFlanger.h"
+#include "DspEffects/DspMS2000Ensemble.h"
+#include "DspEffects/DspMS2000Phaser.h"
+#include "DspEffects/DspMS2000Delay.h"
+#include "DspEffects/DspMS2000VoiceDistortion.h"
+#include "DspEffects/DspMS2000ShelfEq.h"
+#include "DspEffects/DspNeuronSilverFilter.h"
+#include "DspEffects/DspNeuronSilverRack.h"
+#include "DspEffects/DspNeuronMasterFX.h"
+#include "DspEffects/DspGolanaReverb.h"
+#include "DspEffects/DspIterumDelay.h"
+#include "DspEffects/DspRe201Wdf.h"
+#include "DspEffects/DspKr106Chorus.h"
 #include "DspEffects/MasterSafetyLimiter.h"
 
 #include <array>
@@ -43,6 +62,7 @@ public:
     void setSlotPreset(int slotIdx, int presetIdx) noexcept;
     void setSlotDucking(int slotIdx, bool enabled, float amount = 0.6f) noexcept;
     void setSlotChainTarget(int slotIdx, int targetSlotIdx) noexcept;
+    void setSidechainProfile(float depthDb, float attackMs, float releaseMs) noexcept;
     [[nodiscard]] int getSlotChainTarget(int slotIdx) const noexcept;
 
     [[nodiscard]] McxRackSlotTelemetry getSlotTelemetry(int slotIdx) const noexcept;
@@ -72,6 +92,27 @@ private:
         abd::dsp::DspMidasEQ midasEq {};
         abd::dsp::DspFairComp fairComp {};
         abd::dsp::DspMoodFilter moodFilter {};
+        abd::dsp::DspRolandBossReverb bossReverb {};
+        abd::dsp::DspRolandMultiChorus rolandChorus {};
+        abd::dsp::DspRolandToneEq rolandEq {};
+        abd::dsp::DspRolandJvReverb jvReverb {};
+        abd::dsp::DspRolandJvChorus jvChorus {};
+        abd::dsp::DspRolandGsDelay gsDelay {};
+        abd::dsp::DspMS2000ChorusFlanger ms2000ChoFlg {};
+        abd::dsp::DspMS2000Ensemble ms2000Ens {};
+        abd::dsp::DspMS2000Phaser<4> ms2000Phaser {};
+        abd::dsp::DspMS2000Delay ms2000Delay {};
+        abd::dsp::DspMS2000VoiceDistortion ms2000DistL {};
+        abd::dsp::DspMS2000VoiceDistortion ms2000DistR {};
+        abd::dsp::DspMS2000ShelfEq ms2000Eq {};
+        abd::dsp::DspNeuronSilverFilter neuronFilter {};
+        abd::dsp::DspNeuronSilverFreqFX neuronFreq {};
+        abd::dsp::DspNeuronSilverTimeFX neuronTime {};
+        abd::dsp::DspNeuronGlobalSlicer neuronSlicer {};
+        abd::dsp::DspGolanaReverb golanaReverb {};
+        abd::dsp::DspIterumDelay iterumDelay {};
+        abd::dsp::DspRe201Wdf re201Wdf {};
+        abd::dsp::DspKr106Chorus kr106Chorus {};
         int tailSamplesRemaining { 0 };
         float smoothBypassGain { 1.0f };
         float smoothDuckGain { 1.0f };
@@ -84,6 +125,9 @@ private:
     };
 
     double sampleRate_ { 44100.0 };
+    float scDepthDb_ { -18.0f };
+    float scAttackMs_ { 5.0f };
+    float scReleaseMs_ { 180.0f };
     std::array<McxRackSlotState, kMaxSlots> states_ {};
     std::unique_ptr<std::array<SlotDsp, kMaxSlots>> dsp_;
     std::array<float, kMaxChunk> tempL_ {}, tempR_ {};

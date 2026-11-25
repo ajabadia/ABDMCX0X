@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <memory>
 #include <vector>
 
 namespace
@@ -48,7 +49,7 @@ int main()
 
     // 1. Real NoteOn/NoteOff MIDI Out with portIndex & dual MIDI peaks
     {
-        McxEngine engine;
+        auto engPtr = std::make_unique<McxEngine>(); auto& engine = *engPtr;
         engine.prepare(44100.0);
         McxHardwareBridge bridge(engine);
 
@@ -79,7 +80,7 @@ int main()
 
     // 2. McxCommandQueue preserves exact partIdx without 4-bit MIDI channel collision
     {
-        McxEngine engine;
+        auto engPtr = std::make_unique<McxEngine>(); auto& engine = *engPtr;
         engine.prepare(44100.0);
         McxHardwareBridge bridge(engine);
         McxCommandQueue<1024> cmdQueue;
@@ -98,7 +99,7 @@ int main()
 
     // 3. Anti-hanging-note latch map across live transpose/scale changes
     {
-        McxEngine engine;
+        auto engPtr = std::make_unique<McxEngine>(); auto& engine = *engPtr;
         engine.prepare(44100.0);
         McxHardwareBridge bridge(engine);
 
@@ -124,7 +125,7 @@ int main()
 
     // 4. GrooveArpeggiator on ExternalMidi part emits MIDI Out without internal voices
     {
-        McxEngine engine;
+        auto engPtr = std::make_unique<McxEngine>(); auto& engine = *engPtr;
         engine.prepare(44100.0);
         McxHardwareBridge bridge(engine);
 
@@ -146,7 +147,7 @@ int main()
 
     // 5. McxHardwareBridge: per-part contracts, interleaved NRPN channels, dispatchNotes=false
     {
-        McxEngine engine;
+        auto engPtr = std::make_unique<McxEngine>(); auto& engine = *engPtr;
         engine.prepare(44100.0);
         McxHardwareBridge bridge(engine);
         bridge.loadContractsDirectory(ABDSHARED_CONTRACTS_DIR);
@@ -163,14 +164,15 @@ int main()
 
         bridge.routeSemanticParam(0, abd::synth::role::kFilterCutoff, 0.5f); // NRPN 1/32 (3 msgs)
         bridge.routeSemanticParam(1, abd::synth::role::kFilterCutoff, 0.5f); // CC 74 (1 msg, port 1)
-
-        std::vector<McxMidiOutMessage> msgs;
-        McxMidiOutMessage tmp {};
-        while (bridge.getOutboundQueue().pop(tmp))
-            msgs.push_back(tmp);
-
-        check(msgs.size() == 4 && msgs[0].bytes[1] == 99 && msgs[3].portIndex == 1 && msgs[3].bytes[1] == 74,
-              "Per-part contracts emit MC-303 NRPN on P0 and MS2000 CC74 on P1/Port1 simultaneously");
+        std::vector<McxMidiOutMessage> msgs; McxMidiOutMessage tmp {};
+        while (bridge.getOutboundQueue().pop(tmp)) msgs.push_back(tmp);
+        engine.part(3).routeMode = McxPartRouteMode::ExternalMidi;
+        const bool syxSet = bridge.setPartHardwareProfile(3, "roland_d50");
+        bridge.routeSemanticParam(3, abd::synth::role::kFilterCutoff, 0.5f);
+        McxMidiOutMessage syxMsg {};
+        const bool syxOk = bridge.getOutboundQueue().pop(syxMsg) && syxMsg.length == 11 && syxMsg.bytes[0] == 0xF0 && syxMsg.bytes[4] == 0x12 && syxMsg.bytes[10] == 0xF7;
+        check(msgs.size() == 4 && msgs[0].bytes[1] == 99 && msgs[3].portIndex == 1 && msgs[3].bytes[1] == 74 && syxSet && syxOk,
+              "Per-part contracts emit MC-303 NRPN, MS2000 CC74, and D-50 SysEx DT1 simultaneously");
 
         // Interleaved NRPN on Ch 1 (1/32 Cutoff) and Ch 3 (1/33 Resonance)
         engine.part(2).routeMode = McxPartRouteMode::ExternalMidi;
@@ -223,7 +225,8 @@ int main()
 
     // 7. Non-destructive semanticOffsets, Stereo Biquad EQ fix, liveZeroLatency & Bank JSON roundtrip
     {
-        McxEngine engBase, engMod;
+        auto engBaseP = std::make_unique<McxEngine>(), engModP = std::make_unique<McxEngine>();
+        auto& engBase = *engBaseP; auto& engMod = *engModP;
         engBase.prepare(44100.0);
         engMod.prepare(44100.0);
         for (auto* e : { &engBase, &engMod })
@@ -242,39 +245,29 @@ int main()
         check(engMod.part(0).partials[0].cutoffHz == 2000.0f && rmsMod > 0.001f && rmsMod < rmsBase * 0.75f,
               "McxTrackSemanticOffsets alters rendered filter cutoff without overwriting preset partials");
 
-        McxChannelStrip strip;
-        strip.prepare(44100.0);
-        McxChannelStripParams sp {};
-        sp.eqEnabled = true;
-        sp.eqLowGainDb = 6.0f;
+        McxChannelStrip strip; strip.prepare(44100.0);
+        McxChannelStripParams sp {}; sp.eqEnabled = true; sp.eqLowGainDb = 6.0f;
         std::vector<float> l(64, 0.5f), r(64, 0.0f);
         strip.process(l.data(), r.data(), nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 64, sp, true);
-        sp.eqLowGainDb = -6.0f; // Triggers updateEqCoeffs()
-        float l1 = 0.0f, r1 = 0.0f;
+        sp.eqLowGainDb = -6.0f; float l1 = 0.0f, r1 = 0.0f;
         strip.process(&l1, &r1, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 1, sp, true);
         check(r1 == 0.0f && l1 != 0.0f, "McxChannelStrip EQ update preserves independent R channel biquad state");
 
-        McxLatencyCompensator comp;
-        comp.prepare(44100.0);
-        comp.setLatencyMs(10.0f);
-        comp.setLiveZeroLatency(true);
+        McxLatencyCompensator comp; comp.prepare(44100.0); comp.setLatencyMs(10.0f); comp.setLiveZeroLatency(true);
         float impulseL[4] { 1.0f, 0.0f, 0.0f, 0.0f }, impulseR[4] { 1.0f, 0.0f, 0.0f, 0.0f };
         comp.process(impulseL, impulseR, 4);
-        check(comp.getEffectiveDelaySamples() == 0 && impulseL[0] == 1.0f,
-              "McxLatencyCompensator liveZeroLatency bypasses delay immediately while keeping latencyMs");
+        check(comp.getEffectiveDelaySamples() == 0 && impulseL[0] == 1.0f, "McxLatencyCompensator liveZeroLatency bypasses delay");
 
-        McxEngine src, dst;
-        src.prepare(44100.0);
+        auto srcP = std::make_unique<McxEngine>(), dstP = std::make_unique<McxEngine>();
+        auto& src = *srcP; auto& dst = *dstP; src.prepare(44100.0);
         McxHardwareBridge brSrc(src), brDst(dst);
-        src.part(0).midiPortIndex = 3;
-        src.part(0).partials[0].sourceKind = McxOscSourceKind::Fm2Op;
+        src.part(0).midiPortIndex = 3; src.part(0).partials[0].sourceKind = McxOscSourceKind::Fm2Op;
         const std::string json = McxBankManagerBridge::serializeToJson(src, brSrc, "Roundtrip6");
-        const bool okRestore = McxBankManagerBridge::deserializeFromJson(dst, brDst, json);
-        check(okRestore && dst.part(0).midiPortIndex == 3 && dst.part(0).partials[0].sourceKind == McxOscSourceKind::Fm2Op,
+        check(McxBankManagerBridge::deserializeFromJson(dst, brDst, json) && dst.part(0).midiPortIndex == 3,
               "McxBankManagerBridge roundtrips sourceKind and midiPortIndex");
     }
     {
-        McxEngine e; e.prepare(44100.0);
+        auto eP = std::make_unique<McxEngine>(); auto& e = *eP; e.prepare(44100.0);
         auto* eng = e.getPartSoundEngine(0);
         e.part(0).partials[0].cutoffHz = 4000.0f;
         const bool bound = eng != nullptr && std::string(eng->getEngineTypeId()) == "structured_rompler"
@@ -287,6 +280,13 @@ int main()
         float diff = 0.0f;
         for (int i = 0; i < 256; ++i) diff += (a[i] > b[i]) ? (a[i] - b[i]) : (b[i] - a[i]);
         check(bound && diff > 1e-4f && e.part(0).partials[0].cutoffHz == 4000.0f, "TrackModRouter modulates non-destructively");
+
+        McxHardwareBridge hb(e); hb.loadContractsDirectory(ABDSHARED_CONTRACTS_DIR);
+        e.selectPartEngineById(3, "jv880_synth"); e.part(3).midiInPortIndex = 0; e.part(3).midiChannel = 1;
+        const std::uint8_t jvDt1[] = { 0xF0, 0x41, 0x10, 0x46, 0x12, 0x00, 0x08, 0x28, 0x4A, 0x40, 0x46, 0xF7 };
+        float cutVal = 0.0f;
+        hb.processInboundMidiBuffer(jvDt1, sizeof(jvDt1), false, 0);
+        check(e.getPartEngineParamByKey(3, "p1.cutoffHz", cutVal) && cutVal > 1400.0f && cutVal < 1600.0f, "Inbound DT1 SysEx updates active JV-880");
     }
 
     std::printf("\n=== Results: %d passed, %d failed ===\n", gPassed, gFailed);

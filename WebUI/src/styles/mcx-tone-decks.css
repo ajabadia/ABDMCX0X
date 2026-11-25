@@ -114,3 +114,16 @@
   box-shadow: 0 0 16px var(--color-accent), inset 0 0 8px var(--color-accent-dim) !important;
   animation: mcx-card-highlight-pulse 1.4s ease-in-out 3;
 }
+
+.mcx-module-card.is-disabled,
+.synth-knob-cell.is-disabled,
+.mcx-send-knob-cell.is-disabled {
+  opacity: 0.38;
+  filter: grayscale(0.45);
+  pointer-events: none;
+}
+
+.synth-knob-cell.is-disabled .synth-knob-num,
+.mcx-send-knob-cell.is-disabled .synth-knob-num {
+  color: var(--color-text-dim);
+}

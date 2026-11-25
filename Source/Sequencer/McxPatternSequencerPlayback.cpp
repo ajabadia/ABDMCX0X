@@ -8,6 +8,41 @@
 namespace abdmcx
 {
 
+namespace
+{
+[[nodiscard]] float mapSwingToGrooveAmount(float swing50to75) noexcept
+{
+    return std::clamp((swing50to75 - 0.50f) * 4.0f, 0.0f, 1.0f);
+}
+} // namespace
+
+void McxPatternSequencer::setPartSwing50to75(int partIdx, float swing50to75) noexcept
+{
+    const float amt = mapSwingToGrooveAmount(swing50to75);
+    if (partIdx < 0)
+    {
+        auto s = groove_.getMasterGroove();
+        s.mode = GrooveEngine::Mode::Custom;
+        s.amount = amt;
+        groove_.setMasterGroove(s);
+    }
+    else
+    {
+        auto s = groove_.getPartGroove(partIdx);
+        s.mode = GrooveEngine::Mode::Custom;
+        s.amount = amt;
+        groove_.setPartGroove(partIdx, s);
+    }
+}
+
+void McxPatternSequencer::setPartGrooveMusical(int partIdx, GrooveEngine::Mode mode, GrooveEngine::Algorithm algo,
+                                               GrooveEngine::Resolution res, float swing50to75) noexcept
+{
+    const GrooveEngine::GrooveSettings s { mode, algo, res, mapSwingToGrooveAmount(swing50to75) };
+    if (partIdx < 0) groove_.setMasterGroove(s);
+    else groove_.setPartGroove(partIdx, s);
+}
+
 void McxPatternSequencer::processBlock(int numSamples, const McxSequencerCallbacks& cbs, std::int32_t baseSampleOffset) noexcept
 {
     swapDirtyBuffers(cbs, baseSampleOffset);
@@ -47,6 +82,8 @@ void McxPatternSequencer::publishTelemetry() noexcept
     publishedTick_.store(currentTick_ % total, std::memory_order_release);
     publishedStep_.store((currentTick_ / ticksPerStep) % (bars * 16), std::memory_order_release);
     publishedRunning_.store(running_, std::memory_order_release);
+    publishedPaused_.store(paused_, std::memory_order_release);
+    publishedCountInTicks_.store(countInRemainingTicks_, std::memory_order_release);
 }
 
 void McxPatternSequencer::releasePartActiveNotes(int partIdx, const McxSequencerCallbacks& cbs, std::int32_t sampleOffset) noexcept
@@ -88,6 +125,14 @@ void McxPatternSequencer::swapDirtyBuffers(const McxSequencerCallbacks& cbs, std
 
 void McxPatternSequencer::stepSingleTick(const McxSequencerCallbacks& cbs, std::int32_t sampleOffset) noexcept
 {
+    if (recSessionResetPending_.exchange(false, std::memory_order_acq_rel))
+        clearLiveRecState();
+    if (countInRemainingTicks_ > 0)
+    {
+        --countInRemainingTicks_;
+        publishedCountInTicks_.store(countInRemainingTicks_, std::memory_order_release);
+        return;
+    }
     const int ppq = ppq_.load(std::memory_order_relaxed);
     int totalTicks = std::max(1, bars_.load(std::memory_order_relaxed) * 4 * ppq);
     const int tick = currentTick_ % totalTicks;

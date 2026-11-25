@@ -27,6 +27,9 @@ inline juce::var buildTelemetryPayload(const McxTelemetrySnapshot& snap)
     payload->setProperty("lfoPhase", snap.lfoPhase);
     payload->setProperty("lfo2Phase", snap.lfo2Phase);
     payload->setProperty("seqPlaying", snap.seqPlaying);
+    payload->setProperty("seqPaused", snap.seqPaused);
+    payload->setProperty("seqCountInTicks", snap.seqCountInTicks);
+    payload->setProperty("seqRecRev", static_cast<int>(snap.seqRecRev));
     payload->setProperty("seqTick", snap.seqTick);
     payload->setProperty("seqStep", snap.seqStep);
     payload->setProperty("seqTotalTicks", snap.seqTotalTicks);
@@ -98,6 +101,31 @@ inline bool handleSequencerJsEvent(McxAudioProcessor& proc, const juce::String& 
     {
         proc.enqueueTransportPlay(static_cast<bool>(obj.getProperty("playing")),
                                   !obj.hasProperty("reset") || static_cast<bool>(obj.getProperty("reset")));
+        return true;
+    }
+    if (type == "seqSeekBars")
+    {
+        McxUiCommand cmd {};
+        cmd.type = McxUiCommand::Type::SeqSeekBars;
+        cmd.paramId = static_cast<std::int16_t>(std::clamp<int>(static_cast<int>(obj.getProperty("deltaBars")), -64, 64));
+        proc.enqueueUiCommand(cmd);
+        return true;
+    }
+    if (type == "seqReturnToZero")
+    {
+        McxUiCommand cmd {};
+        cmd.type = McxUiCommand::Type::SeqReturnToZero;
+        proc.enqueueUiCommand(cmd);
+        return true;
+    }
+    if (type == "setSeqRecordConfig")
+    {
+        McxUiCommand cmd {};
+        cmd.type = McxUiCommand::Type::SetSeqRecordConfig;
+        cmd.argU8 = static_cast<std::uint8_t>(std::clamp<int>(static_cast<int>(obj.getProperty("mode")), 0, 1));
+        cmd.argU8b = static_cast<std::uint8_t>(std::clamp<int>(static_cast<int>(obj.getProperty("countInBars")), 0, 2));
+        cmd.paramId = static_cast<std::int16_t>(std::clamp<int>(static_cast<int>(obj.getProperty("quantizeSteps")), 0, 64));
+        proc.enqueueUiCommand(cmd);
         return true;
     }
     if (type == "setSequencerBars")

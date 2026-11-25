@@ -26,6 +26,8 @@ export interface McxPartUiState {
   lfo1Shape?: number; lfo1Sync?: boolean; lfo1Trigger?: number; lfo1Rate?: number; lfo1Delay?: number; lfo1Depth?: number; lfo1Target?: number;
   lfo2Shape?: number; lfo2Sync?: boolean; lfo2Trigger?: number; lfo2Rate?: number; lfo2Delay?: number; lfo2Depth?: number; lfo2Target?: number;
   sliceMap?: Record<number, string>; coverUrl?: string;
+  soundBankId?: string; soundBankName?: string; soundBankSlotIndex?: number;
+  soundBankItemIndex?: number; soundBankKind?: 'tone' | 'drum_kit';
   sequence?: { bars: number; ppq: number; mode?: 'chromatic' | 'drum'; notes: Array<{ midiNote: number; startTick: number; durationTicks: number; velocity: number }>; motion?: Record<string, any[]> };
 }
 
@@ -37,7 +39,7 @@ export function createDefaultPartState(i: number): McxPartUiState {
   return {
     enabled: !isClean,
     kind: isDrum ? 'drum_map' : 'chromatic', midiChannel: (i % 16) + 1, mute: false, solo: false,
-    followTranspose: !isDrum, name: presetName, categoryId: isDrum ? 9 : 3,
+    followTranspose: !isDrum, name: presetName, categoryId: isDrum ? 8 : 3,
     engineTypeIndex: 0, engineTypeId: 'structured_rompler', factoryPresetIndex: presetIdx, arpEnabled: false,
     cutoffOffset: 0, resonanceOffset: 0, envAttackOffset: 0, envDecayOffset: 0,
     envSustainOffset: 0, envReleaseOffset: 0, vibratoOffset: 0,

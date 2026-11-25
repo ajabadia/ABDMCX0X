@@ -6,14 +6,6 @@
 namespace abdmcx
 {
 
-namespace
-{
-[[nodiscard]] float mapSwingToGrooveAmount(float swing50to75) noexcept
-{
-    return std::clamp((swing50to75 - 0.50f) * 4.0f, 0.0f, 1.0f);
-}
-} // namespace
-
 McxPatternSequencer::McxPatternSequencer() noexcept
     : storage_(std::make_unique<Storage>())
 {
@@ -29,14 +21,21 @@ void McxPatternSequencer::prepare(double sampleRate) noexcept
 void McxPatternSequencer::reset() noexcept
 {
     running_ = false;
+    paused_ = false;
     prevHostPlaying_ = false;
     barBoundaryPending_ = false;
     currentTick_ = 0;
+    countInRemainingTicks_ = 0;
     sampleCursor_ = 0.0;
     bars_.store(1, std::memory_order_relaxed);
     ppq_.store(kDefaultPpq, std::memory_order_relaxed);
     recording_.store(false, std::memory_order_relaxed);
+    recSessionResetPending_.store(false, std::memory_order_relaxed);
+    recordMode_.store(RecordMode::Overdub, std::memory_order_relaxed);
+    countInBars_.store(0, std::memory_order_relaxed);
+    recordQuantizeSteps_.store(16, std::memory_order_relaxed);
     loopEnabled_.store(true, std::memory_order_relaxed);
+    recordedPatternRev_.store(0u, std::memory_order_relaxed);
 
     groove_.reset();
     // GrooveShuffleEngine resets amount to 0.50 (50% delay). Default straight = 0.0f.
@@ -53,6 +52,7 @@ void McxPatternSequencer::reset() noexcept
         storage_->activeRemainingTicks[u].fill(-1);
         storage_->activeNoteCount[u] = 0;
     }
+    clearLiveRecState();
     updateTiming();
     publishTelemetry();
 }
@@ -167,41 +167,28 @@ void McxPatternSequencer::setPpq(int ppq) noexcept
     publishTelemetry();
 }
 
-void McxPatternSequencer::setPartSwing50to75(int partIdx, float swing50to75) noexcept
-{
-    const float amt = mapSwingToGrooveAmount(swing50to75);
-    if (partIdx < 0)
-    {
-        auto s = groove_.getMasterGroove();
-        s.mode = GrooveEngine::Mode::Custom;
-        s.amount = amt;
-        groove_.setMasterGroove(s);
-    }
-    else
-    {
-        auto s = groove_.getPartGroove(partIdx);
-        s.mode = GrooveEngine::Mode::Custom;
-        s.amount = amt;
-        groove_.setPartGroove(partIdx, s);
-    }
-}
-
-void McxPatternSequencer::setPartGrooveMusical(int partIdx, GrooveEngine::Mode mode, GrooveEngine::Algorithm algo,
-                                               GrooveEngine::Resolution res, float swing50to75) noexcept
-{
-    const GrooveEngine::GrooveSettings s { mode, algo, res, mapSwingToGrooveAmount(swing50to75) };
-    if (partIdx < 0) groove_.setMasterGroove(s);
-    else groove_.setPartGroove(partIdx, s);
-}
-
 void McxPatternSequencer::start(bool resetToZero) noexcept
 {
+    const bool wasPaused = paused_;
     if (resetToZero)
     {
         currentTick_ = 0;
         sampleCursor_ = 0.0;
         barBoundaryPending_ = false;
     }
+    const int cib = countInBars_.load(std::memory_order_relaxed);
+    if (recording_.load(std::memory_order_relaxed) && cib > 0 && (resetToZero || !wasPaused))
+    {
+        const int ppq = ppq_.load(std::memory_order_relaxed);
+        countInRemainingTicks_ = cib * 4 * ppq;
+    }
+    else if (!wasPaused)
+    {
+        countInRemainingTicks_ = 0;
+    }
+    if (resetToZero || !wasPaused)
+        recSessionResetPending_.store(true, std::memory_order_release);
+    paused_ = false;
     running_ = true;
     publishTelemetry();
 }
@@ -209,9 +196,12 @@ void McxPatternSequencer::start(bool resetToZero) noexcept
 void McxPatternSequencer::stop(const McxSequencerCallbacks& cbs, std::int32_t sampleOffset) noexcept
 {
     running_ = false;
+    paused_ = false;
+    countInRemainingTicks_ = 0;
     barBoundaryPending_ = false;
     currentTick_ = 0;
     sampleCursor_ = 0.0;
+    recSessionResetPending_.store(true, std::memory_order_release);
     releaseAllActiveNotes(cbs, sampleOffset);
     publishTelemetry();
 }
@@ -219,6 +209,14 @@ void McxPatternSequencer::stop(const McxSequencerCallbacks& cbs, std::int32_t sa
 void McxPatternSequencer::pause() noexcept
 {
     running_ = false;
+    paused_ = true;
+    countInRemainingTicks_ = 0;
+    for (int p = 0; p < kNumParts; ++p)
+    {
+        const auto u = static_cast<std::size_t>(p);
+        storage_->activeRemainingTicks[u].fill(-1);
+        storage_->activeNoteCount[u] = 0;
+    }
     publishTelemetry();
 }
 

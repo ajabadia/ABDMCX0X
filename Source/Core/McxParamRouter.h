@@ -191,16 +191,43 @@ inline void applyWebPartParam(McxEngine& engine, int partIdx, int paramId, float
     case 51: p.delaySendPre = (value >= 0.5f); break;
     case 52: p.auxSendPre = (value >= 0.5f); break;
     case 53: // Part Pitch Coarse (-24..+24 semitones)
-        setAllPartialsEngineParam(se, {"p1.coarse", "p2.coarse", "p3.coarse", "p4.coarse"},
-            static_cast<float>(std::clamp(static_cast<int>(value), -24, 24)));
+    {
+        const float coarse = static_cast<float>(std::clamp(static_cast<int>(value), -24, 24));
+        setAllPartialsEngineParam(se, {"p1.coarse", "p2.coarse", "p3.coarse", "p4.coarse"}, coarse);
+        if (se != nullptr) { (void)se->setParamByKey("u.keyShift", coarse); (void)se->setParamByKey("l.keyShift", coarse); (void)se->setParamByKey("coarse", coarse); }
         break;
+    }
     case 54: // Part Pitch Fine (-50..+50 cents)
-        setAllPartialsEngineParam(se, {"p1.fine", "p2.fine", "p3.fine", "p4.fine"},
-            std::clamp(value, -50.0f, 50.0f));
+    {
+        const float fine = std::clamp(value, -50.0f, 50.0f);
+        setAllPartialsEngineParam(se, {"p1.fine", "p2.fine", "p3.fine", "p4.fine"}, fine);
+        if (se != nullptr) {
+            (void)se->setParamByKey("u.masterFine", 50.0f + fine); (void)se->setParamByKey("l.masterFine", 50.0f + fine);
+            (void)se->setParamByKey("tuningA4", std::clamp(440.0f * std::pow(2.0f, fine / 1200.0f), 432.0f, 448.0f));
+            (void)se->setParamByKey("fine", fine);
+        }
         break;
-    case 55: if (se != nullptr) se->setParamByKey("porta.enabled", value >= 0.5f ? 1.0f : 0.0f); break;
-    case 56: if (se != nullptr) se->setParamByKey("porta.timeMs", std::clamp(value, 0.0f, 1000.0f)); break;
-    case 57: if (se != nullptr) se->setParamByKey("porta.legato", value >= 0.5f ? 1.0f : 0.0f); break;
+    }
+    case 55:
+        if (se != nullptr) {
+            const float on = (value >= 0.5f) ? 1.0f : 0.0f;
+            (void)se->setParamByKey("porta.enabled", on); (void)se->setParamByKey("portaSwitch", on);
+            if (on < 0.5f) (void)se->setParamByKey("glide", 0.0f);
+        }
+        break;
+    case 56:
+        if (se != nullptr) {
+            const float ms = std::clamp(value, 0.0f, 5000.0f);
+            (void)se->setParamByKey("porta.timeMs", ms); (void)se->setParamByKey("portaTime", std::clamp(ms * 0.05f, 0.0f, 100.0f));
+            (void)se->setParamByKey("glide", std::clamp(ms, 0.0f, 2000.0f)); (void)se->setParamByKey("slide", std::clamp(ms, 2.0f, 360.0f));
+        }
+        break;
+    case 57:
+        if (se != nullptr) {
+            const float leg = (value >= 0.5f) ? 1.0f : 0.0f;
+            (void)se->setParamByKey("porta.legato", leg); (void)se->setParamByKey("portaMode", leg);
+        }
+        break;
     case 58: // Part Arp / Sequencer Enable (0/1)
         p.arp.setEnabled(value >= 0.5f);
         p.arp.setPatternMaskEnabled(true);

@@ -57,6 +57,7 @@ export function buildMidiFxTabHtml(): string {
             ${knobCell('cutoffOffset', t('mcx.macroCutoff'), '0%')}
             ${knobCell('resonanceOffset', t('mcx.macroResonance'), '0%')}
             ${knobCell('envAttackOffset', t('mcx.macroAttack'), '0%')}
+            ${knobCell('envDecayOffset', t('mcx.macroDecay'), '0%')}
             ${knobCell('envReleaseOffset', t('mcx.macroRelease'), '0%')}
             ${knobCell('vibratoOffset', t('mcx.macroVibrato'), '0%')}
           </div>

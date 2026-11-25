@@ -17,28 +17,28 @@ export interface McxTelemetry {
   sendLabels?: { sendA: string; sendB: string; sendC: string; sendD: string };
   partPeaks?: number[];
   partMidiPeaks?: number[];
-  lfoPhase?: number;
-  lfo2Phase?: number;
-  seqPlaying?: boolean;
-  seqTick?: number;
-  seqStep?: number;
-  seqTotalTicks?: number;
-  bpm?: number;
-  activeScene?: number;
-  queuedScene?: number;
-  songMode?: boolean;
-  songLoop?: boolean;
-  songBlockIdx?: number;
-  songBarInBlock?: number;
-  songBlockCount?: number;
-  sceneApplySeq?: number;
-  appliedMuteMask?: number;
-  appliedMuteMask64?: number[];
-  appliedTranspose?: number;
-  rackPeakIn?: number[];
-  rackPeakOut?: number[];
-  rackClipIn?: boolean[];
-  rackClipOut?: boolean[];
+  lfoPhase?: number; lfo2Phase?: number;
+  seqPlaying?: boolean; seqPaused?: boolean; seqCountInTicks?: number; seqRecRev?: number;
+  seqTick?: number; seqStep?: number; seqTotalTicks?: number; bpm?: number;
+  activeScene?: number; queuedScene?: number; songMode?: boolean; songLoop?: boolean;
+  songBlockIdx?: number; songBarInBlock?: number; songBlockCount?: number; sceneApplySeq?: number;
+  appliedMuteMask?: number; appliedMuteMask64?: number[]; appliedTranspose?: number;
+  rackPeakIn?: number[]; rackPeakOut?: number[]; rackClipIn?: boolean[]; rackClipOut?: boolean[];
+}
+
+export interface McxSidechainConfigDto {
+  sourcePart: number; hpfEnabled: boolean; hpfHz: number;
+  depthDb: number; attackMs: number; releaseMs: number; releaseSyncDiv: number;
+}
+export interface McxWavRenderOptionsDto {
+  scope: 'master' | 'part' | 'bank' | 'stems';
+  part?: number; bank?: number; bars?: number; tailSec?: number; useSongMode?: boolean; filename?: string;
+}
+export interface McxWavRenderedDto {
+  ok: boolean; requestId?: number; sampleRate: number; left: Float32Array; right: Float32Array;
+}
+export interface McxExportCompleteDto {
+  ok: boolean; kind: string; path?: string; count?: number;
 }
 
 export interface McxEngineDescriptorDto {
@@ -56,7 +56,7 @@ export interface McxPartPresetsDto {
   engineTypeIndex: number;
   engineTypeId: string;
   currentPreset: string;
-  presets: Array<{ index: number; name: string }>;
+  presets: Array<{ index: number; name: string; categoryId?: number; isDrumMode?: boolean }>;
 }
 
 export interface McxPartEngineStateDto {
@@ -120,6 +120,9 @@ export function parseTelemetryPayload(raw: any): McxTelemetry {
     partPeaks: Array.isArray(raw.partPeaks) ? raw.partPeaks.map(Number) : undefined,
     partMidiPeaks: Array.isArray(raw.partMidiPeaks) ? raw.partMidiPeaks.map(Number) : undefined,
     lfoPhase: Number(raw.lfoPhase ?? 0), lfo2Phase: Number(raw.lfo2Phase ?? 0), seqPlaying: Boolean(raw.seqPlaying),
+    seqPaused: raw.seqPaused !== undefined ? Boolean(raw.seqPaused) : false,
+    seqCountInTicks: raw.seqCountInTicks !== undefined ? Number(raw.seqCountInTicks) : 0,
+    seqRecRev: raw.seqRecRev !== undefined ? Number(raw.seqRecRev) : 0,
     seqTick: Number(raw.seqTick ?? 0), seqStep: Number(raw.seqStep ?? 0),
     seqTotalTicks: Number(raw.seqTotalTicks ?? 384), bpm: Number(raw.bpm ?? 0),
     activeScene: raw.activeScene !== undefined ? Number(raw.activeScene) : undefined,
@@ -158,7 +161,9 @@ export interface McxSessionPartDto {
 export interface McxSessionStateDto {
   masterGain: number; globalTranspose: number; dacCharacter: number;
   reverbMacro: number; chorusMacro: number; limiterEnabled: boolean; limiterCeilingDb: number;
-  fxTopology: number; sendTargets: number[]; rackJson: string; bankLayoutJson?: string; parts: McxSessionPartDto[];
+  fxTopology: number; sendTargets: number[]; rackJson: string; bankLayoutJson?: string;
+  audioDuckEnabled?: boolean; midiDuckEnabled?: boolean; sidechainConfig?: McxSidechainConfigDto;
+  parts: McxSessionPartDto[];
 }
 
 export function parseSongScenesStateJson(json: string): McxSongScenesStateDto | null {

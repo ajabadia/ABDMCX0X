@@ -205,4 +205,18 @@ WASM_EXPORT void getMasterFxTelemetry(float* out7Floats, int* out4Mutes)
     for (int b = 0; b < 4; ++b) out4Mutes[b] = fx.isSendBusMuted(b) ? 1 : 0;
 }
 
+WASM_EXPORT void setSidechainConfig(int sourcePart, int hpfEnabled, float hpfHz,
+                                    float depthDb, float attackMs, float releaseMs, int releaseSyncDiv)
+{
+    abdmcx::McxSidechainConfig cfg;
+    cfg.sourcePart = sourcePart;
+    cfg.hpfEnabled = (hpfEnabled != 0);
+    cfg.hpfHz = hpfHz;
+    cfg.depthDb = depthDb;
+    cfg.attackMs = attackMs;
+    cfg.releaseMs = releaseMs;
+    cfg.releaseSyncDiv = releaseSyncDiv;
+    abdmcx::wasm_internal::engine().setSidechainConfig(cfg);
+}
+
 }

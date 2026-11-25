@@ -18,10 +18,15 @@ const ARP_RATE_TO_IDX: Record<string, number> = {
   '1/4': 7,
 };
 
+const REC_Q_STEPS: Record<string, number> = {
+  off: 0, '1/8': 8, '1/8T': 12, '1/16': 16, '1/16T': 24, '1/32': 32, '1/64': 64,
+};
+
 export function createMidiModals(bridge: McxHostBridge, state: McxAppState) {
   const padModal = new MpcPadModal({
     locale: getLocale() === 'en' ? 'en' : 'es',
     partIndex: state.focusedPart,
+    bpm: state.globalSettings?.standaloneBpm || 120,
     mode: state.partsState[state.focusedPart].kind === 'drum_map' ? 'drum' : 'chromatic',
     onPadTrigger: (partIdx, padIdx, note, vel, _meta, quantize) => {
       const velNorm = vel > 1 ? Math.max(0.05, Math.min(1, vel / 127)) : Math.max(0.05, Math.min(1, vel));
@@ -29,17 +34,18 @@ export function createMidiModals(bridge: McxHostBridge, state: McxAppState) {
       void bridge.enableAudio();
       bridge.noteOn(partIdx, note, velNorm);
       const pr = state.refs.pianoRollModal;
-      if (pr?.isOpen() && pr.isRecording()) {
+      if (pr?.isRecording?.()) {
         const q = quantize || padModal.getInputQuantize?.() || 'off';
-        (pr as any).recordNoteOn(note, velMidi, q);
+        (pr as any).recordNoteOn?.(note, velMidi, q);
       }
       state.setLcdLine2(`PAD ${String(padIdx + 1).padStart(2, '0')} -> NOTE ${note} (VEL ${velMidi} · ${Math.round(velNorm * 100)}%)`);
     },
     onPadRelease: (partIdx, _padIdx, note) => {
       bridge.noteOff(partIdx, note);
       const pr = state.refs.pianoRollModal;
-      if (pr?.isOpen() && pr.isRecording()) pr.recordNoteOff(note);
+      if (pr?.isRecording?.()) pr.recordNoteOff?.(note);
     },
+    onInputQuantizeChange: (q) => state.setRecordConfig({ quantizeSteps: REC_Q_STEPS[q] ?? 16 }),
     onOpen: (partIdx) => {
       padModal.syncPart(partIdx, state.partsState[partIdx]);
     },

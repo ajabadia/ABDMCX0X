@@ -1,5 +1,6 @@
 #include "WasmBridge.h"
 #include "WasmInternal.h"
+#include "../Core/McxWavWriter.h"
 #include "../Sequencer/McxPatternSequencer.h"
 #include "../Sequencer/McxSongAndScenes.h"
 #include "../Sequencer/McxSongJsonCodec.h"
@@ -138,6 +139,62 @@ void getSequencerState(int* outPlaying, int* outTick, int* outStep, int* outTota
     if (outTick) *outTick = eng.getSequencerTick();
     if (outStep) *outStep = eng.getSequencerStep();
     if (outTotalTicks) *outTotalTicks = eng.getSequencerTotalTicks();
+}
+
+void seekSequencerBars(int deltaBars)
+{
+    abdmcx::wasm_internal::engine().seekSequencerBars(deltaBars);
+}
+
+void returnSequencerToZero()
+{
+    abdmcx::wasm_internal::engine().returnSequencerToZero();
+}
+
+void setSequencerRecordConfig(int mode01, int countInBars, int quantizeSteps)
+{
+    abdmcx::wasm_internal::engine().setSequencerRecordConfig(mode01, countInBars, quantizeSteps);
+}
+
+void getSequencerExtState(int* out3Ints)
+{
+    if (!out3Ints) return;
+    const auto& eng = abdmcx::wasm_internal::engine();
+    out3Ints[0] = eng.isSequencerPaused() ? 1 : 0;
+    out3Ints[1] = eng.getSequencerCountInTicks();
+    out3Ints[2] = static_cast<int>(eng.getSequencerRecordedRev());
+}
+
+const char* getPartPatternJson(int partIdx)
+{
+    static char sPatBuf[65536] {};
+    const int n = abdmcx::wasm_internal::engine().sequencer().serializePartPatternJson(partIdx, sPatBuf, sizeof(sPatBuf));
+    if (n <= 0) { sPatBuf[0] = '{'; sPatBuf[1] = '}'; sPatBuf[2] = '\0'; }
+    return sPatBuf;
+}
+
+static abdmcx::OfflineBounceSession gWasmBounce;
+
+int offlineBounceBegin(int bars, float tailSec, int isolatePart, int isolateBank, int useSongMode)
+{
+    abdmcx::OfflineBounceOptions opts;
+    opts.sampleRate = abdmcx::wasm_internal::sampleRate();
+    opts.patternBars = bars;
+    opts.tailSeconds = tailSec;
+    opts.isolatePart = isolatePart;
+    opts.isolateBank = isolateBank;
+    opts.useSongMode = (useSongMode != 0);
+    return gWasmBounce.begin(abdmcx::wasm_internal::engine(), opts);
+}
+
+int offlineBounceRenderChunk(float* outL, float* outR, int numFrames)
+{
+    return gWasmBounce.renderChunk(outL, outR, numFrames);
+}
+
+void offlineBounceEnd()
+{
+    gWasmBounce.end();
 }
 
 } // extern "C"

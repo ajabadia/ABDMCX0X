@@ -120,6 +120,14 @@ export function createDefaultBankLayout(): McxBankLayoutData {
   return { bankCount: 2, activeBank: 0, banks, pinnedParts, bankMuteMask: 0, bankSoloMask: 0, bankNames: emptyBankNames() };
 }
 
+export function createSinglePartBankLayout(): McxBankLayoutData {
+  const banks = Array.from({ length: MAX_BANKS }, () => emptyRow());
+  banks[0][0] = 0;
+  const pinnedParts = new Set<number>();
+  pinnedParts.add(0);
+  return { bankCount: 1, activeBank: 0, banks, pinnedParts, bankMuteMask: 0, bankSoloMask: 0, bankNames: emptyBankNames() };
+}
+
 export function formatSlotLabel(bankIdx: number, slotIdx: number): string {
   return `${BANK_LETTERS[bankIdx] ?? '?'}${slotIdx + 1}`;
 }

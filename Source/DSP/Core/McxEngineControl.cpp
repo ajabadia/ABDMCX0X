@@ -62,6 +62,21 @@ void McxEngine::setMasterTempoBpm(float bpm) noexcept
     for (auto& p : parts_)
         p.arp.setTempoBPM(masterTempoBpm_);
     outputAndFx_.setDelayTempoSyncBpm(masterTempoBpm_);
+    if (scConfig_.releaseSyncDiv > 0)
+        outputAndFx_.getChassis().setSidechainProfile(scConfig_.depthDb, scConfig_.attackMs, resolveSidechainReleaseSec(scConfig_, masterTempoBpm_) * 1000.0f);
+}
+
+void McxEngine::setSidechainConfig(const McxSidechainConfig& cfg) noexcept
+{
+    scConfig_.sourcePart = (cfg.sourcePart < 0) ? -1 : std::clamp(cfg.sourcePart, 0, kNumParts - 1);
+    scConfig_.hpfEnabled = cfg.hpfEnabled;
+    scConfig_.hpfHz = std::clamp(cfg.hpfHz, 40.0f, 300.0f);
+    scConfig_.depthDb = std::clamp(cfg.depthDb, -48.0f, -3.0f);
+    scConfig_.attackMs = std::clamp(cfg.attackMs, 1.0f, 100.0f);
+    scConfig_.releaseMs = std::clamp(cfg.releaseMs, 20.0f, 1000.0f);
+    scConfig_.releaseSyncDiv = std::clamp(cfg.releaseSyncDiv, 0, 3);
+    if (!scConfig_.hpfEnabled) scHpfState_.reset();
+    outputAndFx_.getChassis().setSidechainProfile(scConfig_.depthDb, scConfig_.attackMs, resolveSidechainReleaseSec(scConfig_, masterTempoBpm_) * 1000.0f);
 }
 
 void McxEngine::emitExternalNoteOn(int partIdx, const McxPartState& p, int note, float velocity, std::int32_t sampleOffset) noexcept
@@ -124,7 +139,8 @@ void McxEngine::triggerPartNoteOn(int partIndex, int inputNote, float velocity, 
         else dispatchNoteOffToOutputs(idx, prevLatched, sampleOffset);
     }
     p.latchedNoteMap[static_cast<std::size_t>(rawIn)] = static_cast<std::int8_t>(effNote);
-    if (midiDuckEnabled_ && (p.isDrumKit || idx == 9) && (rawIn == 35 || rawIn == 36)) triggerSidechainDuck(std::clamp(velocity, 0.4f, 1.0f));
+    const bool isMidiDuckSrc = (scConfig_.sourcePart >= 0) ? (idx == scConfig_.sourcePart) : ((p.isDrumKit || idx == 9) && (rawIn == 35 || rawIn == 36));
+    if (midiDuckEnabled_ && isMidiDuckSrc) triggerSidechainDuck(std::clamp(velocity, 0.4f, 1.0f));
     if (p.arp.isEnabled()) p.arp.noteOn(effNote, velocity);
     else dispatchNoteOnToOutputs(idx, effNote, velocity, accentAmount_, sampleOffset);
 }
@@ -239,6 +255,41 @@ void McxEngine::removeRackSlot(int slotIdx) noexcept
     outputAndFx_.removeRackSlot(slotIdx);
     for (auto& p : parts_)
         if (p.insertSlot == slotIdx) p.insertSlot = -1;
+}
+
+void McxEngine::advanceFocusedLfoTelemetry(int numSamples) noexcept
+{
+    if (numSamples <= 0 || sampleRate_ <= 100.0) return;
+    static constexpr float kSyncBeats[18] = {
+        128.0f, 64.0f, 32.0f, 16.0f, 8.0f, 4.0f, 3.0f, 2.0f, 1.5f,
+        1.0f, 0.75f, 0.5f, 1.0f / 3.0f, 0.375f, 0.25f, 1.0f / 6.0f, 0.125f, 0.0625f
+    };
+    const auto& fp = parts_[static_cast<std::size_t>(std::clamp(focusedPartIndex_, 0, kNumParts - 1))];
+    const float dt = static_cast<float>(numSamples) / static_cast<float>(sampleRate_);
+    const float bps = masterTempoBpm_ / 60.0f;
+
+    auto stepLfo = [&](int i, bool sync, std::uint8_t shape, float rate) {
+        const std::size_t u = static_cast<std::size_t>(i);
+        const float freqHz = sync
+            ? (bps / kSyncBeats[std::clamp(static_cast<int>(std::lround(rate)), 0, 17)])
+            : std::clamp(rate, 0.005f, 1280.0f);
+        float ph = lfoPhase01_[u] + freqHz * dt;
+        const bool wrapped = (ph >= 1.0f);
+        ph -= std::floor(ph);
+        lfoPhase01_[u] = ph;
+        if (shape == 0) lfoValueBipolar_[u] = std::sin(ph * 6.2831853f);
+        else if (shape == 1) lfoValueBipolar_[u] = 1.0f - 4.0f * std::abs(ph - 0.5f);
+        else if (shape == 2) lfoValueBipolar_[u] = (ph < 0.5f) ? 1.0f : -1.0f;
+        else if (shape == 3) lfoValueBipolar_[u] = ph * 2.0f - 1.0f;
+        else if (shape == 4) lfoValueBipolar_[u] = 1.0f - ph * 2.0f;
+        else if (shape == 7) lfoValueBipolar_[u] = (ph < 0.25f) ? 1.0f : -1.0f;
+        else if (wrapped || lfoValueBipolar_[u] == 0.0f) {
+            lfoRng_ = lfoRng_ * 1664525u + 1013904223u;
+            lfoValueBipolar_[u] = (static_cast<float>(lfoRng_ >> 16) / 32768.0f) - 1.0f;
+        }
+    };
+    stepLfo(0, fp.lfo1Sync, fp.lfo1Shape, fp.lfo1Rate);
+    stepLfo(1, fp.lfo2Sync, fp.lfo2Shape, fp.lfo2Rate);
 }
 
 } // namespace abdmcx

@@ -33,6 +33,9 @@ struct McxTelemetrySnapshot
     float lfoPhase{0.0f};
     float lfo2Phase{0.0f};
     bool seqPlaying{false};
+    bool seqPaused{false};
+    int seqCountInTicks{0};
+    std::uint32_t seqRecRev{0u};
     int seqTick{0};
     int seqStep{0};
     int seqTotalTicks{384};
@@ -87,6 +90,9 @@ inline McxTelemetrySnapshot captureEngineTelemetry(
     snap.lfoPhase = engine.getFocusedLfoValue(0);
     snap.lfo2Phase = engine.getFocusedLfoValue(1);
     snap.seqPlaying = engine.isSequencerRunning();
+    snap.seqPaused = engine.isSequencerPaused();
+    snap.seqCountInTicks = engine.getSequencerCountInTicks();
+    snap.seqRecRev = engine.getSequencerRecordedRev();
     snap.seqTick = engine.getSequencerTick();
     snap.seqStep = engine.getSequencerStep();
     snap.seqTotalTicks = engine.getSequencerTotalTicks();

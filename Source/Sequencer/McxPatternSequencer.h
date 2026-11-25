@@ -35,6 +35,12 @@ public:
     static constexpr int kMaxMotionPoints = 256;
     static constexpr int kDefaultPpq = 96;
 
+    enum class RecordMode : std::uint8_t
+    {
+        Overdub = 0,
+        Replace = 1
+    };
+
     using PatternEvent = abd::synth::PatternSequencerEngine::PatternEvent;
     using MotionPoint  = abd::synth::PatternSequencerEngine::MotionPoint;
     using GrooveEngine = abd::synth::GrooveShuffleEngine;
@@ -79,8 +85,14 @@ public:
     [[nodiscard]] int getBars() const noexcept { return bars_.load(std::memory_order_relaxed); }
     void setPpq(int ppq) noexcept;
     [[nodiscard]] int getPpq() const noexcept { return ppq_.load(std::memory_order_relaxed); }
-    void setRecording(bool rec) noexcept { recording_.store(rec, std::memory_order_relaxed); }
+    void setRecording(bool rec) noexcept;
     [[nodiscard]] bool isRecording() const noexcept { return recording_.load(std::memory_order_relaxed); }
+    void setRecordMode(RecordMode mode) noexcept { recordMode_.store(mode, std::memory_order_relaxed); }
+    [[nodiscard]] RecordMode getRecordMode() const noexcept { return recordMode_.load(std::memory_order_relaxed); }
+    void setCountInBars(int bars0to2) noexcept { countInBars_.store(std::clamp(bars0to2, 0, 2), std::memory_order_relaxed); }
+    [[nodiscard]] int getCountInBars() const noexcept { return countInBars_.load(std::memory_order_relaxed); }
+    void setRecordQuantizeSteps(int stepsPerBar) noexcept;
+    [[nodiscard]] int getRecordQuantizeSteps() const noexcept { return recordQuantizeSteps_.load(std::memory_order_relaxed); }
     void setLoopEnabled(bool loop) noexcept { loopEnabled_.store(loop, std::memory_order_relaxed); }
     [[nodiscard]] bool isLoopEnabled() const noexcept { return loopEnabled_.load(std::memory_order_relaxed); }
 
@@ -93,6 +105,13 @@ public:
     void start(bool resetToZero = false) noexcept;
     void stop(const McxSequencerCallbacks& cbs, std::int32_t sampleOffset = 0) noexcept;
     void pause() noexcept;
+    void seekToTick(int tick, const McxSequencerCallbacks& cbs, std::int32_t sampleOffset = 0) noexcept;
+    void seekByBars(int deltaBars, const McxSequencerCallbacks& cbs, std::int32_t sampleOffset = 0) noexcept;
+    void returnToZero(const McxSequencerCallbacks& cbs, std::int32_t sampleOffset = 0) noexcept;
+
+    void recordLiveNoteOn(int partIdx, std::uint8_t note, std::uint8_t vel) noexcept;
+    void recordLiveNoteOff(int partIdx, std::uint8_t note) noexcept;
+    int serializePartPatternJson(int partIdx, char* outBuf, int maxBytes) const noexcept;
 
     void syncFromHostTransport(bool hostPlaying,
                                double hostBpm,
@@ -106,11 +125,21 @@ public:
 
     // Thread-safe telemetry accessors for UI mirror
     [[nodiscard]] bool isRunning() const noexcept { return publishedRunning_.load(std::memory_order_acquire); }
+    [[nodiscard]] bool isPaused() const noexcept { return publishedPaused_.load(std::memory_order_acquire); }
+    [[nodiscard]] bool isCountingIn() const noexcept { return publishedCountInTicks_.load(std::memory_order_acquire) > 0; }
+    [[nodiscard]] int getCountInRemainingTicks() const noexcept { return publishedCountInTicks_.load(std::memory_order_acquire); }
+    [[nodiscard]] std::uint32_t getRecordedPatternRev() const noexcept { return recordedPatternRev_.load(std::memory_order_acquire); }
     [[nodiscard]] int getCurrentTick() const noexcept { return publishedTick_.load(std::memory_order_acquire); }
     [[nodiscard]] int getCurrentStep() const noexcept { return publishedStep_.load(std::memory_order_acquire); }
     [[nodiscard]] int getTotalTicks() const noexcept { return publishedTotalTicks_.load(std::memory_order_acquire); }
 
 private:
+    struct LiveRecNote
+    {
+        int startTick { -1 };
+        std::uint8_t velocity { 100 };
+    };
+
     struct Storage
     {
         std::array<std::array<PartPattern, 2>, kNumParts> buffers {};
@@ -119,10 +148,13 @@ private:
         std::array<std::atomic<bool>, kNumParts> dirty {};
         std::array<std::array<std::int16_t, 128>, kNumParts> activeRemainingTicks {};
         std::array<std::uint8_t, kNumParts> activeNoteCount {};
+        std::array<std::array<LiveRecNote, 128>, kNumParts> liveRecNotes {};
+        std::uint64_t replaceClearedPartMask { 0ull };
     };
 
     void updateTiming() noexcept;
     void publishTelemetry() noexcept;
+    void clearLiveRecState() noexcept;
     void releasePartActiveNotes(int partIdx, const McxSequencerCallbacks& cbs, std::int32_t sampleOffset) noexcept;
     void releaseAllActiveNotes(const McxSequencerCallbacks& cbs, std::int32_t sampleOffset) noexcept;
     void swapDirtyBuffers(const McxSequencerCallbacks& cbs, std::int32_t sampleOffset = 0) noexcept;
@@ -136,18 +168,27 @@ private:
     double samplesPerTick_ { 229.6875 };
     double sampleCursor_ { 0.0 };
     bool running_ { false };
+    bool paused_ { false };
     bool prevHostPlaying_ { false };
     bool barBoundaryPending_ { false };
     int currentTick_ { 0 };
+    int countInRemainingTicks_ { 0 };
 
     std::atomic<int> bars_ { 1 };
     std::atomic<int> ppq_ { kDefaultPpq };
     std::atomic<bool> recording_ { false };
+    std::atomic<bool> recSessionResetPending_ { false };
+    std::atomic<RecordMode> recordMode_ { RecordMode::Overdub };
+    std::atomic<int> countInBars_ { 0 };
+    std::atomic<int> recordQuantizeSteps_ { 16 };
     std::atomic<bool> loopEnabled_ { true };
     std::atomic<bool> publishedRunning_ { false };
+    std::atomic<bool> publishedPaused_ { false };
+    std::atomic<int> publishedCountInTicks_ { 0 };
     std::atomic<int> publishedTick_ { 0 };
     std::atomic<int> publishedStep_ { 0 };
     std::atomic<int> publishedTotalTicks_ { 384 };
+    std::atomic<std::uint32_t> recordedPatternRev_ { 0u };
 };
 
 } // namespace abdmcx

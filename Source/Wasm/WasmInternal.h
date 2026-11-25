@@ -8,5 +8,6 @@ namespace abdmcx::wasm_internal
 
 McxEngine& engine() noexcept;
 McxMultiBankManager& bankManager() noexcept;
+double sampleRate() noexcept;
 
 } // namespace abdmcx::wasm_internal

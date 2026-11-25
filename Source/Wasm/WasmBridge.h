@@ -112,6 +112,7 @@ extern "C"
     WASM_EXPORT int setPartEngineParamByKey(int partIdx, const char* key, float value);
     WASM_EXPORT float getPartEngineParamByKey(int partIdx, const char* key);
     WASM_EXPORT const char* getPartEngineStateJson(int partIdx);
+    WASM_EXPORT int setPartEngineStateJson(int partIdx, const char* jsonText);
     WASM_EXPORT const char* getRegisteredEngineCatalogJson();
     WASM_EXPORT const char* getPartPresetsJson(int partIdx);
 
@@ -121,6 +122,7 @@ extern "C"
     WASM_EXPORT int getIndexedBankKitCount(int bankSlot);
     WASM_EXPORT int loadIndexedToneOnDemand(int bankSlot, int toneIdx, int partIdx);
     WASM_EXPORT int loadIndexedKitOnDemand(int bankSlot, int kitIdx, int partIdx);
+    WASM_EXPORT int assignIndexedWaveOnDemand(int bankSlot, int waveIdx, int isDrumSlot, int targetIdx, int partIdx);
     WASM_EXPORT int collectUnusedWaves();
 
     /** Bar-quantized Live Scenes (1..8) and Song Mode arrangement control. */
@@ -173,4 +175,15 @@ extern "C"
     WASM_EXPORT void setSequencerLoop(int loop);
     WASM_EXPORT void setPartPresetName(int partIdx, const char* name);
     WASM_EXPORT void getMasterFxTelemetry(float* out7Floats, int* out4Mutes);
+
+    /** Extended Transport, Live Recording, Offline Bounce & Sidechain Config */
+    WASM_EXPORT void seekSequencerBars(int deltaBars);
+    WASM_EXPORT void returnSequencerToZero();
+    WASM_EXPORT void setSequencerRecordConfig(int mode01, int countInBars, int quantizeSteps);
+    WASM_EXPORT void getSequencerExtState(int* out3Ints);
+    WASM_EXPORT const char* getPartPatternJson(int partIdx);
+    WASM_EXPORT void setSidechainConfig(int sourcePart, int hpfEnabled, float hpfHz, float depthDb, float attackMs, float releaseMs, int releaseSyncDiv);
+    WASM_EXPORT int offlineBounceBegin(int bars, float tailSec, int isolatePart, int isolateBank, int useSongMode);
+    WASM_EXPORT int offlineBounceRenderChunk(float* outL, float* outR, int numFrames);
+    WASM_EXPORT void offlineBounceEnd();
 }

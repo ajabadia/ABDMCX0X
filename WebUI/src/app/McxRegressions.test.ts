@@ -20,16 +20,9 @@ function installDialogPolyfill() {
   }
   const showSpy = vi.fn(function (this: HTMLDialogElement) { this.setAttribute('open', ''); });
   const showModalSpy = vi.fn(function (this: HTMLDialogElement) { this.setAttribute('open', ''); });
-  HTMLDialogElement.prototype.show = showSpy;
-  HTMLDialogElement.prototype.showModal = showModalSpy;
-  HTMLDialogElement.prototype.close = vi.fn(function (this: HTMLDialogElement) {
-    this.removeAttribute('open');
-    this.dispatchEvent(new Event('close'));
-  });
-  HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
-    clearRect: vi.fn(), fillRect: vi.fn(), strokeRect: vi.fn(), fillText: vi.fn(),
-    beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(), fill: vi.fn(),
-  })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+  HTMLDialogElement.prototype.show = showSpy; HTMLDialogElement.prototype.showModal = showModalSpy;
+  HTMLDialogElement.prototype.close = vi.fn(function (this: HTMLDialogElement) { this.removeAttribute('open'); this.dispatchEvent(new Event('close')); });
+  HTMLCanvasElement.prototype.getContext = vi.fn(() => ({ clearRect: vi.fn(), fillRect: vi.fn(), strokeRect: vi.fn(), fillText: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(), fill: vi.fn() })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
   return { showSpy, showModalSpy };
 }
 
@@ -135,6 +128,8 @@ describe('ABDMCX0X P0-P1 Regression Suite', () => {
     expect(showSpy).toHaveBeenCalledTimes(1);
     expect(showModalSpy).not.toHaveBeenCalled();
     expect(document.querySelector('#mcx-synth-slot')?.innerHTML.trim().length).toBeGreaterThan(0);
+    expect(document.querySelector('.mcx-rompler-picker-bar')).toBeNull();
+    expect(document.querySelector('#mcx-synth-slot .abd-ehb')).toBeTruthy();
 
     modal.close();
     modal.open(0);
@@ -176,5 +171,23 @@ describe('ABDMCX0X P0-P1 Regression Suite', () => {
     expect(bridge.removeRackSlot).toHaveBeenCalledWith(1);
     expect(onSlotRemoved).toHaveBeenCalledWith(1);
     expect(rack.getSendTargets()[0]).toBe(-1);
+  });
+
+  it('permite grabar notas desde MPC Pads incluso cuando PianoRollModal está cerrado', () => {
+    installDialogPolyfill();
+    const bridge = makeMockBridge();
+    const recordNoteOn = vi.fn();
+    const recordNoteOff = vi.fn();
+    const partsState = Array.from({ length: 4 }, (_, i) => createDefaultPartState(i));
+    const state = {
+      focusedPart: 0, partsState, setLcdLine2: vi.fn(), syncArpModalForPart: vi.fn(), setRecordConfig: vi.fn(),
+      refs: { pianoRollModal: { isOpen: () => false, isRecording: () => true, recordNoteOn, recordNoteOff } },
+    };
+    const { padModal } = createMidiModals(bridge as never, state as never);
+    const padOpts = (padModal as unknown as { opts: { onPadTrigger: (...a: unknown[]) => void; onPadRelease: (...a: unknown[]) => void } }).opts;
+    padOpts.onPadTrigger(0, 2, 62, 112, {}, '1/16');
+    expect(recordNoteOn).toHaveBeenCalledWith(62, 112, '1/16');
+    padOpts.onPadRelease(0, 2, 62);
+    expect(recordNoteOff).toHaveBeenCalledWith(62);
   });
 });

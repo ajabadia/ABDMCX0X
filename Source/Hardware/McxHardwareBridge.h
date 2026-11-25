@@ -25,11 +25,13 @@ struct McxInboundNrpnState
     int currentChannel { 1 };
     int nrpnMsb { -1 };
     int nrpnLsb { -1 };
+    int dataMsb { -1 };
 
     void reset() noexcept
     {
         nrpnMsb = -1;
         nrpnLsb = -1;
+        dataMsb = -1;
     }
 };
 
@@ -107,6 +109,7 @@ public:
     void processInboundMidiByte(std::uint8_t byte, bool dispatchNotes = true, int midiInPortIdx = 0) noexcept;
     void processInboundMidiBuffer(const std::uint8_t* data, std::size_t length, bool dispatchNotes = true, int midiInPortIdx = 0) noexcept;
     bool processInboundCc(std::uint8_t channel1to16, std::uint8_t cc, std::uint8_t value, int midiInPortIdx = 0) noexcept;
+    bool processInboundSysEx(const std::uint8_t* data, std::size_t length, int midiInPortIdx = 0) noexcept;
 
     // --- Queue Drainage to Hardware Backend ---
     std::size_t drainOutboundQueue(const MidiByteSink& sink) noexcept;
@@ -114,7 +117,7 @@ public:
 private:
     int resolveRegistryIndexById(std::string_view idOrAlias) const noexcept;
     void sendCc(std::uint8_t ch1to16, std::uint8_t cc, std::uint8_t val, std::uint8_t portIdx = 0) noexcept;
-    void sendNrpn(std::uint8_t ch1to16, std::uint8_t msb, std::uint8_t lsb, std::uint8_t val, std::uint8_t portIdx = 0) noexcept;
+    void sendNrpn(std::uint8_t ch1to16, std::uint8_t msb, std::uint8_t lsb, std::uint8_t val, std::uint8_t portIdx = 0, std::int16_t lsbVal = -1) noexcept;
     void dispatchBinding(std::uint8_t partIdx, std::uint8_t ch, std::uint8_t portIdx, const abd::synth::SemanticControlBinding& binding, float normalizedVal) noexcept;
     void applyInternalSemanticParam(std::uint8_t partIdx, std::uint64_t roleHash, float normalizedVal) noexcept;
     void applyInternalDrumParam(std::uint8_t partIdx,
@@ -141,7 +144,7 @@ private:
     std::size_t msgPendingLen_ { 0 };
 
     bool inSysEx_ { false };
-    std::array<std::uint8_t, 64> sysexBuf_ {};
+    std::array<std::uint8_t, 1024> sysexBuf_ {};
     std::size_t sysexLen_ { 0 };
 };
 

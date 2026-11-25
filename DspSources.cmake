@@ -13,6 +13,7 @@ set(MCX_CORE_DSP_SOURCES
     Source/DSP/FX/McxRackChassisParams.cpp
     Source/Sequencer/McxPatternSequencer.cpp
     Source/Sequencer/McxPatternSequencerPlayback.cpp
+    Source/Sequencer/McxPatternSequencerRecord.cpp
     Source/Sequencer/McxEngineSequencer.cpp
     Source/Sequencer/McxSongAndScenes.cpp
     Source/MIDI/HardwareMirrorRouter.cpp

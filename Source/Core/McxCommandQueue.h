@@ -65,7 +65,11 @@ struct McxUiCommand
         SetDuckMode,
         SetSeqLoop,
         SetPartPresetName,
-        ResetToFactory
+        ResetToFactory,
+        SeqSeekBars,
+        SeqReturnToZero,
+        SetSeqRecordConfig,
+        SetSidechainConfig
     };
 
     Type type { Type::AllNotesOff };

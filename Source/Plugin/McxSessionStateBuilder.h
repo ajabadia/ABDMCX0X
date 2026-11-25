@@ -22,12 +22,26 @@ inline juce::var buildSessionStatePayload(const McxEngine& engine)
     obj->setProperty("limiterEnabled", fx.isLimiterEnabled());
     obj->setProperty("limiterCeilingDb", fx.getLimiterCeilingDb());
     obj->setProperty("fxTopology", fx.getUiTopology());
+    obj->setProperty("audioDuckEnabled", engine.isAudioDuckEnabled());
+    obj->setProperty("midiDuckEnabled", engine.isMidiDuckEnabled());
+    {
+        const auto& sc = engine.getSidechainConfig();
+        juce::DynamicObject::Ptr scObj = new juce::DynamicObject();
+        scObj->setProperty("sourcePart", sc.sourcePart);
+        scObj->setProperty("hpfEnabled", sc.hpfEnabled);
+        scObj->setProperty("hpfHz", sc.hpfHz);
+        scObj->setProperty("depthDb", sc.depthDb);
+        scObj->setProperty("attackMs", sc.attackMs);
+        scObj->setProperty("releaseMs", sc.releaseMs);
+        scObj->setProperty("releaseSyncDiv", sc.releaseSyncDiv);
+        obj->setProperty("sidechainConfig", juce::var(scObj.get()));
+    }
 
     juce::Array<juce::var> targets;
     for (int b = 0; b < 4; ++b) targets.add(fx.getSendSlotTarget(b));
     obj->setProperty("sendTargets", targets);
 
-    char rk[2048] {};
+    char rk[4096] {};
     fx.getChassis().serializeJson(rk, sizeof(rk));
     obj->setProperty("rackJson", juce::String(rk));
     obj->setProperty("bankLayoutJson", juce::String(engine.serializeBankLayoutJson()));

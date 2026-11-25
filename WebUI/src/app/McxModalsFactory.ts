@@ -69,6 +69,7 @@ export function createBankDrawer(bridge: McxHostBridge, state: McxAppState): Mcx
     onSelectPartPreset: (pIdx, item) => loadBankDrawerItem(bridge, state, pIdx, item),
     onSelectMultiPreset: (item) => loadBankDrawerItem(bridge, state, 0, item),
     onAudition: (pIdx, item) => {
+      loadBankDrawerItem(bridge, state, pIdx, item);
       void bridge.enableAudio();
       const note = item.engineKind?.includes('drum') ? 36 : 60;
       bridge.noteOn(pIdx, note, 0.85);
@@ -86,6 +87,9 @@ export function createStudioModals(bridge: McxHostBridge, state: McxAppState) {
     bridge: createFxRackBridge(bridge, state),
     bpm: 120,
     locale: getLocale(),
+    enableSidechainConfig: true,
+    partCount: 64,
+    initialSidechainConfig: bridge.loadLocalSidechainFallback() ?? undefined,
     getRackSlots: () => (state.refs.rackColumn as any)?.getSlots?.() ?? [],
     getSendTargets: () => (state.refs.rackColumn as any)?.getSendTargets?.() ?? [0, 1, -1, -1],
     onSendSlotTargetChange: (bus: number, bay: number) => {
@@ -119,7 +123,7 @@ export function createStudioModals(bridge: McxHostBridge, state: McxAppState) {
     bridge: {
       togglePlay: () => state.setTransportPlaying(!(state.refs.masterPanel?.getTransportState()?.playing ?? false)),
       stop: () => state.setTransportPlaying(false),
-      setRecording: (rec: boolean) => bridge.setParam(state.focusedPart, 'seqRecording', rec ? 1 : 0),
+      setRecording: (rec: boolean) => state.setSequencerRecording(rec),
       setBars: (b: number) => {
         bridge.setSequencerBars(b);
         state.setLcdLine2(`PATTERN LENGTH: ${b} BARS (${b * 16} STEPS)`);
@@ -158,6 +162,7 @@ export function createStudioModals(bridge: McxHostBridge, state: McxAppState) {
       else if (target === 'resonance') state.refs.toneDrawer?.updateParamLive('filterResonance', val);
     },
     onOpenGroove: (partIdx?: number) => state.refs.grooveModal?.open(partIdx ?? state.focusedPart),
+    onExportMidi: () => state.refs.onOpenExport?.(),
   });
 
   const grooveModal = new GrooveShuffleModal({

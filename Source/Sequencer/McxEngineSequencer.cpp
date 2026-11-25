@@ -249,8 +249,49 @@ void McxEngine::processSequencerAndClock(int numSamples, std::int32_t baseSample
 }
 
 bool McxEngine::isSequencerRunning() const noexcept { return sequencer_ && sequencer_->isRunning(); }
+bool McxEngine::isSequencerPaused() const noexcept { return sequencer_ && sequencer_->isPaused(); }
+bool McxEngine::isSequencerCountingIn() const noexcept { return sequencer_ && sequencer_->isCountingIn(); }
+int McxEngine::getSequencerCountInTicks() const noexcept { return sequencer_ ? sequencer_->getCountInRemainingTicks() : 0; }
+std::uint32_t McxEngine::getSequencerRecordedRev() const noexcept { return sequencer_ ? sequencer_->getRecordedPatternRev() : 0u; }
 int McxEngine::getSequencerTick() const noexcept { return sequencer_ ? sequencer_->getCurrentTick() : 0; }
 int McxEngine::getSequencerStep() const noexcept { return sequencer_ ? sequencer_->getCurrentStep() : 0; }
 int McxEngine::getSequencerTotalTicks() const noexcept { return sequencer_ ? sequencer_->getTotalTicks() : 384; }
+
+void McxEngine::seekSequencerBars(int deltaBars) noexcept
+{
+    if (sequencer_)
+        sequencer_->seekByBars(deltaBars, makeSeqCallbacks(this), 0);
+}
+
+void McxEngine::returnSequencerToZero() noexcept
+{
+    if (sequencer_)
+        sequencer_->returnToZero(makeSeqCallbacks(this), 0);
+}
+
+void McxEngine::setSequencerRecordConfig(int mode01, int countInBars, int quantizeSteps) noexcept
+{
+    if (!sequencer_) return;
+    sequencer_->setRecordMode(mode01 == 1 ? McxPatternSequencer::RecordMode::Replace : McxPatternSequencer::RecordMode::Overdub);
+    sequencer_->setCountInBars(countInBars);
+    sequencer_->setRecordQuantizeSteps(quantizeSteps);
+}
+
+void McxEngine::recordLiveInputNoteOn(int partIndex, int midiNote, float velocity) noexcept
+{
+    if (!sequencer_ || !sequencer_->isRecording()) return;
+    const int idx = std::clamp(partIndex, 0, kNumParts - 1);
+    const auto note = static_cast<std::uint8_t>(std::clamp(midiNote, 0, 127));
+    const auto vel = static_cast<std::uint8_t>(std::clamp<int>(static_cast<int>(std::lround(velocity * 127.0f)), 1, 127));
+    sequencer_->recordLiveNoteOn(idx, note, vel);
+}
+
+void McxEngine::recordLiveInputNoteOff(int partIndex, int midiNote) noexcept
+{
+    if (!sequencer_ || !sequencer_->isRecording()) return;
+    const int idx = std::clamp(partIndex, 0, kNumParts - 1);
+    const auto note = static_cast<std::uint8_t>(std::clamp(midiNote, 0, 127));
+    sequencer_->recordLiveNoteOff(idx, note);
+}
 
 } // namespace abdmcx

@@ -207,10 +207,11 @@ void McxAudioProcessor::flushPendingUiCommandsLocked() noexcept {
 }
 
 std::size_t McxAudioProcessor::collectUnusedWaves() noexcept { const juce::ScopedLock sl(engineMutex_); return engine_.collectUnusedWaves(); }
-int McxAudioProcessor::mountBankFromMemory(const std::uint8_t* data, std::size_t sizeBytes, const std::string& bankId) { return multiBankManager_.mountBankFromMemory(data, sizeBytes, bankId, true); }
-int McxAudioProcessor::mountBankFromFile(const std::string& filePath) { return multiBankManager_.mountBankFromFile(filePath); }
+int McxAudioProcessor::mountBankFromMemory(const std::uint8_t* data, std::size_t sizeBytes, const std::string& bankId) { return multiBankManager_.mountBankFromMemory(data, sizeBytes, bankId, true, &engine_.wavePool()); }
+int McxAudioProcessor::mountBankFromFile(const std::string& filePath) { return multiBankManager_.mountBankFromFile(filePath, {}, &engine_.wavePool()); }
 bool McxAudioProcessor::loadIndexedBankTone(int bankSlot, int toneIdx, int partIdx) { const juce::ScopedLock sl(engineMutex_); const bool ok = multiBankManager_.loadToneToPart(bankSlot, toneIdx, engine_, partIdx); if (ok) markEngineStateDirty(partIdx); return ok; }
 bool McxAudioProcessor::loadIndexedBankKit(int bankSlot, int kitIdx, int partIdx) { const juce::ScopedLock sl(engineMutex_); const bool ok = multiBankManager_.loadDrumKitToPart(bankSlot, kitIdx, engine_, partIdx); if (ok) markEngineStateDirty(partIdx); return ok; }
+bool McxAudioProcessor::assignIndexedBankWave(int bankSlot, int waveIdx, bool isDrumSlot, int targetIdx, int partIdx) { const juce::ScopedLock sl(engineMutex_); const bool ok = multiBankManager_.assignWaveToPart(bankSlot, waveIdx, isDrumSlot, targetIdx, engine_, partIdx); if (ok) markEngineStateDirty(partIdx); return ok; }
 void McxAudioProcessor::syncHostLatencyReport() { setLatencySamples(static_cast<int>(hardwareBridge_.getLatencyCompensator().getEffectiveDelaySamples())); }
 void McxAudioProcessor::resetToFactory() { const juce::ScopedLock sl(engineMutex_); engine_.reset(); McxFactoryBank::applyFactoryDefaults(engine_); markSessionStateDirty(); }
 void McxAudioProcessor::enqueueResetToFactory(int partIdx) {

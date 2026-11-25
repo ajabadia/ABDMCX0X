@@ -1,6 +1,7 @@
 #include "DSP/Core/McxEngine.h"
 #include "MIDI/McxMidiOutQueue.h"
 #include "Sequencer/McxPatternSequencer.h"
+#include "McxSequencerExtTests.h"
 
 #include <cmath>
 #include <cstdio>
@@ -266,6 +267,8 @@ int main()
         check(started && gotFa && gotFc && !e.isSequencerRunning(),
               "T8: Host transport sync follows BPM, Start (0xFA) and Stop (0xFC)");
     }
+
+    abdmcx::test_ext::runExtendedSequencerTests(check, renderRms);
 
     std::printf("\n=== Results: %d passed, %d failed ===\n", gPassed, gFailed);
     return (gFailed == 0) ? 0 : 1;

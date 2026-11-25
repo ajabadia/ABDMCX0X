@@ -14,6 +14,7 @@ export interface McxRackSlotPatch {
   mix?: number;
   bypass?: boolean;
   duck?: boolean;
+  duckAmount?: number;
   presetIdx?: number;
   params?: Record<string, number>;
 }
@@ -27,6 +28,7 @@ export interface McxRackSlotInitialState {
   mix?: number;
   bypass?: boolean;
   duck?: boolean;
+  duckAmount?: number;
   presetIdx?: number;
   params?: Record<string, number>;
   onStateSync?: (slotIdx: number, patch: McxRackSlotPatch) => void;
@@ -52,7 +54,7 @@ export class McxRackSlotBridge implements FxFaceplateBridge {
     this.onStateSync = init.onStateSync;
     this.desc = getFxDescriptor(init.algoId);
     this.bypassed = init.bypass ?? false;
-    this.ducking = { enabled: init.duck ?? this.desc.canDuck, amount: 0.6 };
+    this.ducking = { enabled: init.duck ?? this.desc.canDuck, amount: init.duckAmount ?? 0.6 };
     this.presetIdx = init.presetIdx ?? 0;
     this.curPresetName = this.desc.presets[this.presetIdx] || this.desc.presets[0] || '';
 
@@ -116,7 +118,7 @@ export class McxRackSlotBridge implements FxFaceplateBridge {
   setDucking(enabled: boolean, amount = 0.6): void {
     this.ducking = { enabled, amount };
     this.host.setRackSlotDucking(this.slotIdx, enabled, amount);
-    this.onStateSync?.(this.slotIdx, { duck: enabled });
+    this.onStateSync?.(this.slotIdx, { duck: enabled, duckAmount: amount });
   }
 
   getDucking(): { enabled: boolean; amount: number } { return { ...this.ducking }; }

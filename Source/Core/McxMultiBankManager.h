@@ -30,11 +30,16 @@ public:
     McxMultiBankManager(McxMultiBankManager&&) noexcept = default;
     McxMultiBankManager& operator=(McxMultiBankManager&&) noexcept = default;
 
-    int mountBankFromFile(const std::string& filePath, const std::string& bankIdOverride = {});
+    int mountBankFromFile(const std::string& filePath,
+                          const std::string& bankIdOverride = {},
+                          abd::rompler::RomplerWavePool* preloadWavePool = nullptr);
     int mountBankFromMemory(const void* data,
                             std::size_t sizeBytes,
                             const std::string& bankIdOverride = {},
-                            bool copyBuffer = true);
+                            bool copyBuffer = true,
+                            abd::rompler::RomplerWavePool* preloadWavePool = nullptr);
+    [[nodiscard]] static bool isLaSharedPcmBankId(std::string_view bankId) noexcept;
+    bool preloadBankWaves(int bankSlot, abd::rompler::RomplerWavePool& pool) const;
 
     [[nodiscard]] int findBankSlotById(std::string_view bankId) const noexcept;
     [[nodiscard]] int findBankSlotByPath(std::string_view filePath) const noexcept;
@@ -43,6 +48,7 @@ public:
 
     bool loadToneToPart(int bankSlot, int toneIndex, McxEngine& engine, int partIdx) const;
     bool loadDrumKitToPart(int bankSlot, int kitIndex, McxEngine& engine, int partIdx) const;
+    bool assignWaveToPart(int bankSlot, int waveIndex, bool isDrumSlot, int targetIndex, McxEngine& engine, int partIdx) const;
 
     void clear() noexcept;
 
@@ -56,7 +62,8 @@ private:
 
     int registerMountedIndex(std::unique_ptr<abd::rompler::RomplerBankIndex> idx,
                              const std::string& filePath,
-                             bool replaceMatchingId);
+                             bool replaceMatchingId,
+                             abd::rompler::RomplerWavePool* preloadWavePool = nullptr);
 
     std::vector<MountedBankSlot> slots_ {};
 };

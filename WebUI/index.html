@@ -98,18 +98,13 @@
       </section>
     </section>
 
-    <!-- RIGHT SECTION: 19'' FX Rack & Master Panel (top) + Master Transport Dock (bottom) -->
+    <!-- RIGHT SECTION: Independent Collapsible 19'' FX Rack & Master Columns -->
     <aside class="mcx-right-col" id="mcx-right-col">
-      <div class="mcx-right-top-row">
-        <!-- 8-SLOT MODULAR 19'' STUDIO RACK CHASSIS COLUMN -->
-        <div class="mcx-panel mcx-rack-column" id="mcx-rack-column" aria-label="19'' Studio FX Rack"></div>
+      <!-- 8-SLOT MODULAR 19'' STUDIO RACK CHASSIS COLUMN -->
+      <div class="mcx-panel mcx-rack-column" id="mcx-rack-column" aria-label="19'' Studio FX Rack"></div>
 
-        <!-- MASTER & GLOBAL OUTPUT COLUMN -->
-        <div class="mcx-panel mcx-master-panel" id="mcx-master-panel" aria-label="Master &amp; Global Output"></div>
-      </div>
-
-      <!-- MASTER TRANSPORT CONTROLS DOCK (Horizontal bar under Rack & Master) -->
-      <div class="mcx-panel mcx-transport-dock" id="mcx-transport-mount" aria-label="Master Transport Controls"></div>
+      <!-- MASTER & GLOBAL OUTPUT COLUMN -->
+      <div class="mcx-panel mcx-master-panel" id="mcx-master-panel" aria-label="Master &amp; Global Output"></div>
     </aside>
   </main>
 
@@ -129,6 +124,13 @@
       <button type="button" id="oct-down" class="kbd-octave-btn" title="Octave Down" data-i18n-title="mcx.octaveDown">
         <span data-i18n="mcx.octDownShort">OCT -</span>
         <div class="kbd-octave-led" id="led-down"></div>
+      </button>
+    </div>
+    <div class="kbd-transpose-controls">
+      <button type="button" id="kbd-transpose-btn" class="kbd-octave-btn kbd-transpose-btn" title="Live Transpose (Hold or click + key; double-click resets · Alt+T)" data-i18n-title="mcx.liveTransposeHint" aria-pressed="false">
+        <span data-i18n="mcx.transposeShort">TR</span>
+        <span class="kbd-transpose-val" id="kbd-transpose-val">0</span>
+        <div class="kbd-octave-led" id="led-transpose"></div>
       </button>
     </div>
     <div class="mcx-kbd-host" id="piano-keyboard"></div>

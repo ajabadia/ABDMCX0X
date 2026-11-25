@@ -179,13 +179,14 @@ Cuando la modal emite `onSendLabelsChange`, las 16 tiras de canal actualizan sus
 ## 7. Estado de la Implementación Canónica (Nov 2026)
 
 - **Componente Universal:** Implementado en `ABDShared/Components/MultiBusFxRack/` y subdividido en módulos estrictamente `< 200 líneas`:
-  - `multiBusFxRegistry.js`: Catálogo de 7 categorías (`reverb`, `delay`, `modulation`, `distortion`, `filter`, `dynamics`, `pitch`), algoritmos y presets.
+  - `multiBusFxRegistry.js`: Catálogo de 7 categorías (`reverb`, `delay`, `modulation`, `distortion`, `filter`, `dynamics`, `pitch`) con **80 entradas / 79 `fxId` únicos** (incluyendo suites Roland LA-50/MT-32/JV-880/GS, Korg MS2000, Hartmann Neuron `74..77`, Hügelton Golana `78`, Krate Iterum `79`, RE-201 WDF `80`, Juno KR-106 `81` y efectos boutique/granulares) y sus respectivas carátulas en `ABDShared/Assets/assets/fx/models/*.webp`.
   - `multiBusFxViews.js`: Generación de interfaz en 3 niveles y barras de control.
   - `multiBusFxRackLcd.js`: Renderizador SVG de matriz vectorial de ruteo para las 10 topologías con nombres dinámicos.
   - `multiBusFxRackModal.js`: Controlador principal con modales modeless, eventos en cascada y arrastre.
+- **Motores C++ Host (`McxRackEngineType`):** 30 procesadores activos en [McxRackSlot.h](file:///d:/desarrollos/ABDSynths/ABDMCX0X/Source/DSP/FX/McxRackSlot.h) (`Bypass=0`, `ZitaReverb`..`MoodFilter`, `RolandBossReverb=10`, `RolandMt32Reverb=11`, `RolandMultiChorus=12`, `RolandToneEq=13`, `RolandJvReverb=14`, `RolandJvChorus=15`, `RolandGsDelay=16`, `Ms2000ChorusFlanger=17`..`Ms2000Eq=22`, `NeuronSilverFilter=23`..`NeuronSlicer=26` y `GolanaReverb=27`..`Kr106Chorus=30` delegados a [DspGolanaReverb.h](file:///d:/desarrollos/ABDSynths/ABDShared/Code/DspEffects/DspGolanaReverb.h), [DspIterumDelay.h](file:///d:/desarrollos/ABDSynths/ABDShared/Code/DspEffects/DspIterumDelay.h), [DspRe201Wdf.h](file:///d:/desarrollos/ABDSynths/ABDShared/Code/DspEffects/DspRe201Wdf.h) y [DspKr106Chorus.h](file:///d:/desarrollos/ABDSynths/ABDShared/Code/DspEffects/DspKr106Chorus.h)).
+- **Calibración DSP JV-880 desde ROM2 (`@0x4800`):** `DspRolandJvReverb.h` y `DspRolandJvChorus.h` consumen `kJv880ReverbRom2Words[8][30]` y `kJv880ChorusRom2Words[3][5]` desde [RolandGsMc303FxProfile.h](file:///d:/desarrollos/ABDSynths/ABDShared/Code/DspEffects/profiles/RolandGsMc303FxProfile.h) (derivados del contrato `roland_jv880_fx_microprogram.json`) para calibrar taps ERAM (incluyendo proporciones de Delay/Pan Delay `0x3cf0`/`0x1e7d`), sesgos de coeficientes y asimetría L/R del chorus.
 - **Definiciones TypeScript:** Publicadas canónicamente en `ABDShared/Components/multiBusFxRackModal.d.ts`.
 - **Hojas de Estilo:** `ABDShared/Assets/styles/components/multi-bus-fx-rack.css` (100% token-driven, cero colores hardcodeados).
-- **Suite de Pruebas:** Validada con Vitest en `ABDShared/tests/multiBusFxRackModal.test.js` (**6/6 tests unitarios en verde**).
 - **Integración Host:** Enlazada y operativa en `ABDMCX0X` a través de `McxMasterPanel` (`#mcx-btn-open-fx`) y `McxGlobalDrawer` (`#g-open-full-rack`).
 
 

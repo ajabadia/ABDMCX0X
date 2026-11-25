@@ -24,6 +24,7 @@ private:
     McxAudioProcessor& processor_;
     std::unique_ptr<abd::webview2::JuceWebView2Component> webComponent_;
     std::unique_ptr<juce::FileChooser> folderChooser_;
+    std::unique_ptr<juce::FileChooser> exportChooser_;
     bool isUiReady_{false};
     int gcTickCounter_{0};
 

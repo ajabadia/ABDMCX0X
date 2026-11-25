@@ -30,8 +30,8 @@ export function mountMultiEngineUi(
     getCatalog: () => routeModal.getEngineCatalog(),
     onPartUpdated: (idx) => state.notifyPartMetadataChanged(idx),
     onOpenRouteModal: (idx) => routeModal.open(idx),
-    onOpenBank: (idx) => state.refs.bankDrawer?.open(idx),
     setLcdLine2: state.setLcdLine2,
+    state,
   });
 
   state.refs.routeModal = routeModal;
@@ -53,10 +53,12 @@ export function mountMultiEngineUi(
   bridge.onPartEngineState((dto) => {
     synthModal.applyPartEngineState(dto);
     state.refs.toneDrawer?.applyPartEngineState(dto);
+    if (dto.part === state.focusedPart) state.syncFocusedKeyboardPlayableNotes?.();
   });
 
   themeMgr.onChange(() => {
     routeModal.syncTheme();
+    synthModal.syncTheme();
   });
 
   bridge.onAudioStatus((st) => {

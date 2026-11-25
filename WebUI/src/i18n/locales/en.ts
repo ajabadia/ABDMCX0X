@@ -41,6 +41,8 @@ export const mcxEn = {
     octaveDown: 'Octave Down',
     octUpShort: 'OCT +',
     octDownShort: 'OCT -',
+    transposeShort: 'TR',
+    liveTransposeHint: 'Live Transpose (hold or click + key; double-click resets · Alt+T)',
     cutoff: 'CUTOFF',
     resonance: 'RESO',
     attack: 'ATTACK',

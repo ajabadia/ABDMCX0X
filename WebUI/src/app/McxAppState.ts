@@ -48,6 +48,7 @@ import type { McxRackColumn } from '../ui/McxRackColumn';
 import type { McxGlobalDrawer } from '../ui/McxGlobalDrawer';
 import type { McxSettingsModal } from '../ui/McxSettingsModal';
 import { createMixerCallbacks } from './McxMixerCallbacksFactory';
+import type { McxLiveTransposeHandle } from './McxLiveTranspose';
 import { syncPianoRollPart } from './McxPianoRollSync';
 
 export interface McxUiRefs {
@@ -59,11 +60,20 @@ export interface McxUiRefs {
   fxRackModal?: MultiBusFxRackModal | null; globalLfoModal?: GlobalLfoModal | null;
   pianoRollModal?: PianoRollModal | null; grooveModal?: GrooveShuffleModal | null;
   padModal?: MpcPadModal | null; arpModal?: GrooveArpeggiatorModal | null;
+  keyboard?: {
+    setPlayableNotes(notes: number[] | null): void; setScaleFilter?(type: string | null, root?: number): void;
+    disableScaleFilter?(): void; setScaleSnapMode?(mode: 'block' | 'snap' | 'highlight'): void;
+    setTranspose?(semitones: number, emit?: boolean): void; toggleTransposeArm?(): void;
+    isTransposeArmed?(): boolean; interceptTransposeNoteOn?(midiNote: number): boolean;
+  } | null;
+  liveTranspose?: McxLiveTransposeHandle | null;
+  onUndo?: () => void; onRedo?: () => void; onToggleCompare?: () => void; onCaptureCompare?: () => void;
   onSongTelemetry?: (tel: McxTelemetry) => void;
   triggerLiveScene?: (idx: number, immediate?: boolean) => void;
   toggleSongDrawer?: () => void; refreshSongLocale?: () => void;
   onSavePreset?: (isMulti: boolean) => void; onOpenBankFile?: () => void; onPanic?: () => void;
-  onToggleProbe?: () => void;
+  onToggleProbe?: () => void; onOpenExport?: () => void; onOpenMidiLearn?: () => void; getSongState?: () => any;
+  onNewProject?: () => void; onSaveProject?: () => void; onOpenProject?: () => void;
 }
 
 export class McxAppState {
@@ -71,6 +81,10 @@ export class McxAppState {
   public bankLayout: McxBankLayoutData = createDefaultBankLayout();
   public midiDevices: McxMidiDevicesDto;
   public focusedPart = 0;
+  public isRecording = false;
+  public recordMode: 'overdub' | 'replace' = 'overdub';
+  public countInBars = 0;
+  public recordQuantizeSteps = 16;
   public globalSettings: McxSystemSettingsDto;
   public refs: McxUiRefs = {};
   private readonly bridge: McxHostBridge;
@@ -103,6 +117,7 @@ export class McxAppState {
   public syncOctaveTooltips(): void {
     document.getElementById('oct-up')?.setAttribute('title', t('mcx.octaveUp'));
     document.getElementById('oct-down')?.setAttribute('title', t('mcx.octaveDown'));
+    document.getElementById('kbd-transpose-btn')?.setAttribute('title', t('mcx.liveTransposeHint'));
   }
 
   public refreshPartList(): void {
@@ -180,8 +195,40 @@ export class McxAppState {
     if (this.refs.toneDrawer?.isOpen()) this.refs.toneDrawer.syncPart(idx, ps);
     if (this.refs.padModal?.isOpen()) this.refs.padModal.syncPart(idx, ps);
     if (this.refs.arpModal?.isOpen()) this.syncArpModalForPart(idx);
-    if (this.refs.pianoRollModal?.isOpen()) this.syncPianoRollForPart(idx);
+    if (this.refs.pianoRollModal?.isOpen() || this.isRecording) this.syncPianoRollForPart(idx);
     if (this.refs.synthModal?.isOpen()) this.refs.synthModal.open(idx);
+  }
+
+  public setSequencerRecording(rec: boolean): void {
+    this.isRecording = Boolean(rec);
+    if (this.isRecording) this.syncPianoRollForPart(this.focusedPart);
+    this.bridge.setParam(this.focusedPart, 'seqRecording', this.isRecording ? 1 : 0);
+    this.refs.masterPanel?.setRecording(this.isRecording);
+    this.refs.pianoRollModal?.setRecording?.(this.isRecording);
+  }
+
+  public setRecordConfig(patch: { mode?: 'overdub' | 'replace'; countInBars?: number; quantizeSteps?: number }): void {
+    if (patch.mode !== undefined) this.recordMode = patch.mode;
+    if (patch.countInBars !== undefined) this.countInBars = Math.max(0, Math.min(2, patch.countInBars));
+    if (patch.quantizeSteps !== undefined) this.recordQuantizeSteps = patch.quantizeSteps;
+    this.bridge.setSequencerRecordConfig(this.recordMode === 'replace' ? 1 : 0, this.countInBars, this.recordQuantizeSteps);
+    this.refs.pianoRollModal?.setRecordMode?.(this.recordMode);
+  }
+
+  public loadRecordedPatternFromHost(partIdx: number, patternJson: string): void {
+    const ps = this.partsState[partIdx];
+    if (!ps || !patternJson) return;
+    try {
+      const parsed = JSON.parse(patternJson);
+      const notes = Array.isArray(parsed?.notes) ? parsed.notes : [];
+      const seq = {
+        bars: Number(parsed?.bars || 1), ppq: Number(parsed?.ppq || 96),
+        mode: (ps.kind === 'drum_map' ? 'drum' : 'chromatic') as 'drum' | 'chromatic', notes, motion: ps.sequence?.motion || {},
+      };
+      ps.sequence = seq;
+      this.refs.stepStrip?.syncFromSequence(partIdx, seq);
+      if (partIdx === this.focusedPart) this.refs.pianoRollModal?.setNotes?.(notes);
+    } catch { /* ignore malformed recorded pattern */ }
   }
 
   public selectBank(bankIdx: number): void {
@@ -444,6 +491,12 @@ export class McxAppState {
     }
   }
 
+  public syncFocusedKeyboardPlayableNotes(): void {
+    const notes = this.refs.synthModal?.getPlayableNotesForPart?.(this.focusedPart) ?? null;
+    this.refs.keyboard?.setPlayableNotes?.(notes);
+    this.refs.liveTranspose?.syncKeyboardScaleVisuals?.();
+  }
+
   public focusPart(idx: number): void {
     if (!this.partsState[idx]) return;
     this.focusedPart = idx;
@@ -458,6 +511,8 @@ export class McxAppState {
     }
     this.updateLcdLine1(0);
     this.syncOpenEditorsToFocusedPart();
+    this.bridge.requestPartEngineState(idx);
+    this.syncFocusedKeyboardPlayableNotes();
   }
 
   public notifyPartMetadataChanged(idx: number): void {
@@ -467,6 +522,8 @@ export class McxAppState {
     if (this.refs.padModal?.isOpen() && this.refs.padModal.getPart() === idx) this.refs.padModal.syncPart(idx, this.partsState[idx]);
     if (this.refs.arpModal?.isOpen() && this.refs.arpModal.getPart() === idx) this.syncArpModalForPart(idx);
     if (this.refs.pianoRollModal?.isOpen() && this.focusedPart === idx) this.syncPianoRollForPart(idx);
+    if (this.focusedPart === idx) this.syncFocusedKeyboardPlayableNotes();
+    this.refs.bankDrawer?.syncToolbar();
   }
 
   public getPanelCallbacks(): McxMixerCallbacks {

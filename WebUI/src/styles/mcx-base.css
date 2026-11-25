@@ -41,23 +41,39 @@ body.mcx-app {
 #mcx-navbar-host .navbar,
 #mcx-navbar-host .abd-synth-navbar {
   background: color-mix(in srgb, var(--navbar-bg, var(--color-panel-bg)) 58%, transparent);
+  flex-wrap: nowrap;
+  overflow: visible;
+  height: var(--navbar-height, 44px);
+  min-height: var(--navbar-height, 44px);
+  max-height: var(--navbar-height, 44px);
+}
+
+#mcx-navbar-host .nav-left,
+#mcx-navbar-host .nav-right,
+#mcx-navbar-host .menu-bar,
+#mcx-navbar-host .mcx-nav-group {
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 #mcx-navbar-host .nav-right {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  flex-shrink: 0;
 }
 #mcx-navbar-host .nav-right .nav-brand {
   order: 2;
   margin-right: 0;
   margin-left: var(--space-4);
+  flex-shrink: 0;
 }
 #mcx-navbar-host .nav-right .mcx-nav-group {
   order: 1;
+  flex-shrink: 0;
 }
 
-.mcx-nav-group { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
+.mcx-nav-group { display: flex; align-items: center; gap: var(--space-4); flex-wrap: nowrap; }
 
 .mcx-nav-select {
   padding: var(--space-2) var(--space-4);

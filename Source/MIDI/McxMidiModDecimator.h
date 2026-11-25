@@ -103,7 +103,8 @@ public:
                     std::uint8_t msb,
                     std::uint8_t lsb,
                     float norm01,
-                    std::int32_t sampleOffset = 0) noexcept
+                    std::int32_t sampleOffset = 0,
+                    bool is14Bit = false) noexcept
     {
         if (slotId >= kMaxSlots)
             return false;
@@ -112,8 +113,8 @@ public:
         if (slot.hasEmitted && slot.samplesSinceEmit < nrpnIntervalSamples_)
             return false;
 
-        const std::uint8_t byteVal = quantize7Bit(norm01);
-        if (slot.hasEmitted && slot.lastByte == static_cast<int>(byteVal))
+        const int qVal = is14Bit ? static_cast<int>(quantize14Bit(norm01)) : static_cast<int>(quantize7Bit(norm01));
+        if (slot.hasEmitted && slot.lastByte == qVal)
             return false;
 
         const std::uint8_t m7 = static_cast<std::uint8_t>(msb & 0x7Fu);
@@ -129,7 +130,7 @@ public:
                      && (cache.samplesSinceAddr < nrpnRefreshSamples_);
         }
 
-        const std::size_t neededMsgs = addrMatch ? 1u : 3u;
+        const std::size_t neededMsgs = (addrMatch ? 0u : 2u) + (is14Bit ? 2u : 1u);
         if (hasBackpressure(outQueue, neededMsgs))
             return false;
 
@@ -148,10 +149,13 @@ public:
             }
         }
 
-        if (!outQueue.push(HardwareMirrorRouter::makeCc(ch1to16, 6, byteVal, sampleOffset, portIdx)))
+        const std::uint8_t msbData = is14Bit ? static_cast<std::uint8_t>((qVal >> 7) & 0x7Fu) : static_cast<std::uint8_t>(qVal);
+        if (!outQueue.push(HardwareMirrorRouter::makeCc(ch1to16, 6, msbData, sampleOffset, portIdx)))
+            return false;
+        if (is14Bit && !outQueue.push(HardwareMirrorRouter::makeCc(ch1to16, 38, static_cast<std::uint8_t>(qVal & 0x7Fu), sampleOffset, portIdx)))
             return false;
 
-        slot.lastByte = static_cast<int>(byteVal);
+        slot.lastByte = qVal;
         slot.samplesSinceEmit = 0;
         slot.hasEmitted = true;
         return true;
@@ -182,6 +186,12 @@ private:
     {
         const float clamped = std::clamp(norm01, 0.0f, 1.0f);
         return static_cast<std::uint8_t>(std::clamp(static_cast<int>(std::lround(clamped * 127.0f)), 0, 127));
+    }
+
+    static std::uint16_t quantize14Bit(float norm01) noexcept
+    {
+        const float clamped = std::clamp(norm01, 0.0f, 1.0f);
+        return static_cast<std::uint16_t>(std::clamp(static_cast<int>(std::lround(clamped * 16383.0f)), 0, 16383));
     }
 
     template <std::size_t Cap>

@@ -71,7 +71,7 @@
 └── MidiLearn/                       # Perfiles completos de MIDI Learn por dispositivo físico
 ```
 
-- Taxonomía compartida: `ABDShared/Components/bank/bankCategories.js` (`cat-0..cat-9`, ES/EN, incluyendo `cat-9: Rhythm / Drums`) e imágenes de instrumento de `ABDNeuModMakr`.
+- Taxonomía compartida: `ABDShared/Components/bank/bankCategories.js` (`CATEGORY_0_9`, Parameter Sets inmutables de Hartmann Neuron, multiliteral EN/ES + `neuron`/`music`/`short`): `cat-8 = Loop Factory / Drums, Perc & Loops`, `cat-9 = Multipurpose / SFX, Drones & Exp.`; el eje ortogonal es `playMode: chromatic | drum_map`. Iconos de instrumento de `ABDNeuModMakr`.
 
 ---
 

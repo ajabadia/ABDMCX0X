@@ -64,10 +64,19 @@ float McxNullSoundEngine::getControlInputValue(std::size_t destId) const noexcep
 }
 
 McxEngineRegistry::McxEngineRegistry() noexcept
-    : romplerEngines_(static_cast<std::size_t>(kNumParts))
+    : romplerEngines_(static_cast<std::size_t>(kNumParts)),
+      jv880Engines_(static_cast<std::size_t>(kNumParts)),
+      tb303Engines_(static_cast<std::size_t>(kNumParts)),
+      emaxEngines_(static_cast<std::size_t>(kNumParts))
 {
     std::array<abd::engines::ISoundEngine*, kNumParts> romplerPtrs {};
     std::array<abd::engines::ISoundEngine*, kNumParts> extPtrs {};
+    std::array<abd::engines::ISoundEngine*, kNumParts> mcs48Ptrs {};
+    std::array<abd::engines::ISoundEngine*, kNumParts> la50Ptrs {};
+    std::array<abd::engines::ISoundEngine*, kNumParts> cm32Ptrs {};
+    std::array<abd::engines::ISoundEngine*, kNumParts> jv880Ptrs {};
+    std::array<abd::engines::ISoundEngine*, kNumParts> tb303Ptrs {};
+    std::array<abd::engines::ISoundEngine*, kNumParts> emaxPtrs {};
     for (int i = 0; i < kNumParts; ++i)
     {
         const auto idx = static_cast<std::size_t>(i);
@@ -78,18 +87,56 @@ McxEngineRegistry::McxEngineRegistry() noexcept
         rompler.patch().pan = 0.0f;
         romplerPtrs[idx] = &rompler;
         extPtrs[idx] = &externalMidiEngines_[idx];
+        mcs48Ptrs[idx] = &mcs48Engines_[idx];
+        la50Engines_[idx].setDeferKernelUntilActive(true);
+        la50Engines_[idx].attachWavePool(&wavePool_);
+        la50Ptrs[idx] = &la50Engines_[idx];
+        cm32Engines_[idx].configureAsCm32();
+        cm32Engines_[idx].setDeferKernelUntilActive(true);
+        cm32Engines_[idx].attachWavePool(&wavePool_);
+        cm32Ptrs[idx] = &cm32Engines_[idx];
+        auto& jv880 = jv880Engines_[idx];
+        jv880.attachVoicePool(&romplerPool_, i);
+        jv880.attachWavePool(&wavePool_);
+        jv880.configureAsJv880();
+        jv880Ptrs[idx] = &jv880;
+        tb303Ptrs[idx] = &tb303Engines_[idx];
+        auto& emax = emaxEngines_[idx];
+        emax.attachWavePool(&wavePool_);
+        emaxPtrs[idx] = &emax;
     }
     registerEngineType(romplerEngines_[0].getDescriptor(), romplerPtrs.data(), kNumParts);
     registerEngineType(externalMidiEngines_[0].getDescriptor(), extPtrs.data(), kNumParts);
+    registerEngineType(mcs48Engines_[0].getDescriptor(), mcs48Ptrs.data(), kNumParts);
+    registerEngineType(la50Engines_[0].getDescriptor(), la50Ptrs.data(), kNumParts);
+    registerEngineType(cm32Engines_[0].getDescriptor(), cm32Ptrs.data(), kNumParts);
+    registerEngineType(jv880Engines_[0].getDescriptor(), jv880Ptrs.data(), kNumParts);
+    registerEngineType(tb303Engines_[0].getDescriptor(), tb303Ptrs.data(), kNumParts);
+    registerEngineType(emaxEngines_[0].getDescriptor(), emaxPtrs.data(), kNumParts);
 }
 
 McxEngineRegistry::~McxEngineRegistry() noexcept
 {
+    for (auto& la : la50Engines_)
+        la.attachWavePool(nullptr);
+    for (auto& cm : cm32Engines_)
+        cm.attachWavePool(nullptr);
+    for (auto& jv : jv880Engines_)
+    {
+        jv.releaseActiveWaves();
+        jv.attachWavePool(nullptr);
+        jv.attachVoicePool(nullptr, 0);
+    }
     for (auto& r : romplerEngines_)
     {
         r.releaseActiveWaves();
         r.attachWavePool(nullptr);
         r.attachVoicePool(nullptr, 0);
+    }
+    for (auto& e : emaxEngines_)
+    {
+        e.releaseActiveWaves();
+        e.attachWavePool(nullptr);
     }
     wavePool_.clear();
 }
@@ -202,19 +249,18 @@ int McxEngineRegistry::findTypeIndexForInstance(const abd::engines::ISoundEngine
     return -1;
 }
 
-abd::rompler::StructuredRomplerEngine& McxEngineRegistry::rompler(int partIdx) noexcept
-{
-    return romplerEngines_[static_cast<std::size_t>(std::clamp(partIdx, 0, kNumParts - 1))];
-}
-
-const abd::rompler::StructuredRomplerEngine& McxEngineRegistry::rompler(int partIdx) const noexcept
-{
-    return romplerEngines_[static_cast<std::size_t>(std::clamp(partIdx, 0, kNumParts - 1))];
-}
-
-std::size_t McxEngineRegistry::collectUnusedWaves() noexcept
-{
-    return wavePool_.collectGarbage(&romplerPool_);
-}
+abd::rompler::StructuredRomplerEngine& McxEngineRegistry::rompler(int partIdx) noexcept { return romplerEngines_[static_cast<std::size_t>(std::clamp(partIdx, 0, kNumParts - 1))]; }
+const abd::rompler::StructuredRomplerEngine& McxEngineRegistry::rompler(int partIdx) const noexcept { return romplerEngines_[static_cast<std::size_t>(std::clamp(partIdx, 0, kNumParts - 1))]; }
+abd::engines::La50SoundEngine& McxEngineRegistry::la50(int partIdx) noexcept { return la50Engines_[static_cast<std::size_t>(std::clamp(partIdx, 0, kNumParts - 1))]; }
+const abd::engines::La50SoundEngine& McxEngineRegistry::la50(int partIdx) const noexcept { return la50Engines_[static_cast<std::size_t>(std::clamp(partIdx, 0, kNumParts - 1))]; }
+abd::engines::La50SoundEngine& McxEngineRegistry::cm32(int partIdx) noexcept { return cm32Engines_[static_cast<std::size_t>(std::clamp(partIdx, 0, kNumParts - 1))]; }
+const abd::engines::La50SoundEngine& McxEngineRegistry::cm32(int partIdx) const noexcept { return cm32Engines_[static_cast<std::size_t>(std::clamp(partIdx, 0, kNumParts - 1))]; }
+abd::rompler::StructuredRomplerEngine& McxEngineRegistry::jv880(int partIdx) noexcept { return jv880Engines_[static_cast<std::size_t>(std::clamp(partIdx, 0, kNumParts - 1))]; }
+const abd::rompler::StructuredRomplerEngine& McxEngineRegistry::jv880(int partIdx) const noexcept { return jv880Engines_[static_cast<std::size_t>(std::clamp(partIdx, 0, kNumParts - 1))]; }
+abd::engines::Tb303SoundEngine& McxEngineRegistry::tb303(int partIdx) noexcept { return tb303Engines_[static_cast<std::size_t>(std::clamp(partIdx, 0, kNumParts - 1))]; }
+const abd::engines::Tb303SoundEngine& McxEngineRegistry::tb303(int partIdx) const noexcept { return tb303Engines_[static_cast<std::size_t>(std::clamp(partIdx, 0, kNumParts - 1))]; }
+abd::emax::EmaxSoundEngine& McxEngineRegistry::emax(int partIdx) noexcept { return emaxEngines_[static_cast<std::size_t>(std::clamp(partIdx, 0, kNumParts - 1))]; }
+const abd::emax::EmaxSoundEngine& McxEngineRegistry::emax(int partIdx) const noexcept { return emaxEngines_[static_cast<std::size_t>(std::clamp(partIdx, 0, kNumParts - 1))]; }
+std::size_t McxEngineRegistry::collectUnusedWaves() noexcept { return wavePool_.collectGarbage(&romplerPool_); }
 
 } // namespace abdmcx

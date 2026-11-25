@@ -105,9 +105,9 @@ export class McxToneDrawer {
 
   public syncPart(partIdx: number, ps: McxPartUiState): void {
     this.currentPart = partIdx;
-    syncToneDrawerDom(this.el, partIdx, ps, this.catalog);
-    syncInsertSelectOptions(this.el, this.opts.getRackSlots?.(), ps.insertSlot ?? -1);
+    syncToneDrawerDom(this.el, partIdx, ps, this.catalog, this.knobsMgr);
     this.knobsMgr.syncValues(ps);
+    syncInsertSelectOptions(this.el, this.opts.getRackSlots?.(), ps.insertSlot ?? -1);
   }
   public updateInsertOptions(rackSlots?: any[]): void {
     const ps = this.getPartState(this.currentPart);

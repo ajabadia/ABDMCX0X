@@ -1,0 +1,118 @@
+{
+  "schema": "abd.midiLearn.v1",
+  "synth": "ABDMCX0X",
+  "device": "roland_mc303",
+  "displayName": "Roland MC-303 Groovebox",
+  "portMatchHints": ["MC-303", "Roland MC-303"],
+  "exportedAt": "2026-11-25T00:00:00.000Z",
+  "mappings": [
+    {
+      "id": "mc303_cc074_filterCutoff",
+      "sourceType": 0,
+      "channel": 0,
+      "number": 74,
+      "targetIndex": 0,
+      "targetKey": "filterCutoff",
+      "minNorm": 0,
+      "maxNorm": 1,
+      "invert": false,
+      "curve": 1
+    },
+    {
+      "id": "mc303_cc071_filterResonance",
+      "sourceType": 0,
+      "channel": 0,
+      "number": 71,
+      "targetIndex": 1,
+      "targetKey": "filterResonance",
+      "minNorm": 0,
+      "maxNorm": 1,
+      "invert": false,
+      "curve": 0
+    },
+    {
+      "id": "mc303_cc073_ampAttack",
+      "sourceType": 0,
+      "channel": 0,
+      "number": 73,
+      "targetIndex": 2,
+      "targetKey": "ampAttack",
+      "minNorm": 0,
+      "maxNorm": 1,
+      "invert": false,
+      "curve": 1
+    },
+    {
+      "id": "mc303_cc075_ampDecay",
+      "sourceType": 0,
+      "channel": 0,
+      "number": 75,
+      "targetIndex": 3,
+      "targetKey": "ampDecay",
+      "minNorm": 0,
+      "maxNorm": 1,
+      "invert": false,
+      "curve": 1
+    },
+    {
+      "id": "mc303_cc072_ampRelease",
+      "sourceType": 0,
+      "channel": 0,
+      "number": 72,
+      "targetIndex": 5,
+      "targetKey": "ampRelease",
+      "minNorm": 0,
+      "maxNorm": 1,
+      "invert": false,
+      "curve": 1
+    },
+    {
+      "id": "mc303_cc091_reverbSend",
+      "sourceType": 0,
+      "channel": 0,
+      "number": 91,
+      "targetIndex": 8,
+      "targetKey": "reverbSend",
+      "minNorm": 0,
+      "maxNorm": 1,
+      "invert": false,
+      "curve": 0
+    },
+    {
+      "id": "mc303_cc093_chorusSend",
+      "sourceType": 0,
+      "channel": 0,
+      "number": 93,
+      "targetIndex": 9,
+      "targetKey": "chorusSend",
+      "minNorm": 0,
+      "maxNorm": 1,
+      "invert": false,
+      "curve": 0
+    },
+    {
+      "id": "mc303_cc007_masterVolume",
+      "sourceType": 0,
+      "channel": 0,
+      "number": 7,
+      "targetIndex": 900,
+      "targetKey": "masterVolume",
+      "minNorm": 0,
+      "maxNorm": 1,
+      "invert": false,
+      "curve": 2
+    },
+    {
+      "id": "mc303_cc010_partPan",
+      "sourceType": 0,
+      "channel": 0,
+      "number": 10,
+      "targetIndex": 7,
+      "targetKey": "partPan",
+      "minNorm": 0,
+      "maxNorm": 1,
+      "invert": false,
+      "curve": 0
+    }
+  ]
+}

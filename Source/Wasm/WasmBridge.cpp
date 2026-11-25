@@ -83,7 +83,7 @@ public:
         if (!data || sizeBytes <= 0)
             return 0;
 
-        const int slot = bankManager_.mountBankFromMemory(data, static_cast<std::size_t>(sizeBytes), {}, true);
+        const int slot = bankManager_.mountBankFromMemory(data, static_cast<std::size_t>(sizeBytes), {}, true, &engine_.wavePool());
         const auto* bank = bankManager_.getBank(slot);
         if (bank == nullptr)
             return 0;
@@ -132,6 +132,7 @@ public:
     abdmcx::McxEngine& engine() noexcept { return engine_; }
     const abdmcx::McxEngine& engine() const noexcept { return engine_; }
     abdmcx::McxMultiBankManager& bankManager() noexcept { return bankManager_; }
+    [[nodiscard]] double sampleRate() const noexcept { return currentSampleRate_; }
 
     int drainMidi(uint8_t* outBytes, int maxBytes) noexcept
     {
@@ -175,6 +176,7 @@ namespace abdmcx::wasm_internal
 {
 McxEngine& engine() noexcept { return getEngine().engine(); }
 McxMultiBankManager& bankManager() noexcept { return getEngine().bankManager(); }
+double sampleRate() noexcept { return getEngine().sampleRate(); }
 } // namespace abdmcx::wasm_internal
 
 extern "C"

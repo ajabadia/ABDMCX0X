@@ -6,7 +6,7 @@ dialog.mcx-synth-dialog {
   margin: auto;
   z-index: var(--z-modal, 9999);
   padding: 0;
-  width: min(880px, 94vw);
+  width: min(980px, 95vw);
   max-height: 90vh;
   overflow: hidden;
   box-sizing: border-box;

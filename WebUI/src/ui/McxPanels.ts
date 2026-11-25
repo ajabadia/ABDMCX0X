@@ -135,15 +135,20 @@ export function bindVectorPad(pad: HTMLElement, dot: HTMLElement, bridge: McxHos
   pad.addEventListener('pointerup', () => { dragging = false; });
 }
 
+import { indexAndStoreBankBuffer } from '../app/McxSoundBankManager';
+
 export function wireBankDropZone(
   dropZone: HTMLElement,
   fileInput: HTMLInputElement,
   bridge: McxHostBridge,
   setLcdLine2: (text: string) => void,
+  onBankParsed?: (items: any[]) => void,
 ): void {
   const loadFile = async (file: File) => {
-    bridge.loadBankBuffer(await file.arrayBuffer());
-    setLcdLine2(`${t('mcx.loadBank')}: ${file.name}`);
+    const buf = await file.arrayBuffer();
+    const entry = await indexAndStoreBankBuffer({ filename: file.name }, buf, bridge);
+    if (onBankParsed) onBankParsed(entry.items);
+    setLcdLine2(`${t('mcx.loadBank')}: ${entry.name}`);
   };
   if (dropZone.classList.contains('mcx-drop-zone')) {
     dropZone.addEventListener('click', (e) => {

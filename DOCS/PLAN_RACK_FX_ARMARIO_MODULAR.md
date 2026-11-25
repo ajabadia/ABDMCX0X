@@ -147,6 +147,21 @@ El ducking (atenuación por señal de control externa o bombeo rítmico) es esen
   - Integrar en el *Tone Drawer* de las pistas de audio (`routeMode !== 1`) la selección de unidad de rack como inserción de canal directa.
   - Verificar pruebas CTest y suite WebUI sin advertencias de compilador.
 
+- [x] **Fase 6: Catálogo Completo 56 Efectos & Carátulas Fotográficas 1:1 en `ABDShared`**
+  - Expansión total de `multiBusFxRegistry.js` cubriendo los 56 algoritmos del contrato C++ de `ABDEep` y `ABDMCX0X`.
+  - Integración de 46 carátulas fotorrealistas de hardware en formato WebP 512px optimizado (`tc_m3000`, `fender_spring`, `tree_monster`, `bonsai`, `nimbus`, `fdn_reverb`, `spectral_delay`, `pattern_freeze`, `decimator`, etc.).
+  - Selector de bahía enriquecido (`McxRackColumnViews.ts`) agrupado por categorías con miniaturas en tiempo real.
+  - Faceplate modal de alta fidelidad: escalado de carátula al 100% de altura con anclaje a la izquierda (`background-size: auto 100%; background-position: left center;`) y fundido suave con degradado de máscara hacia el chasis.
+  - RE-201 Space Echo con dial selector rotatorio gigante de 12 posiciones, sincronización con cinta/cabezales y mandos aislados por placa posterior antirreflejo.
+
+- [x] **Fase 7: Experiencia Visual de Topología, Selector Universal & Congelación de Parámetros**
+  - **Selector Universal `FxPickerModal`**: Reemplazo del selector de ranura por el componente universal de `ABDShared` con 8 categorías, buscador reactivo y miniaturas de hardware.
+  - **Matriz 2×2 en Topología**: Distribución de los 4 envíos auxiliares (`Envío A..D`) en cuadrícula de 2 columnas por 2 filas sin compresión ni desbordamiento horizontal.
+  - **Módulo Visual de Bahías**: Eliminación del `<select>` plano y sustitución por chasis con LED de actividad, miniatura de hardware, badge `B1..B8`, botón `▶ FACEPLATE` y menú filtrado a bahías ocupadas.
+  - **Diagrama de Bloques por Etapas (Stage Flow LCD)**: Representación gráfica vectorial cristalina en la mitad derecha de la pantalla LCD para las 10 topologías con bloques iluminados (`[A]`, `[B]`, `[C]`, `[D]`) en serie, paralelo, bifurcación o bucle de retorno.
+  - **Congelación Total en Canción / Proyecto**: Serialización C++ profunda en `McxRackChassisJson.cpp` y `McxBankManagerBridge.cpp` grabando `p1..p12`, motores, modos, ganancia, mezcla y ducking directamente en el fichero de canción `.json`, haciéndola 100% autónoma ante traslados de archivo.
+  - **Gestor Compartido de Presets (`FxPresetManager`)**: Soporte para presets de fábrica y de usuario en `ABDShared` y carpetas de trabajo `Presets/Effects/`.
+
 ---
 
 ## 7. Estado de Verificación y Ducking Dual (Completado)

@@ -14,14 +14,9 @@
 #include <memory>
 #include <string>
 #include <vector>
-
 using namespace abdmcx;
-
-namespace
-{
-int gPassed = 0;
-int gFailed = 0;
-
+namespace {
+int gPassed = 0, gFailed = 0;
 void check(bool cond, const char* msg)
 {
     if (cond) { ++gPassed; std::printf("  [PASS] %s\n", msg); }
@@ -99,14 +94,8 @@ public:
     std::array<float, 8> controls_ {};
 };
 
-void pushU16(std::vector<std::uint8_t>& o, std::uint16_t v)
-{
-    o.push_back(static_cast<std::uint8_t>(v & 0xFFu)); o.push_back(static_cast<std::uint8_t>((v >> 8) & 0xFFu));
-}
-void pushU32(std::vector<std::uint8_t>& o, std::uint32_t v)
-{
-    for (int s = 0; s < 32; s += 8) o.push_back(static_cast<std::uint8_t>((v >> s) & 0xFFu));
-}
+void pushU16(std::vector<std::uint8_t>& o, std::uint16_t v) { o.push_back(static_cast<std::uint8_t>(v & 0xFFu)); o.push_back(static_cast<std::uint8_t>((v >> 8) & 0xFFu)); }
+void pushU32(std::vector<std::uint8_t>& o, std::uint32_t v) { for (int s = 0; s < 32; s += 8) o.push_back(static_cast<std::uint8_t>((v >> s) & 0xFFu)); }
 void appendZipEntry(std::vector<std::uint8_t>& z, const std::string& name, const std::uint8_t* data, std::size_t sz)
 {
     pushU32(z, 0x04034b50u); pushU16(z, 20); pushU16(z, 0); pushU16(z, 0); pushU16(z, 0); pushU16(z, 0);
@@ -170,11 +159,14 @@ int main()
 
         const int mockType = e.registerCustomEngineType((*mocks)[0].getDescriptor(), ptrs.data(), McxEngine::kNumParts);
         e.prepare(44100.0);
-        const auto d0 = e.getRegisteredEngineDescriptor(0);
-        const auto d1 = e.getRegisteredEngineDescriptor(1);
-        check(e.getRegisteredEngineTypeCount() == 3 && mockType == 2 && std::string(d0.typeId) == "structured_rompler" &&
-                  d0.supportsBankArchives && std::string(d1.typeId) == "external_midi" && !(*mocks)[0].renderBlock(nullptr, nullptr, 0),
-              "T1: McxEngineRegistry registers pre-allocated Rompler, ExternalMidi, and custom MockAnalogVa engines");
+        const auto d0 = e.getRegisteredEngineDescriptor(0), d1 = e.getRegisteredEngineDescriptor(1), d2 = e.getRegisteredEngineDescriptor(2);
+        const auto d3 = e.getRegisteredEngineDescriptor(3), d4 = e.getRegisteredEngineDescriptor(4), d5 = e.getRegisteredEngineDescriptor(5), d6 = e.getRegisteredEngineDescriptor(6);
+        check(e.getRegisteredEngineTypeCount() == 9 && mockType == 8 && std::string(d0.typeId) == "structured_rompler" &&
+                  d0.supportsBankArchives && std::string(d1.typeId) == "external_midi" && std::string(d2.typeId) == "mcs48_synth" &&
+                  std::string(d3.typeId) == "la50_synth" && std::string(d4.typeId) == "cm32_synth" && std::string(d5.typeId) == "jv880_synth" &&
+                  std::string(d6.typeId) == "tb303_synth" && std::string(e.getRegisteredEngineDescriptor(7).typeId) == "emax_synth" &&
+                  e.getRegisteredEngineDescriptor(7).supportsBankArchives && !(*mocks)[0].renderBlock(nullptr, nullptr, 0),
+              "T1: McxEngineRegistry registers Rompler, ExternalMidi, Mcs48, La50, Cm32, Jv880, Tb303, Emax II, and MockAnalogVa engines");
 
         e.setPartKind(0, McxPartKind::DrumMap);
         McxCommandQueue<32> q;
@@ -279,17 +271,28 @@ int main()
               "T7: setPartEngineParamByKey / getPartEngineParamByKey / serializePartEngineStateJson contract works across engines");
     }
 
-    // T8: routeMidiChannelCc(64) sustain pedal forwarding to polymorphic ISoundEngine
+    // T8, T9 & T10: CC64 sustain + la50_synth (D-50) + cm32_synth (CM-32L)
     {
-        McxEngine e; e.prepare(44100.0);
-        MockAnalogVaEngine mock;
-        e.setPartSoundEngine(0, &mock);
-        e.routeMidiChannelCc(1, 64, 127);
-        const bool down = mock.sustainDown_;
-        e.routeMidiChannelCc(1, 64, 0);
+        McxEngine e; e.prepare(44100.0); MockAnalogVaEngine mock;
+        e.setPartSoundEngine(0, &mock); e.routeMidiChannelCc(1, 64, 127);
+        const bool down = mock.sustainDown_; e.routeMidiChannelCc(1, 64, 0);
         check(down && !mock.sustainDown_, "T8: routeMidiChannelCc forwards CC64 sustain pedal to engine");
+        const bool selLa50 = e.selectPartEngineById(1, "la50_synth"), presetOk = e.loadPartFactoryPreset(1, 0);
+        const bool cutSet = e.setPartEngineParamByKey(1, "u.p1.tvfCutoff", 80.0f); e.triggerPartNoteOn(1, 60, 0.9f);
+        check(selLa50 && presetOk && cutSet && std::string(e.getPartCurrentPresetName(1)) == "Fantasia" && rmsRender(e, 256) > 0.0005f,
+              "T9: McxEngine switches to la50_synth, loads Fantasia, accepts param edit, and renders audio");
+        std::string cmHex(492, '0');
+        const char* nm = "CmTestTimb"; for (int i = 0; i < 10; ++i) { const unsigned v = static_cast<unsigned>(nm[i]); cmHex[i*2] = "0123456789ABCDEF"[v>>4]; cmHex[i*2+1] = "0123456789ABCDEF"[v&15]; }
+        cmHex[12*2] = '0'; cmHex[12*2+1] = '1'; cmHex[(14+4)*2+1] = '1'; cmHex[(14+41)*2] = '6'; cmHex[(14+41)*2+1] = '4'; cmHex[(14+50)*2] = '3'; cmHex[(14+54)*2] = '6'; cmHex[(14+54)*2+1] = '4';
+        const bool selCm32 = e.selectPartEngineById(2, "cm32_synth") && e.deserializePartEngineStateJson(2, "{\"presetName\":\"CmTestTimb\",\"mt32Hex\":\"" + cmHex + "\"}");
+        e.triggerPartNoteOn(2, 60, 0.9f);
+        check(selCm32 && rmsRender(e, 256) > 0.0005f, "T10: McxEngine switches to cm32_synth, unpacks mt32Hex timbre, and renders audio");
+        const bool selJv880 = e.selectPartEngineById(3, "jv880_synth") && e.loadPartFactoryPreset(3, 0);
+        e.triggerPartNoteOn(3, 60, 0.9f);
+        check(selJv880 && e.getPartFactoryPresetCount(3) == 64 && std::string(e.getPartCurrentPresetName(3)) == "A.Piano 1" && rmsRender(e, 256) > 0.0005f, "T11: McxEngine switches to jv880_synth and renders Preset A");
+        const bool sel303 = e.selectPartEngineById(4, "tb303_synth") && e.loadPartFactoryPreset(4, 2) && e.setPartEngineParamByKey(4, "cutoff", 1320.0f);
+        e.triggerPartNoteOn(4, 45, 0.95f); const float rms303 = rmsRender(e, 256); const std::string j303 = e.serializePartEngineStateJson(4);
+        check(sel303 && e.getPartFactoryPresetCount(4) == 16 && std::string(e.getPartCurrentPresetName(4)) == "Devilfish RAT Lead" && rms303 > 0.005f && j303.find("tb303_synth") != std::string::npos && e.deserializePartEngineStateJson(4, j303), "T12: McxEngine switches to tb303_synth, loads preset, renders RAT bass and roundtrips JSON");
     }
-
-    std::printf("\n=== Results: %d passed, %d failed ===\n", gPassed, gFailed);
-    return (gFailed == 0) ? 0 : 1;
+    std::printf("\n=== Results: %d passed, %d failed ===\n", gPassed, gFailed); return (gFailed == 0) ? 0 : 1;
 }

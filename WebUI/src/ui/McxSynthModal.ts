@@ -1,7 +1,7 @@
 /**
  * ABDMCX0X -- McxSynthModal.ts
- * Dedicated Modeless Instrument Modal (<dialog>) hosting the active part's synth engine
- * interface (e.g. StructuredRomplerPanel) or External MIDI controller. Strictly < 200 lines.
+ * Dedicated Modeless Instrument Modal (<dialog>) hosting the active part's embeddable synth engine
+ * interface decoupled from specific engines. Strictly < 200 lines.
  */
 
 import { EnginePanelHost } from '@abdsynths/shared/components/synth-engines';
@@ -10,13 +10,14 @@ import type { McxEngineDescriptorDto, McxHostBridge, McxPartEngineStateDto, McxP
 import { McxPartEngineBridge } from '../bridge/McxPartEngineBridge';
 import { DEFAULT_ENGINE_CATALOG } from './McxEngineCatalogDefaults';
 import type { McxPartUiState } from './McxMixerConsole';
+import type { McxAppState } from '../app/McxAppState';
 import { getLocale, t } from '../i18n/mcxI18n';
 
 export interface McxSynthModalOptions {
   bridge: McxHostBridge; getPartState: (idx: number) => McxPartUiState;
   getCatalog?: () => McxEngineDescriptorDto[]; getPartPresets?: (idx: number) => McxPartPresetsDto | undefined;
   onPartUpdated: (idx: number) => void; onOpenRouteModal: (idx: number) => void;
-  onOpenBank: (idx: number) => void; setLcdLine2: (text: string) => void;
+  onOpenBank?: (idx: number) => void; setLcdLine2: (text: string) => void; state?: McxAppState;
 }
 
 export class McxSynthModal {
@@ -26,22 +27,17 @@ export class McxSynthModal {
   private partBridges = new Map<number, McxPartEngineBridge>();
   private mountedPart = -1; private mountedEngineTypeId = '';
   private enginePanelHost: EnginePanelHost | null = null; private slotEl: HTMLElement | null = null;
-  private readonly onEscKey: (ev: KeyboardEvent) => void;
+  private readonly onEscKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape' && this.dialog.open) this.close(); };
 
   constructor(opts: McxSynthModalOptions) {
-    this.opts = opts;
-    this.dialog = document.createElement('dialog');
-    this.dialog.className = 'mcx-synth-dialog';
-    this.dialog.setAttribute('aria-labelledby', 'mcx-synth-title');
+    this.opts = opts; this.dialog = document.createElement('dialog');
+    this.dialog.className = 'mcx-synth-dialog'; this.dialog.setAttribute('aria-labelledby', 'mcx-synth-title');
     document.body.appendChild(this.dialog);
-    this.onEscKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape' && this.dialog.open) this.close(); };
     this.dialog.addEventListener('close', () => {
       this.dialog.returnValue = ''; window.removeEventListener('keydown', this.onEscKey); this.opts.onPartUpdated(this.currentPart);
     });
     this.dialog.addEventListener('click', (ev) => {
-      const target = ev.target as HTMLElement | null;
-      const actEl = target?.closest<HTMLElement>('[data-act]');
-      const act = actEl?.dataset.act;
+      const act = (ev.target as HTMLElement | null)?.closest<HTMLElement>('[data-act]')?.dataset.act;
       if (act === 'close') { ev.stopPropagation(); this.close(); }
       else if (act === 'open-route') { ev.stopPropagation(); this.close(); this.opts.onOpenRouteModal(this.currentPart); }
     });
@@ -53,7 +49,7 @@ export class McxSynthModal {
       pb = new McxPartEngineBridge({
         partIndex: partIdx, hostBridge: this.opts.bridge, getPartState: () => this.opts.getPartState(partIdx),
         getCatalog: () => this.catalog, getPartPresets: () => this.presetsByPart.get(partIdx),
-        onRequestBank: () => this.opts.onOpenBank(partIdx),
+        appState: this.opts.state, onRequestBank: this.opts.onOpenBank ? () => this.opts.onOpenBank?.(partIdx) : undefined,
         onHostStateChanged: () => { this.opts.onPartUpdated(partIdx); this.syncHeader(); },
       });
       this.partBridges.set(partIdx, pb);
@@ -62,55 +58,55 @@ export class McxSynthModal {
   }
 
   public setEngineCatalog(engines: McxEngineDescriptorDto[]): void { if (engines.length > 0) this.catalog = engines; if (this.dialog.open) this.syncHeader(); }
+  public refreshBrowser(): void { if (this.dialog.open) this.enginePanelHost?.refreshBrowser?.(); }
   public setPartPresets(dto: McxPartPresetsDto): void { this.presetsByPart.set(dto.part, dto); if (this.dialog.open && dto.part === this.currentPart) this.syncEnginePanel(); }
   public applyPartEngineState(dto: McxPartEngineStateDto): void {
     this.getOrCreatePartBridge(dto.part).applyRemoteState(dto.engineTypeId, dto.stateJson, dto.presetName, dto.coverDataUrl);
     if (this.dialog.open && dto.part === this.currentPart) this.syncEnginePanel();
   }
   public setLocale(locale: 'en' | 'es'): void {
-    if (this.dialog.open) { this.render(); this.syncEnginePanel(); }
-    else this.enginePanelHost?.setLocale(locale);
+    if (this.dialog.open) { this.render(); this.syncEnginePanel(); } else this.enginePanelHost?.setLocale(locale);
+  }
+  public getCurrentPart(): number { return this.currentPart; }
+
+  public getPlayableNotesForPart(partIdx: number): number[] | null {
+    const ps = this.opts.getPartState(partIdx), pb = this.partBridges.get(partIdx);
+    if (!ps || !pb || !pb.hasRemoteEngineState()) return null;
+    const meta = pb.getPatchMeta();
+    return (ps.kind === 'drum_map' || meta.isDrumKit) ? meta.populatedDrumNotes.map((s) => s.note) : null;
   }
 
   public open(partIdx: number): void {
     this.currentPart = partIdx; this.syncTheme();
     this.opts.bridge.requestPartPresets(partIdx); this.opts.bridge.requestPartEngineState(partIdx);
     this.render();
-    if (!this.dialog.open) {
-      if (typeof this.dialog.show === 'function') this.dialog.show();
-      else this.dialog.setAttribute('open', '');
-    }
-    window.addEventListener('keydown', this.onEscKey);
-    bringToFront(this.dialog);
-    this.syncEnginePanel();
+    if (!this.dialog.open) { if (typeof this.dialog.show === 'function') this.dialog.show(); else this.dialog.setAttribute('open', ''); }
+    window.addEventListener('keydown', this.onEscKey); bringToFront(this.dialog); this.syncEnginePanel();
     const ps = this.opts.getPartState(partIdx);
     this.opts.setLcdLine2(`INSTRUMENT [P${String(partIdx + 1).padStart(2, '0')}] ${ps.name || 'Tone'}`);
   }
 
   public close(): void {
-    window.removeEventListener('keydown', this.onEscKey);
-    if (!this.dialog.open) return;
-    if (typeof this.dialog.close === 'function') this.dialog.close();
-    else this.dialog.removeAttribute('open');
+    window.removeEventListener('keydown', this.onEscKey); if (!this.dialog.open) return;
+    if (typeof this.dialog.close === 'function') this.dialog.close(); else this.dialog.removeAttribute('open');
   }
   public toggle(partIdx: number): void { if (this.dialog.open && this.currentPart === partIdx) this.close(); else this.open(partIdx); }
   public isOpen(): boolean { return this.dialog.open; }
-
-  private syncTheme(): void {
+  public updateTelemetry(tel: { partPeaks?: number[]; partMidiPeaks?: number[] }): void {
+    if (!this.dialog.open) return;
+    this.partBridges.get(this.currentPart)?.updateTelemetry(tel.partPeaks?.[this.currentPart] ?? 0, tel.partMidiPeaks?.[this.currentPart] ?? 0);
+  }
+  public syncTheme(): void {
     const theme = document.documentElement.getAttribute('data-theme');
     if (theme) this.dialog.setAttribute('data-theme', theme);
+    if (this.dialog.open) { this.render(); this.syncEnginePanel(); }
   }
 
   private render(): void {
-    this.enginePanelHost?.destroy();
-    this.enginePanelHost = null;
-    this.mountedPart = -1;
-    this.mountedEngineTypeId = '';
-
-    const p = this.currentPart, ps = this.opts.getPartState(p);
-    const isExt = ps.routeMode === 1;
+    this.enginePanelHost?.destroy(); this.enginePanelHost = null; this.mountedPart = -1; this.mountedEngineTypeId = '';
+    const p = this.currentPart, ps = this.opts.getPartState(p), isExt = ps.routeMode === 1;
     const desc = this.catalog.find((e) => e.index === ps.engineTypeIndex);
-    const engineTitle = isExt ? t('mcx.synthExtTitle') : (desc?.displayName || 'ABD Structured Rompler');
+    const engineTitle = isExt ? t('mcx.synthExtTitle') : (desc?.displayName || ps.engineTypeId || 'Sound Engine');
 
     this.dialog.innerHTML = `
       <div class="mcx-synth-shell">
@@ -125,42 +121,28 @@ export class McxSynthModal {
           </div>
         </header>
         <div class="mcx-synth-body"><div class="mcx-synth-slot" id="mcx-synth-slot"></div></div>
-      </div>
-    `;
+      </div>`;
 
-    const head = this.dialog.querySelector<HTMLElement>('.mcx-synth-head');
-    if (head) attachDialogDrag(this.dialog, head);
+    const head = this.dialog.querySelector<HTMLElement>('.mcx-synth-head'); if (head) attachDialogDrag(this.dialog, head);
     this.slotEl = this.dialog.querySelector<HTMLElement>('#mcx-synth-slot');
     if (this.slotEl) this.enginePanelHost = new EnginePanelHost(this.slotEl, { locale: getLocale() === 'es' ? 'es' : 'en', skin: 'ms2000' });
   }
 
   private syncHeader(): void {
-    const titleEl = this.dialog.querySelector<HTMLElement>('#mcx-synth-title');
-    if (!titleEl) return;
-    const ps = this.opts.getPartState(this.currentPart);
-    const isExt = ps.routeMode === 1;
-    const desc = this.catalog.find((c) => c.index === ps.engineTypeIndex);
-    titleEl.textContent = isExt ? t('mcx.synthExtTitle') : (desc?.displayName || 'ABD Structured Rompler');
+    const titleEl = this.dialog.querySelector<HTMLElement>('#mcx-synth-title'); if (!titleEl) return;
+    const ps = this.opts.getPartState(this.currentPart), desc = this.catalog.find((c) => c.index === ps.engineTypeIndex);
+    titleEl.textContent = ps.routeMode === 1 ? t('mcx.synthExtTitle') : (desc?.displayName || ps.engineTypeId || 'Sound Engine');
   }
 
   private syncEnginePanel(): void {
     const ps = this.opts.getPartState(this.currentPart);
-    const isExternal = ps.routeMode === 1 || ps.engineTypeIndex === 1 || ps.engineTypeId === 'external_midi';
-    if (isExternal) {
+    if (ps.routeMode === 1 || ps.engineTypeIndex === 1 || ps.engineTypeId === 'external_midi') {
       this.enginePanelHost?.clear(); this.mountedPart = -1; this.mountedEngineTypeId = '';
       if (this.slotEl) {
-        this.slotEl.innerHTML = `
-          <div class="mcx-motor-external">
-            <div class="mcx-ext-head">
-              <span class="mcx-ext-title">${t('mcx.synthExtUpper')} (${t('mcx.routePort').toUpperCase()} ${(ps.midiPortIndex ?? 0) + 1} · ${t('mcx.routeCh').toUpperCase()} ${ps.midiChannel || 1})</span>
-              <button type="button" class="mcx-synth-route-btn" data-act="open-route">${t('mcx.synthChangePortCh')}</button>
-            </div>
-            <p class="mcx-ext-hint">${t('mcx.synthExtHint')}</p>
-          </div>`;
+        this.slotEl.innerHTML = `<div class="mcx-motor-external"><div class="mcx-ext-head"><span class="mcx-ext-title">${t('mcx.synthExtUpper')} (${t('mcx.routePort').toUpperCase()} ${(ps.midiPortIndex ?? 0) + 1} &middot; ${t('mcx.routeCh').toUpperCase()} ${ps.midiChannel || 1})</span><button type="button" class="mcx-synth-route-btn" data-act="open-route">${t('mcx.synthChangePortCh')}</button></div><p class="mcx-ext-hint">${t('mcx.synthExtHint')}</p></div>`;
       }
       return;
     }
-
     const pb = this.getOrCreatePartBridge(this.currentPart), typeId = pb.getDescriptor().typeId;
     if (this.mountedPart !== this.currentPart || this.mountedEngineTypeId !== typeId) {
       this.enginePanelHost?.mount(pb); this.mountedPart = this.currentPart; this.mountedEngineTypeId = typeId;
@@ -168,9 +150,5 @@ export class McxSynthModal {
     } else this.enginePanelHost?.sync();
   }
 
-  public destroy(): void {
-    window.removeEventListener('keydown', this.onEscKey);
-    this.enginePanelHost?.destroy();
-    this.dialog.remove();
-  }
+  public destroy(): void { window.removeEventListener('keydown', this.onEscKey); this.enginePanelHost?.destroy(); this.dialog.remove(); }
 }

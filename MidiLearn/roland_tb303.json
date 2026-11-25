@@ -1,0 +1,118 @@
+{
+  "schema": "abd.midiLearn.v1",
+  "synth": "ABDMCX0X",
+  "device": "roland_tb303",
+  "displayName": "Roland TB-303 Bass Line",
+  "portMatchHints": ["TB-303", "Roland TB-303"],
+  "exportedAt": "2026-11-25T00:00:00.000Z",
+  "mappings": [
+    {
+      "id": "tb303_cc074_filterCutoff",
+      "sourceType": 0,
+      "channel": 0,
+      "number": 74,
+      "targetIndex": 0,
+      "targetKey": "filterCutoff",
+      "minNorm": 0,
+      "maxNorm": 1,
+      "invert": false,
+      "curve": 1
+    },
+    {
+      "id": "tb303_cc071_filterResonance",
+      "sourceType": 0,
+      "channel": 0,
+      "number": 71,
+      "targetIndex": 1,
+      "targetKey": "filterResonance",
+      "minNorm": 0,
+      "maxNorm": 1,
+      "invert": false,
+      "curve": 0
+    },
+    {
+      "id": "tb303_cc075_ampDecay",
+      "sourceType": 0,
+      "channel": 0,
+      "number": 75,
+      "targetIndex": 3,
+      "targetKey": "ampDecay",
+      "minNorm": 0,
+      "maxNorm": 1,
+      "invert": false,
+      "curve": 1
+    },
+    {
+      "id": "tb303_cc016_ampSustain",
+      "sourceType": 0,
+      "channel": 0,
+      "number": 16,
+      "targetIndex": 4,
+      "targetKey": "ampSustain",
+      "minNorm": 0,
+      "maxNorm": 1,
+      "invert": false,
+      "curve": 0
+    },
+    {
+      "id": "tb303_cc070_driveAmount",
+      "sourceType": 0,
+      "channel": 0,
+      "number": 70,
+      "targetIndex": 46,
+      "targetKey": "driveAmount",
+      "minNorm": 0,
+      "maxNorm": 1,
+      "invert": false,
+      "curve": 1
+    },
+    {
+      "id": "tb303_cc073_ampAttack",
+      "sourceType": 0,
+      "channel": 0,
+      "number": 73,
+      "targetIndex": 2,
+      "targetKey": "ampAttack",
+      "minNorm": 0,
+      "maxNorm": 1,
+      "invert": false,
+      "curve": 1
+    },
+    {
+      "id": "tb303_cc072_ampRelease",
+      "sourceType": 0,
+      "channel": 0,
+      "number": 72,
+      "targetIndex": 5,
+      "targetKey": "ampRelease",
+      "minNorm": 0,
+      "maxNorm": 1,
+      "invert": false,
+      "curve": 1
+    },
+    {
+      "id": "tb303_cc007_masterVolume",
+      "sourceType": 0,
+      "channel": 0,
+      "number": 7,
+      "targetIndex": 900,
+      "targetKey": "masterVolume",
+      "minNorm": 0,
+      "maxNorm": 1,
+      "invert": false,
+      "curve": 2
+    },
+    {
+      "id": "tb303_cc010_partPan",
+      "sourceType": 0,
+      "channel": 0,
+      "number": 10,
+      "targetIndex": 7,
+      "targetKey": "partPan",
+      "minNorm": 0,
+      "maxNorm": 1,
+      "invert": false,
+      "curve": 0
+    }
+  ]
+}

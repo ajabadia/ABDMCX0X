@@ -10,6 +10,7 @@ import type { McxCatalogItem } from '../ui/McxBankDrawer';
 import { deserializeBankLayoutJson, findPartLocation } from '../ui/McxBankLayout';
 import type { McxPartUiState } from '../ui/McxMixerConsole';
 import type { McxAppState } from './McxAppState';
+import { ensureBankLoaded, ensureEngineWaveDependencies, loadInstrumentIntoPart, soundBankRegistry } from './McxSoundBankManager';
 
 const USER_PRESETS_KEY = 'abdmcx0x.userPresets.v1';
 const SNAP_PARAMS: McxParamKey[] = [
@@ -42,7 +43,7 @@ export function parseLibraryCatalogJson(catalogJson: string): McxCatalogItem[] {
   try {
     const parsed = JSON.parse(catalogJson);
     if (!Array.isArray(parsed?.items)) return [];
-    return parsed.items.map((it: any) => ({
+    const items: McxCatalogItem[] = parsed.items.map((it: any) => ({
       id: String(it.id ?? ''), name: String(it.name ?? 'Unnamed'),
       sublibrary: String(it.sublibrary ?? 'Library'), categoryName: String(it.categoryName ?? 'General'),
       categoryId: Number(it.categoryId ?? 0), engineKind: String(it.engineKind ?? 'rompler_chromatic'),
@@ -50,7 +51,10 @@ export function parseLibraryCatalogJson(catalogJson: string): McxCatalogItem[] {
       isFavorite: Boolean(it.isFavorite), bankId: it.bankId ? String(it.bankId) : undefined,
       bankSlotKind: it.bankSlotKind ? String(it.bankSlotKind) : undefined,
       bankItemIndex: typeof it.bankItemIndex === 'number' ? it.bankItemIndex : undefined,
+      bankSlotIndex: typeof it.bankSlotIndex === 'number' ? it.bankSlotIndex : undefined,
     }));
+    soundBankRegistry.ingestLibraryItems(items);
+    return items;
   } catch { return []; }
 }
 
@@ -68,8 +72,7 @@ export function persistAndNotifyPresetSave(bridge: McxHostBridge, state: McxAppS
       categoryName: payload.sublibrary || 'User', categoryId: payload.categoryId, itemType: 1,
       engineKind: ps.kind === 'drum_map' ? 'rompler_drum_map' : 'rompler_chromatic', snapshot,
     });
-    state.refs.bankDrawer?.setUserItems(items);
-    state.notifyPartMetadataChanged(idx);
+    state.refs.bankDrawer?.setUserItems(items); state.notifyPartMetadataChanged(idx);
   } else {
     bridge.saveMultiPreset(payload.name, payload.sublibrary, payload.categoryId);
     const items = saveUserPresetLocal({
@@ -84,39 +87,49 @@ export function persistAndNotifyPresetSave(bridge: McxHostBridge, state: McxAppS
 export function loadBankDrawerItem(bridge: McxHostBridge, state: McxAppState, partIdx: number, item: McxCatalogItem): void {
   const p = `P${String(partIdx + 1).padStart(2, '0')}`;
   if (item.itemType === 2) {
-    if (bridge.isNative && (item.filePath || item.id)) {
-      bridge.loadCatalogItem(0, item.id, item.filePath ?? ''); bridge.requestSessionState();
+    if (bridge.isNative && (item.filePath || item.id)) { bridge.loadCatalogItem(0, item.id, item.filePath ?? ''); bridge.requestSessionState(); }
+    state.setLcdLine2(`LOADED MULTI: ${item.name}`); return;
+  }
+  if (item.itemType === 3 || (!item.bankSlotKind && item.bankId && typeof item.factoryPresetIndex !== 'number')) {
+    if (bridge.isNative && (item.filePath || item.id)) { bridge.loadCatalogItem(0, item.id, item.filePath ?? ''); bridge.requestSessionState(); }
+    else if (typeof fetch === 'function' && item.filePath) {
+      const url = item.filePath.startsWith('/') || item.filePath.startsWith('http') ? item.filePath : `/banks/${item.filePath}`;
+      fetch(url).then(async (r) => { if (r.ok) bridge.loadBankBuffer(await r.arrayBuffer()); }).catch((e) => console.warn('[ABDMCX0X] Bank fetch error:', e));
     }
-    state.setLcdLine2(`LOADED MULTI: ${item.name}`);
-    return;
+    state.setLcdLine2(`LOADED BANK: ${item.name}`); return;
   }
   const ps = state.partsState[partIdx];
-  if (bridge.isNative && (item.filePath || item.bankId)) {
-    bridge.loadCatalogItem(partIdx, item.id, item.filePath ?? '');
-  } else if (typeof item.factoryPresetIndex === 'number') {
-    ps.factoryPresetIndex = item.factoryPresetIndex;
-    bridge.loadFactoryPreset(partIdx, item.factoryPresetIndex);
-    bridge.setPartPresetName(partIdx, item.name);
+  if (!item.snapshot && ps.engineTypeId !== 'structured_rompler') {
+    ps.engineTypeId = 'structured_rompler'; ps.engineTypeIndex = 0; bridge.selectPartEngineType(partIdx, 0);
+  }
+  if (item.bankSlotKind && typeof item.bankItemIndex === 'number') {
+    if (!bridge.isNative && (item.bankId || item.sublibrary)) {
+      void ensureBankLoaded(item.bankId || item.sublibrary || '', bridge, state).then((bank) => {
+        if (!bank?.isLoaded) return; item.bankSlotIndex = bank.slotIndex; loadInstrumentIntoPart(bridge, state, partIdx, item);
+      });
+      return;
+    }
+    loadInstrumentIntoPart(bridge, state, partIdx, item); return;
+  }
+  if (bridge.isNative && (item.filePath || item.bankId)) bridge.loadCatalogItem(partIdx, item.id, item.filePath ?? '');
+  else if (typeof item.factoryPresetIndex === 'number') {
+    ps.factoryPresetIndex = item.factoryPresetIndex; bridge.loadFactoryPreset(partIdx, item.factoryPresetIndex); bridge.setPartPresetName(partIdx, item.name);
   } else if (item.snapshot) {
-    ps.factoryPresetIndex = undefined;
-    Object.assign(ps, item.snapshot);
+    ps.factoryPresetIndex = undefined; Object.assign(ps, item.snapshot);
     if (typeof item.snapshot.engineTypeIndex === 'number') bridge.selectPartEngineType(partIdx, item.snapshot.engineTypeIndex);
+    ensureEngineWaveDependencies(item.snapshot.engineTypeId || (item.snapshot.engineTypeIndex === 3 ? 'la50_synth' : (item.snapshot.engineTypeIndex === 4 ? 'cm32_synth' : (item.snapshot.engineTypeIndex === 5 ? 'jv880_synth' : undefined))), bridge, state);
     SNAP_PARAMS.forEach((k) => { const v = (ps as any)[k]; if (typeof v === 'number') bridge.setParam(partIdx, k, v); });
     bridge.setPartPresetName(partIdx, item.name);
-  } else {
-    bridge.setPartPresetName(partIdx, item.name);
-  }
+  } else bridge.setPartPresetName(partIdx, item.name);
   ps.name = item.name;
   if (typeof item.categoryId === 'number') ps.categoryId = item.categoryId;
   if (item.engineKind?.includes('drum')) { ps.kind = 'drum_map'; bridge.setParam(partIdx, 'partKind', 1); }
   else if (item.engineKind?.includes('chromatic')) { ps.kind = 'chromatic'; bridge.setParam(partIdx, 'partKind', 0); }
-  state.notifyPartMetadataChanged(partIdx);
-  state.setLcdLine2(`${p} PRESET: ${item.name}`);
+  state.notifyPartMetadataChanged(partIdx); state.setLcdLine2(`${p} PRESET: ${item.name}`);
 }
 
 export function createFxRackBridge(bridge: McxHostBridge, state: McxAppState): FxRackBridgeAdapter {
-  const busLbl = ['REV (A)', 'CHO (B)', 'DEL (C)', 'AUX (D)'];
-  const gateLbl = ['DUCK', 'GATE REV', 'FREEZE', 'KILL'];
+  const busLbl = ['REV (A)', 'CHO (B)', 'DEL (C)', 'AUX (D)'], gateLbl = ['DUCK', 'GATE REV', 'FREEZE', 'KILL'];
   return {
     setTopology: (topo) => { bridge.setFxTopology(topo); state.setLcdLine2(`FX RACK TOPOLOGY: ${topo}`); },
     setMacro: (slot, m) => bridge.setParam(state.focusedPart, slot === 0 ? 'reverbMacro' : 'chorusMacro', m),
@@ -139,6 +152,11 @@ export function createFxRackBridge(bridge: McxHostBridge, state: McxAppState): F
       else if (p === 'duckMidi') bridge.setDuckMode(2, v >= 0.5);
       state.setLcdLine2(`FX ${p}: ${Number(v).toFixed(2).replace(/\.00$/, '')}`);
     },
+    setSidechainConfig: (cfg: any) => {
+      bridge.setSidechainConfig(cfg);
+      state.setLcdLine2(`SIDECHAIN: DEPTH ${Math.round(cfg.depthDb)}dB · REL ${cfg.releaseSyncDiv > 0 ? 'SYNC' : `${Math.round(cfg.releaseMs)}ms`}`);
+    },
+    setDuckMode: (kind: 0 | 1 | 2, enabled: boolean) => { bridge.setDuckMode(kind, enabled); },
   };
 }
 
@@ -148,40 +166,32 @@ export function hydrateSessionState(state: McxAppState, dto: McxSessionStateDto)
     const ps = state.partsState[p.index];
     if (!ps) continue;
     Object.assign(ps, {
-      enabled: p.enabled !== undefined ? Boolean(p.enabled) : ps.enabled,
-      name: p.name || ps.name, kind: p.kind === 'drum_map' ? 'drum_map' : 'chromatic',
-      midiChannel: p.midiChannel, midiPortIndex: p.midiPortIndex,
+      enabled: p.enabled !== undefined ? Boolean(p.enabled) : ps.enabled, name: p.name || ps.name,
+      kind: p.kind === 'drum_map' ? 'drum_map' : 'chromatic', midiChannel: p.midiChannel, midiPortIndex: p.midiPortIndex,
       midiInPortIndex: p.midiInPortIndex !== undefined ? p.midiInPortIndex : ps.midiInPortIndex,
-      midiOutDeviceName: p.midiOutDeviceName ?? ps.midiOutDeviceName,
-      midiInDeviceName: p.midiInDeviceName ?? ps.midiInDeviceName,
-      routeMode: p.routeMode,
-      mute: p.mute, solo: p.solo, followTranspose: p.followTranspose,
-      engineTypeIndex: p.engineTypeIndex, engineTypeId: p.engineTypeId,
-      partLevel: p.partLevel, partPan: p.partPan, reverbSend: p.reverbSend, chorusSend: p.chorusSend,
-      delaySend: p.delaySend, auxSend: p.auxSend, sendAPre: p.sendAPre, sendBPre: p.sendBPre,
-      sendCPre: p.sendCPre, sendDPre: p.sendDPre, insertSlot: p.insertSlot,
+      midiOutDeviceName: p.midiOutDeviceName ?? ps.midiOutDeviceName, midiInDeviceName: p.midiInDeviceName ?? ps.midiInDeviceName,
+      routeMode: p.routeMode, mute: p.mute, solo: p.solo, followTranspose: p.followTranspose,
+      engineTypeIndex: p.engineTypeIndex, engineTypeId: p.engineTypeId, partLevel: p.partLevel, partPan: p.partPan,
+      reverbSend: p.reverbSend, chorusSend: p.chorusSend, delaySend: p.delaySend, auxSend: p.auxSend,
+      sendAPre: p.sendAPre, sendBPre: p.sendBPre, sendCPre: p.sendCPre, sendDPre: p.sendDPre, insertSlot: p.insertSlot,
       driveType: p.driveType, driveAmount: p.driveAmount, eqLowGain: p.eqLowGain, eqMidGain: p.eqMidGain, eqHighGain: p.eqHighGain,
-      filterCutoff: p.filterCutoff, filterResonance: p.filterResonance, filterModel: p.filterModel,
-      structureMode: p.structureMode, pitchCoarse: p.pitchCoarse, pitchFine: p.pitchFine,
-      lfo1Shape: p.lfo1Shape, lfo1Sync: p.lfo1Sync, lfo1Rate: p.lfo1Rate, lfo1Depth: p.lfo1Depth, lfo1Target: p.lfo1Target,
-      lfo2Shape: p.lfo2Shape, lfo2Sync: p.lfo2Sync, lfo2Rate: p.lfo2Rate, lfo2Depth: p.lfo2Depth, lfo2Target: p.lfo2Target,
+      filterCutoff: p.filterCutoff, filterResonance: p.filterResonance, filterModel: p.filterModel, structureMode: p.structureMode,
+      pitchCoarse: p.pitchCoarse, pitchFine: p.pitchFine, lfo1Shape: p.lfo1Shape, lfo1Sync: p.lfo1Sync, lfo1Rate: p.lfo1Rate,
+      lfo1Depth: p.lfo1Depth, lfo1Target: p.lfo1Target, lfo2Shape: p.lfo2Shape, lfo2Sync: p.lfo2Sync, lfo2Rate: p.lfo2Rate,
+      lfo2Depth: p.lfo2Depth, lfo2Target: p.lfo2Target,
     });
   }
-  if (dto.bankLayoutJson) {
-    state.bankLayout = deserializeBankLayoutJson(dto.bankLayoutJson);
-  }
+  if (dto.bankLayoutJson) state.bankLayout = deserializeBankLayoutJson(dto.bankLayoutJson);
   state.clearPreSoloMemory();
-  if (!findPartLocation(state.bankLayout, state.focusedPart)) {
-    state.focusedPart = state.findFirstPlacedPart(state.bankLayout.activeBank);
-  }
+  if (!findPartLocation(state.bankLayout, state.focusedPart)) state.focusedPart = state.findFirstPlacedPart(state.bankLayout.activeBank);
   state.refs.rackColumn?.hydrateFromHost(dto.rackJson, dto.sendTargets);
-  state.refs.masterPanel?.setVolume(dto.masterGain);
-  state.refs.masterPanel?.setLimiterEnabled(dto.limiterEnabled);
-  state.refs.globalDrawer?.syncFromSession(dto);
-  state.refs.settingsModal?.syncGlobalTranspose(dto.globalTranspose);
+  state.refs.masterPanel?.setVolume(dto.masterGain); state.refs.masterPanel?.setLimiterEnabled(dto.limiterEnabled);
+  state.refs.globalDrawer?.syncFromSession(dto); state.refs.settingsModal?.syncGlobalTranspose(dto.globalTranspose);
+  state.refs.liveTranspose?.setGlobalTranspose(dto.globalTranspose ?? 0);
   state.refs.fxRackModal?.hydrateFromHost?.({
-    fxTopology: dto.fxTopology, limiterEnabled: dto.limiterEnabled,
-    limiterCeilingDb: dto.limiterCeilingDb, sendTargets: dto.sendTargets,
-  });
+    fxTopology: dto.fxTopology, limiterEnabled: dto.limiterEnabled, limiterCeilingDb: dto.limiterCeilingDb,
+    sendTargets: dto.sendTargets, audioDuckEnabled: dto.audioDuckEnabled, midiDuckEnabled: dto.midiDuckEnabled,
+    sidechainConfig: dto.sidechainConfig,
+  } as any);
   state.notifyPartMetadataChanged(state.focusedPart);
 }

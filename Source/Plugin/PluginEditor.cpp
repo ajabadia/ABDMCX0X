@@ -3,6 +3,7 @@
 #include "McxEngineBridgeHelpers.h"
 #include "McxSongBridgeHelpers.h"
 #include "McxRackBridgeHelpers.h"
+#include "McxExportBridgeHelpers.h"
 #include "McxSessionStateBuilder.h"
 #include "McxEditorWebViewHelpers.h"
 
@@ -121,6 +122,9 @@ void McxAudioProcessorEditor::handleJsEvent(const juce::var& msg) {
         return;
     }
     if (handleRackJsEvent(processor_, type, *obj)) {
+        return;
+    }
+    if (handleExportJsEvent(processor_, webComponent_.get(), exportChooser_, type, *obj)) {
         return;
     }
     if (type == "noteOn") {

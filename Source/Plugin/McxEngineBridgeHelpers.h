@@ -42,12 +42,18 @@ inline juce::var buildPartPresetsPayload(const McxEngine& engine, int partIdx)
     payload->setProperty("currentPreset", juce::String(engine.getPartCurrentPresetName(part)));
 
     juce::Array<juce::var> presets;
+    const auto* partEng = engine.getPartSoundEngine(part);
     const int count = engine.getPartFactoryPresetCount(part);
     for (int i = 0; i < count; ++i)
     {
         juce::DynamicObject::Ptr p = new juce::DynamicObject();
         p->setProperty("index", i);
         p->setProperty("name", juce::String(engine.getPartFactoryPresetName(part, i)));
+        if (partEng != nullptr)
+        {
+            p->setProperty("categoryId", partEng->getFactoryPresetCategory(i));
+            p->setProperty("isDrumMode", partEng->isFactoryPresetDrumMode(i));
+        }
         presets.add(juce::var(p.get()));
     }
     payload->setProperty("presets", presets);
@@ -122,14 +128,31 @@ inline bool handleEngineAndBankJsEvent(McxAudioProcessor& proc,
         if (web != nullptr) web->emitEventIfBrowserIsVisible("onNativeTelemetry", juce::var(reply.get()));
         return true;
     }
+    if (type == "indexBankBase64")
+    {
+        const auto b64 = obj.getProperty("base64").toString();
+        juce::MemoryOutputStream decoded;
+        const bool decodedOk = juce::Base64::convertFromBase64(decoded, b64);
+        const int slot = decodedOk ? proc.mountBankFromMemory(static_cast<const std::uint8_t*>(decoded.getData()), decoded.getDataSize()) : -1;
+        juce::DynamicObject::Ptr reply = new juce::DynamicObject();
+        reply->setProperty("type", "bankIndexed");
+        reply->setProperty("slot", slot);
+        reply->setProperty("ok", slot >= 0);
+        if (web != nullptr) web->emitEventIfBrowserIsVisible("onNativeTelemetry", juce::var(reply.get()));
+        return true;
+    }
     if (type == "loadBankItemOnDemand")
     {
         const int part = static_cast<int>(obj.getProperty("part"));
         const int bankSlot = static_cast<int>(obj.getProperty("bankSlot"));
         const int itemIdx = static_cast<int>(obj.getProperty("itemIndex"));
-        const bool isKit = obj.getProperty("kind").toString() == "drum_kit";
-        const bool ok = isKit ? proc.loadIndexedBankKit(bankSlot, itemIdx, part)
-                              : proc.loadIndexedBankTone(bankSlot, itemIdx, part);
+        const auto kindStr = obj.getProperty("kind").toString();
+        const int targetIdx = obj.hasProperty("targetIndex") ? static_cast<int>(obj.getProperty("targetIndex")) : 0;
+        const bool isWave = (kindStr == "partial_wave" || kindStr == "drum_wave");
+        const bool ok = isWave
+            ? proc.assignIndexedBankWave(bankSlot, itemIdx, kindStr == "drum_wave", targetIdx, part)
+            : (kindStr == "drum_kit" ? proc.loadIndexedBankKit(bankSlot, itemIdx, part)
+                                     : proc.loadIndexedBankTone(bankSlot, itemIdx, part));
         juce::DynamicObject::Ptr reply = new juce::DynamicObject();
         reply->setProperty("type", "bankItemLoaded");
         reply->setProperty("part", part);

@@ -105,6 +105,31 @@ inline void executeRackOrSystemCommand(const Cmd& cmd,
             }
             break;
         }
+        case Type::SeqSeekBars:
+            engine.seekSequencerBars(static_cast<int>(cmd.paramId));
+            break;
+        case Type::SeqReturnToZero:
+            engine.returnSequencerToZero();
+            break;
+        case Type::SetSeqRecordConfig:
+            engine.setSequencerRecordConfig(
+                static_cast<int>(cmd.argU8),
+                static_cast<int>(cmd.argU8b),
+                static_cast<int>(cmd.paramId));
+            break;
+        case Type::SetSidechainConfig:
+        {
+            McxSidechainConfig cfg;
+            cfg.sourcePart = static_cast<int>(cmd.paramId);
+            cfg.hpfEnabled = (cmd.argU8 != 0);
+            cfg.hpfHz = cmd.value;
+            cfg.depthDb = cmd.value2;
+            cfg.attackMs = cmd.value3;
+            cfg.releaseMs = static_cast<float>(cmd.argU64) * 0.1f;
+            cfg.releaseSyncDiv = static_cast<int>(cmd.argU8b);
+            engine.setSidechainConfig(cfg);
+            break;
+        }
         default:
             break;
     }

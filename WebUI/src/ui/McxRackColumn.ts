@@ -4,13 +4,10 @@
  * Strict line limit: < 200 lines. 100% theme tokenized.
  */
 
-import { findAlgorithmById } from '@abdsynths/shared/components';
+import { findAlgorithmById, openFxPicker } from '@abdsynths/shared/components';
 import type { McxHostBridge } from '../bridge/McxHostBridge';
 import { t } from '../i18n/mcxI18n';
-import {
-  buildOccupiedSlotHtml, buildRackPickerHtml, buildRackShellHtml,
-  RACK_PICKER_ENGINES, type UiRackSlot,
-} from './McxRackColumnViews';
+import { buildOccupiedSlotHtml, buildRackShellHtml, createDefaultRackSlots, createEmptyRackSlot, createEmptyRackSlots, wireRackSlotCoverPopup, type UiRackSlot } from './McxRackColumnViews';
 
 export type { UiRackSlot } from './McxRackColumnViews';
 
@@ -19,6 +16,7 @@ export interface McxRackColumnOptions {
   onOpenTopology?: () => void; onSlotsChanged?: (slots: UiRackSlot[]) => void;
   onSlotMoved?: (from: number, to: number) => void; onSlotRemoved?: (slot: number) => void;
   onOpenEffectDetail?: (slotIdx: number, algoId: string, customName: string, slot: UiRackSlot) => void;
+  onToggleCollapse?: () => void;
 }
 
 export class McxRackColumn {
@@ -40,7 +38,8 @@ export class McxRackColumn {
         if (st.params) Object.entries(st.params).forEach(([k, v]) => this.opts.bridge.setRackSlotParamByKey(i, k, Number(v)));
       }
       if (st?.bypass) this.opts.bridge.setRackSlotBypass(i, true);
-      if (st?.duck !== undefined) this.opts.bridge.setRackSlotDucking(i, Boolean(st.duck));
+      if (st?.duck !== undefined) this.opts.bridge.setRackSlotDucking(i, Boolean(st.duck), st.duckAmount ?? 0.6);
+      if ((st?.chainTarget ?? -1) >= 0) this.opts.bridge.setSlotChainTarget(i, Number(st.chainTarget));
     });
     this.sendTargets.forEach((bay, b) => this.opts.bridge.setSendSlotTarget(b, bay));
   }
@@ -57,9 +56,7 @@ export class McxRackColumn {
       } catch { /* ignore */ }
       this.opts.bridge.onAudioStatus((st) => { if (st === 'ready' && !this.hasHostHydrated) this.pushToBridge(); });
     }
-    this.slots = Array.from({ length: 8 }, (_, i) => ({ slot: i, engine: 0, algoId: '', name: '', bypass: false, duck: false, p1: 0.5, p2: 0.5, mix: 1.0 }));
-    this.slots[0] = { slot: 0, engine: 2, algoId: 'space_echo', name: 'RE-201 Lead Echo', bypass: false, duck: true, p1: 0.45, p2: 0.50, mix: 1.0 };
-    this.slots[1] = { slot: 1, engine: 1, algoId: 'zita', name: 'Zita Hall Space', bypass: false, duck: true, p1: 0.60, p2: 0.40, mix: 1.0 };
+    this.slots = createDefaultRackSlots();
   }
 
   public hydrateFromHost(rackJson: string, sendTargets?: number[]): void {
@@ -70,11 +67,7 @@ export class McxRackColumn {
       if (Array.isArray(parsed?.slots)) {
         this.slots = Array.from({ length: 8 }, (_, i) => {
           const r = parsed.slots[i];
-          return {
-            slot: i, engine: Number(r?.engine ?? 0), algoId: String(r?.algoId ?? ''), name: String(r?.name ?? ''),
-            bypass: Boolean(r?.bypass), duck: Boolean(r?.duck), p1: Number(r?.p1 ?? 0.5), p2: Number(r?.p2 ?? 0.5), mix: Number(r?.mix ?? 1.0),
-            params: r ? { p3: Number(r.p3 ?? 0.5), p4: Number(r.p4 ?? 0.5), p5: Number(r.p5 ?? 0.5), mode: Number(r.mode ?? 0), mix: Number(r.mix ?? 1.0) } : undefined,
-          };
+          return { slot: i, engine: Number(r?.engine ?? 0), algoId: String(r?.algoId ?? ''), name: String(r?.name ?? ''), bypass: Boolean(r?.bypass), duck: Boolean(r?.duck), duckAmount: Number(r?.duckAmt ?? 0.6), chainTarget: Number(r?.chain ?? -1), p1: Number(r?.p1 ?? 0.5), p2: Number(r?.p2 ?? 0.5), mix: Number(r?.mix ?? 1.0), params: r ? { p3: Number(r.p3 ?? 0.5), p4: Number(r.p4 ?? 0.5), p5: Number(r.p5 ?? 0.5), mode: Number(r.mode ?? 0), mix: Number(r.mix ?? 1.0) } : undefined };
         });
       }
     } catch { /* ignore invalid rackJson */ }
@@ -84,6 +77,19 @@ export class McxRackColumn {
   getSlots(): UiRackSlot[] { return this.slots; }
   getSendTargets(): number[] { return [...this.sendTargets]; }
   setSendTarget(bus: number, slot: number): void { this.sendTargets[bus] = slot; this.syncSlotIndices(); }
+  public clearAllSlots(): void {
+    for (let s = 0; s < 8; ++s) { this.opts.bridge.removeRackSlot(s); this.opts.bridge.setRackSlotBypass(s, false); }
+    for (let b = 0; b < 4; ++b) this.opts.bridge.setSendSlotTarget(b, -1);
+    this.slots = createEmptyRackSlots();
+    this.sendTargets = [-1, -1, -1, -1];
+    this.syncSlotIndices(); this.renderSlots();
+  }
+  public resetToFactoryRack(): void {
+    this.slots = createDefaultRackSlots();
+    this.sendTargets = [1, 0, 0, -1];
+    this.sendTargets.forEach((tgt, b) => this.opts.bridge.setSendSlotTarget(b, tgt));
+    this.pushToBridge(); this.syncSlotIndices(); this.renderSlots();
+  }
   updateSlotState(slotIdx: number, patch: Partial<UiRackSlot>, rerender = false): void {
     const cur = this.slots[slotIdx]; if (!cur) return;
     this.slots[slotIdx] = { ...cur, ...patch, params: patch.params ? { ...(cur.params || {}), ...patch.params } : cur.params };
@@ -96,23 +102,25 @@ export class McxRackColumn {
     }
     this.opts.onSlotsChanged?.(this.slots);
   }
-  setSlotCustomName(slotIdx: number, name: string): void {
-    if (this.slots[slotIdx]) { this.slots[slotIdx].name = name; this.syncSlotIndices(); this.renderSlots(); }
-  }
-  openSlotFaceplate(slotIdx: number): void {
-    const s = this.slots[slotIdx]; if (s && s.engine !== 0) this.opts.onOpenEffectDetail?.(slotIdx, s.algoId, s.name, s);
-  }
+  setSlotCustomName(slotIdx: number, name: string): void { if (this.slots[slotIdx]) { this.slots[slotIdx].name = name; this.syncSlotIndices(); this.renderSlots(); } }
+  openSlotFaceplate(slotIdx: number): void { const s = this.slots[slotIdx]; if (s && s.engine !== 0) this.opts.onOpenEffectDetail?.(slotIdx, s.algoId, s.name, s); }
 
   render(): void {
     this.el.innerHTML = buildRackShellHtml();
     const openPatch = () => this.opts.onOpenTopology?.();
+    const toggleCol = () => this.opts.onToggleCollapse?.();
     this.el.querySelector('#mcx-rack-open-topo')?.addEventListener('click', openPatch);
     this.el.querySelector('#mcx-rack-patchbay-strip')?.addEventListener('click', openPatch);
+    this.el.querySelector('#mcx-rack-collapse')?.addEventListener('click', toggleCol);
+    this.el.querySelector('#mcx-rack-expand')?.addEventListener('click', toggleCol);
     this.renderSlots();
   }
 
   private renderSlots(): void {
-    const mount = this.el.querySelector('#mcx-rack-slots-mount'); if (!mount) return;
+    const mount = this.el.querySelector('#mcx-rack-slots-mount');
+    const badge = this.el.querySelector('#mcx-rack-collapsed-count');
+    if (badge) badge.textContent = String(this.slots.filter((sl) => sl.engine !== 0).length);
+    if (!mount) return;
     mount.innerHTML = '';
     this.slots.forEach((s, idx) => {
       const card = document.createElement('div');
@@ -136,10 +144,13 @@ export class McxRackColumn {
       this.opts.bridge.setRackSlotBypass(idx, s.bypass); this.syncSlotIndices();
       this.opts.setLcdLine2?.(`SLOT ${idx + 1} ${s.name}: ${s.bypass ? 'BYPASS (0% CPU)' : 'ACTIVO'}`); this.renderSlots();
     });
-    card.querySelector('.mcx-rack-slot-name')?.addEventListener('click', (e) => { e.stopPropagation(); this.opts.onOpenEffectDetail?.(idx, s.algoId, s.name, s); });
+    const openDetail = (e: Event) => { e.stopPropagation(); this.opts.onOpenEffectDetail?.(idx, s.algoId, s.name, s); };
+    wireRackSlotCoverPopup(card, s, findAlgorithmById(s.algoId), () => this.opts.onOpenEffectDetail?.(idx, s.algoId, s.name, s));
+    card.querySelector('.mcx-rack-slot-name')?.addEventListener('click', openDetail);
+    card.querySelector('.btn-faceplate')?.addEventListener('click', openDetail);
     card.querySelector('.btn-del')?.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.slots[idx] = { slot: idx, engine: 0, algoId: '', name: '', bypass: false, duck: false, p1: 0.5, p2: 0.5, mix: 1.0 };
+      this.slots[idx] = createEmptyRackSlot(idx);
       this.sendTargets = this.sendTargets.map((t) => (t === idx ? -1 : t));
       this.opts.bridge.removeRackSlot(idx); this.syncSlotIndices(); this.opts.onSlotRemoved?.(idx); this.renderSlots();
     });
@@ -150,30 +161,29 @@ export class McxRackColumn {
     };
     card.querySelector('.btn-up')?.addEventListener('click', (e) => { e.stopPropagation(); if (idx > 0) swapRack(idx, idx - 1); });
     card.querySelector('.btn-dn')?.addEventListener('click', (e) => { e.stopPropagation(); if (idx < 7) swapRack(idx, idx + 1); });
+    const chainSel = card.querySelector<HTMLSelectElement>('.mcx-rack-chain-sel');
+    chainSel?.addEventListener('click', (e) => e.stopPropagation());
+    chainSel?.addEventListener('change', (e) => {
+      e.stopPropagation();
+      const target = Number(chainSel.value); s.chainTarget = target;
+      this.opts.bridge.setSlotChainTarget(idx, target); this.syncSlotIndices();
+      this.opts.setLcdLine2?.(`BAY ${idx + 1} OUT: ${target >= 0 ? `CHAIN → B${target + 1}` : 'MASTER MIX'}`);
+    });
     card.addEventListener('click', () => this.opts.onOpenEffectDetail?.(idx, s.algoId, s.name, s));
   }
 
   private showAddEffectMenu(slotIdx: number, anchorEl: HTMLElement): void {
-    this.pickerEl?.remove();
-    const pop = document.createElement('div');
-    pop.className = 'mcx-rack-picker-popover'; pop.setAttribute('popover', 'auto');
-    pop.innerHTML = buildRackPickerHtml(slotIdx);
-    pop.addEventListener('click', (ev) => {
-      if ((ev.target as HTMLElement).closest('.mcx-rack-picker-close')) { pop.hidePopover?.(); return; }
-      const itemBtn = (ev.target as HTMLElement).closest<HTMLButtonElement>('[data-eng-idx]'); if (!itemBtn) return;
-      const chosen = RACK_PICKER_ENGINES[Number(itemBtn.dataset.engIdx)] || RACK_PICKER_ENGINES[0];
-      this.slots[slotIdx] = { slot: slotIdx, engine: chosen.eng, algoId: chosen.id, name: chosen.name, bypass: false, duck: false, p1: 0.5, p2: 0.5 };
-      this.opts.bridge.setRackSlotEngine(slotIdx, chosen.eng, chosen.name);
-      this.opts.setLcdLine2?.(`${t('mcx.rackMounted')} ${slotIdx + 1}: ${chosen.name}`); this.syncSlotIndices(); this.renderSlots(); pop.hidePopover?.();
+    openFxPicker({
+      slotIdx, anchorEl, activeId: this.slots[slotIdx]?.algoId || null,
+      onSelect: (chosen: { id: string; fxId?: number; eng?: number; rackEngine?: number; name: string }) => {
+        const engId = chosen?.rackEngine ?? chosen?.fxId ?? chosen?.eng ?? 0;
+        const isNone = !chosen || engId === 0;
+        this.slots[slotIdx] = { slot: slotIdx, engine: isNone ? 0 : engId, algoId: isNone ? '' : chosen.id, name: isNone ? '' : chosen.name, bypass: false, duck: false, p1: 0.5, p2: 0.5 };
+        if (isNone) this.opts.bridge.removeRackSlot(slotIdx);
+        else { this.opts.bridge.setRackSlotEngine(slotIdx, engId, chosen.name); this.opts.setLcdLine2?.(`${t('mcx.rackMounted')} ${slotIdx + 1}: ${chosen.name}`); }
+        this.syncSlotIndices(); this.renderSlots();
+      },
     });
-    pop.addEventListener('toggle', (ev) => { if ((ev as ToggleEvent).newState === 'closed') { pop.remove(); if (this.pickerEl === pop) this.pickerEl = null; } });
-    document.body.appendChild(pop); this.pickerEl = pop;
-    if (typeof CSS !== 'undefined' && !CSS.supports('position-area', 'block-end')) {
-      const r = anchorEl.getBoundingClientRect();
-      pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 240))}px`;
-      pop.style.top = `${Math.max(8, Math.min(r.bottom + 4, window.innerHeight - 280))}px`; pop.style.right = 'auto'; pop.style.transform = 'none';
-    }
-    (pop as HTMLElement & { showPopover?: (opts?: { source?: HTMLElement }) => void }).showPopover?.({ source: anchorEl });
   }
 
   updateMeter(slotIdx: number, pIn: number, pOut: number, clipIn = false, clipOut = false): void {

@@ -11,6 +11,7 @@ export interface SettingsModalCallbacks {
   bridge: McxHostBridge;
   onSettingsApplied: (settings: McxSystemSettingsDto) => void;
   onGlobalTransposeChange?: (st: number) => void;
+  onScaleChange?: (root: number, type: number) => void;
 }
 
 export class McxSettingsModal {
@@ -41,6 +42,15 @@ export class McxSettingsModal {
     const transIn = this.dialog.querySelector('#set-trans') as HTMLInputElement | null;
     if (lbl) lbl.textContent = `${this.globalTranspose > 0 ? '+' : ''}${this.globalTranspose} st`;
     if (transIn) transIn.value = String(this.globalTranspose);
+  }
+
+  public syncScale(root: number, type: number): void {
+    this.scaleRoot = ((Math.round(root) % 12) + 12) % 12;
+    this.scaleType = Math.max(0, Math.min(14, Math.round(type)));
+    const rSel = this.dialog.querySelector('#set-scale-root') as HTMLSelectElement | null;
+    const tSel = this.dialog.querySelector('#set-scale-type') as HTMLSelectElement | null;
+    if (rSel) rSel.value = String(this.scaleRoot);
+    if (tSel) tSel.value = String(this.scaleType);
   }
 
   public syncFromHost(next: McxSystemSettingsDto): void {
@@ -130,12 +140,14 @@ export class McxSettingsModal {
     scaleRoot?.addEventListener('change', () => {
       this.scaleRoot = parseInt(scaleRoot.value, 10);
       this.cb.bridge.setParam(0, 'globalScaleRoot', this.scaleRoot);
+      this.cb.onScaleChange?.(this.scaleRoot, this.scaleType);
     });
     const scaleType = this.dialog.querySelector('#set-scale-type') as HTMLSelectElement | null;
     scaleType?.addEventListener('change', () => {
       this.scaleType = parseInt(scaleType.value, 10);
       this.cb.bridge.setParam(0, 'globalScale', this.scaleType);
       this.cb.bridge.setParam(0, 'globalScaleQuantize', this.scaleType > 0 ? 1 : 0);
+      this.cb.onScaleChange?.(this.scaleRoot, this.scaleType);
     });
 
     this.dialog.querySelector('#btn-refresh-midi')?.addEventListener('click', () => {

@@ -5,10 +5,8 @@
 
 #include <algorithm>
 #include <cmath>
-
 namespace abdmcx
 {
-
 void McxEngine::onRomplerVoiceStolen(void* userData, int ownerSlot, int drumSlotNote) noexcept
 {
     auto* self = static_cast<McxEngine*>(userData);
@@ -78,7 +76,8 @@ void McxEngine::prepare(double sampleRate) noexcept
 void McxEngine::reset() noexcept
 {
     fxTailSamplesLeft_ = 0;
-    fxGates_.fill(false); fxTempoSync_ = true; manualDuckGate_ = false;
+    fxGates_.fill(false); fxTempoSync_ = true; manualDuckGate_ = false; prevDuckTriggered_ = false;
+    scHpfState_.reset();
     lfoPhase01_.fill(0.0f); lfoValueBipolar_.fill(0.0f);
     partMidiPeaks_.fill(0.0f);
     mirrorRouter_.clear();
@@ -177,7 +176,7 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
                     partL_.data(), partR_.data(),
                     partL_.data(), partR_.data(),
                     chunk,
-                    false);
+                    prevDuckTriggered_);
             }
 
             McxChannelStripParams csp {};
@@ -207,8 +206,9 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
                 pMax = std::max(pMax, std::max(std::abs(sL), std::abs(sR)));
             }
             partPeaks_[idx] = std::max(partPeaks_[idx], pMax);
-            if (audioDuckEnabled_ && (pIdx == 9 || parts_[idx].isDrumKit))
-                audioDuckEnvelope_ = std::max(audioDuckEnvelope_, pMax);
+            const bool isScAudioSrc = (scConfig_.sourcePart >= 0) ? (pIdx == scConfig_.sourcePart) : (pIdx == 9 || parts_[idx].isDrumKit);
+            if (audioDuckEnabled_ && isScAudioSrc)
+                audioDuckEnvelope_ = std::max(audioDuckEnvelope_, detectSidechainPeak(partL_.data(), partR_.data(), chunk, pMax, scConfig_, sampleRate_, scHpfState_));
         }
 
         const bool injFilter = diagProbe_.isInjectingAt(4) || diagProbe_.isInjectingAt(5);
@@ -261,14 +261,16 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
             fxCtrl.bpm = static_cast<double>(masterTempoBpm_);
             fxCtrl.tempoSync = fxTempoSync_;
             const bool duckTriggered = manualDuckGate_ || (midiDuckEnabled_ && kickDuckEnvelope_ > 0.05f) || (audioDuckEnabled_ && audioDuckEnvelope_ > 0.08f);
+            prevDuckTriggered_ = duckTriggered;
             fxCtrl.gates[0] = duckTriggered ? 1.0f : 0.0f;
             fxCtrl.gates[1] = fxGates_[1] ? 1.0f : 0.0f;
             fxCtrl.gates[2] = fxGates_[2] ? 1.0f : 0.0f;
             fxCtrl.gates[3] = fxGates_[3] ? 1.0f : 0.0f;
             if (fp.lfo1Target < 4) fxCtrl.lfoMod[fp.lfo1Target] = std::clamp(lfoValueBipolar_[0] * fp.lfo1Depth, -1.0f, 1.0f);
-            if (kickDuckEnvelope_ > 0.01f) kickDuckEnvelope_ *= std::exp(-static_cast<float>(chunk) / static_cast<float>(sampleRate_ * 0.18));
+            const float relDecay = std::exp(-static_cast<float>(chunk) / static_cast<float>(sampleRate_ * static_cast<double>(resolveSidechainReleaseSec(scConfig_, masterTempoBpm_))));
+            if (kickDuckEnvelope_ > 0.01f) kickDuckEnvelope_ *= relDecay;
             else kickDuckEnvelope_ = 0.0f;
-            if (audioDuckEnvelope_ > 0.01f) audioDuckEnvelope_ *= std::exp(-static_cast<float>(chunk) / static_cast<float>(sampleRate_ * 0.18));
+            if (audioDuckEnvelope_ > 0.01f) audioDuckEnvelope_ *= relDecay;
             else audioDuckEnvelope_ = 0.0f;
             const float outGain = (injPreMaster && !anyVoiceActive && !injFilter && !injPreFx) ? 1.0f : masterGain_;
             outputAndFx_.processChunk(dryL_.data(), dryR_.data(), revL_.data(), revR_.data(), choL_.data(), choR_.data(),
@@ -282,7 +284,6 @@ void McxEngine::processAudio(float* left, float* right, int numSamples) noexcept
 
         if (injPostMaster)
             diagProbe_.injectStereoBuffer(1, left + offset, right + offset, chunk, false);
-
         offset += chunk;
     }
 

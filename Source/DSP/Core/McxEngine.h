@@ -5,6 +5,7 @@
 #include "McxPartState.h"
 #include "McxTypes.h"
 #include "../FX/McxOutputAndFx.h"
+#include "../FX/McxSidechainConfig.h"
 #include "../Synth/McxChannelStrip.h"
 #include "../../MIDI/HardwareMirrorRouter.h"
 #include "../../MIDI/McxMidiClockEmitter.h"
@@ -200,11 +201,22 @@ public:
     [[nodiscard]] McxMidiClockEmitter& midiClock() noexcept { return midiClock_; }
     [[nodiscard]] const McxMidiClockEmitter& midiClock() const noexcept { return midiClock_; }
     void setSequencerPlaying(bool playing, bool resetToZero = true) noexcept;
+    void seekSequencerBars(int deltaBars) noexcept;
+    void returnSequencerToZero() noexcept;
+    void setSequencerRecordConfig(int mode01, int countInBars, int quantizeSteps) noexcept;
+    void recordLiveInputNoteOn(int partIndex, int midiNote, float velocity) noexcept;
+    void recordLiveInputNoteOff(int partIndex, int midiNote) noexcept;
     void syncHostTransport(bool hostPlaying, double hostBpm, double hostPpqPos, bool ppqValid) noexcept;
     [[nodiscard]] bool isSequencerRunning() const noexcept;
+    [[nodiscard]] bool isSequencerPaused() const noexcept;
+    [[nodiscard]] bool isSequencerCountingIn() const noexcept;
+    [[nodiscard]] int getSequencerCountInTicks() const noexcept;
+    [[nodiscard]] std::uint32_t getSequencerRecordedRev() const noexcept;
     [[nodiscard]] int getSequencerTick() const noexcept;
     [[nodiscard]] int getSequencerStep() const noexcept;
     [[nodiscard]] int getSequencerTotalTicks() const noexcept;
+    void setSidechainConfig(const McxSidechainConfig& cfg) noexcept;
+    [[nodiscard]] const McxSidechainConfig& getSidechainConfig() const noexcept { return scConfig_; }
     [[nodiscard]] std::array<float, kNumParts> getPartPeaks() const noexcept { return partPeaks_; }
     [[nodiscard]] std::array<float, kNumParts> getPartMidiPeaks() const noexcept { return partMidiPeaks_; }
     static float quantizeOutputSample(float x, McxOutputCharacter character) noexcept;
@@ -266,6 +278,9 @@ private:
     bool audioDuckEnabled_ { true };
     bool midiDuckEnabled_ { true };
     bool manualDuckGate_ { false };
+    bool prevDuckTriggered_ { false };
+    McxSidechainConfig scConfig_ {};
+    McxSidechainHpfState scHpfState_ {};
     bool fxTempoSync_ { true };
     std::array<bool, 4> fxGates_ { false, false, false, false };
     std::array<float, 2> lfoPhase01_ { 0.0f, 0.0f };

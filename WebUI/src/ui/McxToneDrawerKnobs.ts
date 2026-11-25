@@ -35,6 +35,7 @@ export const KNOB_DEFS: KnobDef[] = [
   { param: 'cutoffOffset', min: -1, max: 1, def: 0, bipolar: true, fmt: fmtPctOffset },
   { param: 'resonanceOffset', min: -1, max: 1, def: 0, bipolar: true, fmt: fmtPctOffset },
   { param: 'envAttackOffset', min: -1, max: 1, def: 0, bipolar: true, fmt: fmtPctOffset },
+  { param: 'envDecayOffset', min: -1, max: 1, def: 0, bipolar: true, fmt: fmtPctOffset },
   { param: 'envReleaseOffset', min: -1, max: 1, def: 0, bipolar: true, fmt: fmtPctOffset },
   { param: 'vibratoOffset', min: -1, max: 1, def: 0, bipolar: true, fmt: fmtPctOffset },
 ];
@@ -70,8 +71,15 @@ export class McxToneDrawerKnobsManager {
       const raw = (ps as unknown as Record<string, number | undefined>)[key] ?? item.def.def;
       const norm = Math.max(0, Math.min(1, (raw - item.def.min) / (item.def.max - item.def.min)));
       item.knob.setValue(norm);
-      if (item.numEl) item.numEl.textContent = item.def.fmt(raw);
+      if (item.numEl) item.numEl.textContent = item.knob.disabled ? 'N/A' : item.def.fmt(raw);
     }
+  }
+
+  public setParamDisabled(param: McxParamKey, disabled: boolean): void {
+    const item = this.items.get(param);
+    if (!item) return;
+    item.knob.setDisabled(disabled);
+    if (item.numEl && disabled) item.numEl.textContent = 'N/A';
   }
 
   public updateSingle(param: McxParamKey, rawVal: number): void {

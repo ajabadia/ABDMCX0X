@@ -1,136 +1,90 @@
 /**
  * ABDMCX0X -- McxNavbar.ts (Slice 1)
- * Desktop menu bar built on @abdsynths/shared SynthNavBar + AboutDialog:
- * Pure visual Theme selector (8 ABDShared/ABDNeuModMakr families x Light/Dark),
- * File (Working Dir / Bank / Reset), Edit (Settings / Theme / Language / Panic),
- * Tools (440 Hz Probe / Decks), Help (Updates & AboutDialog).
+ * Desktop menu bar built on @abdsynths/shared SynthNavBar + AboutDialog + History A/B controls.
+ * Strict line limit: < 160 lines.
  */
 
 import { createSynthNavBar } from '@abdsynths/shared/components';
+import type { HistoryStatus } from '../app/McxHistoryManager';
 import { getLocale, setLocale, t } from '../i18n/mcxI18n';
-import { THEME_FAMILIES, type ThemeFamilyKey, type ThemeManager } from './ThemeManager';
+import { buildMcxNavbarMenus } from './McxNavbarMenus';
+import { type ThemeFamilyKey, type ThemeManager } from './ThemeManager';
 
 export interface McxNavbarCallbacks {
   themeMgr: ThemeManager;
-  onConfigureFolder: () => void;
-  onOpenSettings: () => void;
-  onOpenBankManager: () => void;
-  onSavePartPreset: () => void;
-  onSaveMultiPreset: () => void;
-  onLoadBank: () => void;
-  onFactoryReset: () => void;
-  onPanic: () => void;
-  onEnableAudio: () => void;
-  onToggleProbe: () => void;
-  onOpenFxRack?: () => void;
-  onOpenGlobalLfo?: () => void;
-  onOpenPianoRoll?: () => void;
-  onOpenGroove?: () => void;
-  onOpenSong?: () => void;
+  onNewProject?: () => void; onNewFromTemplate?: (tpl: 'empty' | 'factory' | 'starter8' | 'electronic' | 'live64') => void;
+  onSaveProject?: () => void; onSaveProjectAs?: () => void; onOpenProject?: () => void;
+  onUndo?: () => void; onRedo?: () => void; onToggleCompare?: () => void; onCaptureCompare?: () => void;
+  onConfigureFolder: () => void; onOpenSettings: () => void; onOpenBankManager: () => void;
+  onSavePartPreset: () => void; onSaveMultiPreset: () => void; onLoadBank: () => void;
+  onFactoryReset: () => void; onPanic: () => void; onEnableAudio: () => void; onToggleProbe: () => void;
+  onOpenFxRack?: () => void; onOpenGlobalLfo?: () => void; onOpenPianoRoll?: () => void;
+  onOpenGroove?: () => void; onOpenSong?: () => void; onOpenExport?: () => void; onOpenMidiLearn?: () => void;
   onSelectTab?: (tab: 'tone' | 'drums') => void;
-}
-
-function buildMenus() {
-  return [
-    { name: 'File', nameEs: 'Archivo', items: [
-        { id: 98, label: 'Bank Manager...', labelEs: 'Navegador de Bancos...', action: 'openBankManager', shortcut: 'B' },
-        { id: 99, label: 'Save Part Preset (.abdpart)...', labelEs: 'Guardar Preset de Parte (.abdpart)...', action: 'savePartPreset', shortcut: 'Ctrl+S' },
-        { id: 105, label: 'Save Multi Preset (.abdmulti)...', labelEs: 'Guardar Multi Preset (.abdmulti)...', action: 'saveMultiPreset' },
-        { separator: true },
-        { id: 100, label: 'Configure Working Folder...', labelEs: 'Configurar Directorio de Trabajo...', action: 'configureFolder' },
-        { id: 101, label: 'Load Soundbank (.abdbank)...', labelEs: 'Cargar Banco (.abdbank)...', action: 'loadBank', shortcut: 'Ctrl+O' },
-        { separator: true },
-        { id: 102, label: 'Factory Preset Reset', labelEs: 'Restablecer Fábrica', action: 'factoryReset' },
-      ],
-    },
-    {
-      name: 'Edit', nameEs: 'Edición',
-      items: [
-        { id: 200, label: 'Global Settings...', labelEs: 'Ajustes Globales...', action: 'openSettings', shortcut: 'Ctrl+,' },
-        { id: 201, label: 'All Notes Off (Panic)', labelEs: 'Silenciar Todo (Pánico)', action: 'panic', shortcut: 'Esc' },
-        { separator: true },
-        {
-          id: 203, label: 'Visual Theme', labelEs: 'Tema Visual',
-          submenu: [
-            { id: 220, label: 'Toggle Light / Dark', labelEs: 'Cambiar Claro / Oscuro', action: 'toggleScheme' },
-            { separator: true },
-            ...THEME_FAMILIES.map((f, idx) => ({
-              id: 221 + idx, label: f.label, labelEs: f.label, action: 'themeFamily', value: f.key,
-            })),
-          ],
-        },
-        {
-          id: 204, label: 'Language', labelEs: 'Idioma',
-          submenu: [
-            { id: 241, label: 'Español (ES)', labelEs: 'Español (ES)', action: 'locale', value: 'es' },
-            { id: 242, label: 'English (EN)', labelEs: 'English (EN)', action: 'locale', value: 'en' },
-          ],
-        },
-      ],
-    },
-    {
-      name: 'Tools', nameEs: 'Herramientas',
-      items: [
-        { id: 300, label: 'Master Multi-Bus FX Rack...', labelEs: 'Rack Multibus de Efectos...', action: 'openFxRack', shortcut: 'Ctrl+F' },
-        { id: 302, label: 'Master Global LFOs...', labelEs: 'LFOs Globales (Master)...', action: 'openGlobalLfo', shortcut: 'Ctrl+L' },
-        { id: 303, label: 'Piano Roll Sequencer...', labelEs: 'Secuenciador Rollo Pianola...', action: 'openPianoRoll', shortcut: 'Ctrl+P' },
-        { id: 304, label: 'Master Groove & Shuffle...', labelEs: 'Groove y Shuffle Maestro...', action: 'openGroove', shortcut: 'Ctrl+G' },
-        { id: 305, label: 'Song Mode & Live Scenes...', labelEs: 'Modo Canción y Escenas...', action: 'openSong', shortcut: 'Ctrl+M' },
-        { id: 301, label: '440 Hz Signal Probe...', labelEs: 'Sonda de Señal 440 Hz...', action: 'toggleProbe', shortcut: 'Ctrl+4' },
-      ],
-    },
-    {
-      name: 'Help', nameEs: 'Ayuda',
-      items: [
-        { id: 901, label: 'Check for Updates...', labelEs: 'Buscar Actualizaciones...', action: 'checkForUpdates' },
-        { separator: true },
-        { id: 902, label: 'About ABDMCX0X...', labelEs: 'Acerca de ABDMCX0X...', action: 'about' },
-      ],
-    },
-  ];
 }
 
 export class McxNavbar {
   private container: HTMLElement;
   private cb: McxNavbarCallbacks;
   private navBar: ReturnType<typeof createSynthNavBar> | null = null;
+  private centerMountEl: HTMLElement;
   private audioStatus: { state: 'idle' | 'loading' | 'ready' | 'error'; detail?: string } = { state: 'idle' };
+  private historyStatus: HistoryStatus = { canUndo: false, canRedo: false, undoCount: 0, redoCount: 0, compareMode: 'A', hasBaseline: false };
 
   constructor(container: HTMLElement, cb: McxNavbarCallbacks) {
     this.container = container;
     this.cb = cb;
+    this.centerMountEl = document.createElement('div');
+    this.centerMountEl.id = 'mcx-transport-mount';
+    this.centerMountEl.className = 'mcx-navbar-transport';
     this.mount();
   }
+
+  public getTransportMount(): HTMLElement { return this.centerMountEl; }
 
   private createRightSlot(): HTMLElement {
     const slot = document.createElement('div');
     slot.className = 'mcx-nav-group';
     slot.innerHTML = `
+      <span class="mcx-nav-hist-group">
+        <button type="button" class="mcx-nav-hist-btn" id="mcx-btn-undo" title="Deshacer (Ctrl+Z)" disabled>↶</button>
+        <button type="button" class="mcx-nav-hist-btn" id="mcx-btn-redo" title="Rehacer (Ctrl+Y)" disabled>↷</button>
+        <button type="button" class="mcx-nav-hist-btn" id="mcx-btn-compare" title="Comparar A/B (Ctrl+Shift+B)">A</button>
+      </span>
       <button type="button" class="mcx-btn mcx-btn--audio" id="btn-audio"></button>
     `;
+    slot.querySelector('#mcx-btn-undo')?.addEventListener('click', () => this.cb.onUndo?.());
+    slot.querySelector('#mcx-btn-redo')?.addEventListener('click', () => this.cb.onRedo?.());
+    slot.querySelector('#mcx-btn-compare')?.addEventListener('click', () => this.cb.onToggleCompare?.());
     slot.querySelector('#btn-audio')?.addEventListener('click', () => this.cb.onEnableAudio());
     return slot;
   }
 
+  public closeMenu(): void { this.navBar?.closeDropdown?.(); }
+
   private dispatch(action: string, value?: unknown): void {
-    if (action === 'openBankManager') this.cb.onOpenBankManager();
-    else if (action === 'savePartPreset') this.cb.onSavePartPreset();
-    else if (action === 'saveMultiPreset') this.cb.onSaveMultiPreset();
-    else if (action === 'configureFolder') this.cb.onConfigureFolder();
-    else if (action === 'openSettings') this.cb.onOpenSettings();
-    else if (action === 'loadBank') this.cb.onLoadBank();
-    else if (action === 'factoryReset') this.cb.onFactoryReset();
-    else if (action === 'panic') this.cb.onPanic();
-    else if (action === 'toggleScheme') this.cb.themeMgr.toggleScheme();
-    else if (action === 'themeFamily') this.cb.themeMgr.setFamily(value as ThemeFamilyKey);
-    else if (action === 'locale' && (value === 'es' || value === 'en')) setLocale(value);
-    else if (action === 'openFxRack') this.cb.onOpenFxRack?.();
-    else if (action === 'openGlobalLfo') this.cb.onOpenGlobalLfo?.();
-    else if (action === 'openPianoRoll') this.cb.onOpenPianoRoll?.();
-    else if (action === 'openGroove') this.cb.onOpenGroove?.();
-    else if (action === 'openSong') this.cb.onOpenSong?.();
-    else if (action === 'toggleProbe') this.cb.onToggleProbe();
-    else if (action === 'tab' && (value === 'tone' || value === 'drums')) this.cb.onSelectTab?.(value);
+    try {
+      const map: Record<string, (() => void) | undefined> = {
+        newProject: () => this.cb.onNewProject?.(), template: () => this.cb.onNewFromTemplate?.(value as any),
+        saveProject: () => this.cb.onSaveProject?.(), saveProjectAs: () => this.cb.onSaveProjectAs?.(),
+        openProject: () => this.cb.onOpenProject?.(), undo: () => this.cb.onUndo?.(), redo: () => this.cb.onRedo?.(),
+        toggleCompare: () => this.cb.onToggleCompare?.(), captureCompare: () => this.cb.onCaptureCompare?.(),
+        openBankManager: () => this.cb.onOpenBankManager(), savePartPreset: () => this.cb.onSavePartPreset(),
+        saveMultiPreset: () => this.cb.onSaveMultiPreset(), configureFolder: () => this.cb.onConfigureFolder(),
+        openSettings: () => this.cb.onOpenSettings(), loadBank: () => this.cb.onLoadBank(),
+        factoryReset: () => this.cb.onFactoryReset(), panic: () => this.cb.onPanic(),
+        toggleScheme: () => this.cb.themeMgr.toggleScheme(), themeFamily: () => this.cb.themeMgr.setFamily(value as ThemeFamilyKey),
+        openFxRack: () => this.cb.onOpenFxRack?.(), openGlobalLfo: () => this.cb.onOpenGlobalLfo?.(),
+        openPianoRoll: () => this.cb.onOpenPianoRoll?.(), openGroove: () => this.cb.onOpenGroove?.(),
+        openSong: () => this.cb.onOpenSong?.(), openExport: () => this.cb.onOpenExport?.(),
+        openMidiLearn: () => this.cb.onOpenMidiLearn?.(), toggleProbe: () => this.cb.onToggleProbe(),
+      };
+      if (action === 'locale' && (value === 'es' || value === 'en')) setLocale(value);
+      else if (action === 'tab' && (value === 'tone' || value === 'drums')) this.cb.onSelectTab?.(value);
+      else map[action]?.();
+    } finally {
+      this.closeMenu();
+    }
   }
 
   public mount(): void {
@@ -141,7 +95,8 @@ export class McxNavbar {
       locale: getLocale(),
       brand: { title: 'ABDMCX0X', subtitle: '' },
       brandPosition: 'right',
-      menus: buildMenus(),
+      menus: buildMcxNavbarMenus(),
+      centerSlot: this.centerMountEl,
       rightSlot: this.createRightSlot(),
       enableGlobalShortcuts: false,
       activeValues: { themeFamily: this.cb.themeMgr.getFamily(), locale: getLocale() },
@@ -159,8 +114,30 @@ export class McxNavbar {
     this.sync();
   }
 
+  public setHistoryStatus(status: HistoryStatus): void {
+    this.historyStatus = status;
+    this.sync();
+  }
+
   public sync(): void {
     const family = this.cb.themeMgr.getFamily();
+    const btnUndo = this.container.querySelector('#mcx-btn-undo') as HTMLButtonElement | null;
+    const btnRedo = this.container.querySelector('#mcx-btn-redo') as HTMLButtonElement | null;
+    const btnCmp = this.container.querySelector('#mcx-btn-compare') as HTMLButtonElement | null;
+    if (btnUndo) {
+      btnUndo.disabled = !this.historyStatus.canUndo;
+      btnUndo.title = this.historyStatus.undoLabel ? `Deshacer: ${this.historyStatus.undoLabel} (Ctrl+Z)` : 'Deshacer (Ctrl+Z)';
+    }
+    if (btnRedo) {
+      btnRedo.disabled = !this.historyStatus.canRedo;
+      btnRedo.title = this.historyStatus.redoLabel ? `Rehacer: ${this.historyStatus.redoLabel} (Ctrl+Y)` : 'Rehacer (Ctrl+Y)';
+    }
+    if (btnCmp) {
+      const isB = this.historyStatus.compareMode === 'B';
+      btnCmp.textContent = isB ? 'B' : 'A';
+      btnCmp.classList.toggle('is-compare-b', isB);
+      btnCmp.disabled = !this.historyStatus.hasBaseline;
+    }
     const btnAudio = this.container.querySelector('#btn-audio');
     if (btnAudio) {
       const { state, detail } = this.audioStatus;

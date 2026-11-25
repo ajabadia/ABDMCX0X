@@ -5,25 +5,10 @@
 namespace abdmcx
 {
 
-McxPartState& McxEngine::part(int partIndex) noexcept
-{
-    return parts_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))];
-}
-
-const McxPartState& McxEngine::part(int partIndex) const noexcept
-{
-    return parts_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))];
-}
-
-IMcxSoundEngine* McxEngine::getPartSoundEngine(int partIndex) noexcept
-{
-    return engineSlots_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))];
-}
-
-const IMcxSoundEngine* McxEngine::getPartSoundEngine(int partIndex) const noexcept
-{
-    return engineSlots_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))];
-}
+McxPartState& McxEngine::part(int partIndex) noexcept { return parts_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))]; }
+const McxPartState& McxEngine::part(int partIndex) const noexcept { return parts_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))]; }
+IMcxSoundEngine* McxEngine::getPartSoundEngine(int partIndex) noexcept { return engineSlots_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))]; }
+const IMcxSoundEngine* McxEngine::getPartSoundEngine(int partIndex) const noexcept { return engineSlots_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))]; }
 
 void McxEngine::switchToResolvedEngine(int idx, int typeIdx, IMcxSoundEngine* nextEng, bool callPrepare) noexcept
 {
@@ -62,6 +47,16 @@ void McxEngine::switchToResolvedEngine(int idx, int typeIdx, IMcxSoundEngine* ne
     }
     if (nextEng == &engineRegistry_.rompler(idx))
         engineRegistry_.rompler(idx).setDrumMode(parts_[uIdx].isDrumKit);
+    else if (nextEng == &engineRegistry_.jv880(idx))
+    {
+        auto& jv = engineRegistry_.jv880(idx);
+        if (jv.getPartialWaveHandle(0) == abd::rompler::kInvalidWaveHandle)
+            (void)jv.loadFactoryPreset(0);
+    }
+    else if (nextEng == &engineRegistry_.la50(idx))
+        engineRegistry_.la50(idx).ensureKernel();
+    else if (nextEng == &engineRegistry_.cm32(idx))
+        engineRegistry_.cm32(idx).ensureKernel();
 
     cacheSemanticDestIds(idx);
 }
@@ -167,6 +162,7 @@ bool McxEngine::loadPartFactoryPreset(int partIndex, int presetIndex) noexcept
         rompler.patch().level = 1.0f;
         rompler.patch().pan = 0.0f;
     }
+    else if (eng == &engineRegistry_.jv880(idx)) { engineRegistry_.jv880(idx).patch().level = 1.0f; engineRegistry_.jv880(idx).patch().pan = 0.0f; }
     return true;
 }
 
@@ -215,23 +211,13 @@ bool McxEngine::deserializePartEngineStateJson(int partIndex, std::string_view j
         rompler.patch().level = 1.0f;
         rompler.patch().pan = 0.0f;
     }
+    else if (eng == &engineRegistry_.jv880(idx)) { engineRegistry_.jv880(idx).patch().level = 1.0f; engineRegistry_.jv880(idx).patch().pan = 0.0f; }
     return true;
 }
 
-std::size_t McxEngine::collectUnusedWaves() noexcept
-{
-    return engineRegistry_.collectUnusedWaves();
-}
-
-McxTrackModRouter& McxEngine::modRouter(int partIndex) noexcept
-{
-    return modRouters_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))];
-}
-
-const McxTrackModRouter& McxEngine::modRouter(int partIndex) const noexcept
-{
-    return modRouters_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))];
-}
+std::size_t McxEngine::collectUnusedWaves() noexcept { return engineRegistry_.collectUnusedWaves(); }
+McxTrackModRouter& McxEngine::modRouter(int partIndex) noexcept { return modRouters_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))]; }
+const McxTrackModRouter& McxEngine::modRouter(int partIndex) const noexcept { return modRouters_[static_cast<std::size_t>(std::clamp(partIndex, 0, kNumParts - 1))]; }
 
 void McxEngine::cacheSemanticDestIds(int partIdx) noexcept
 {
@@ -267,8 +253,10 @@ void McxEngine::syncPartEngineControl(int partIdx) noexcept
         rompler.patch().level = 1.0f;
         rompler.patch().pan = 0.0f;
     }
+    else if (eng == &engineRegistry_.jv880(partIdx)) { auto& jv = engineRegistry_.jv880(partIdx); jv.patch().level = 1.0f; jv.patch().pan = 0.0f; }
 
-    eng->setTransportContext({ static_cast<double>(masterTempoBpm_), masterTuneSemitones_, p.pitchBendSemitones });
+    const float modWheel = std::clamp(p.semanticOffsets.vibratoDepth, 0.0f, 1.0f);
+    eng->setTransportContext({ static_cast<double>(masterTempoBpm_), masterTuneSemitones_, p.pitchBendSemitones, modWheel, 0.0f });
 
     const auto& o = p.semanticOffsets;
     auto& prev = lastSemanticOffsets_[uIdx];

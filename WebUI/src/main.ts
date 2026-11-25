@@ -11,6 +11,8 @@ import '@abdsynths/midi-keyb/keyboard.css';
 import '@abdsynths/shared/styles/components/step-button-strip.css';
 import '@abdsynths/shared/styles/components/mpc-pad-matrix.css';
 import '@abdsynths/shared/styles/components/multi-bus-fx-rack.css';
+import '@abdsynths/shared/styles/components/fx-picker.css';
+import '@abdsynths/shared/styles/components/fx-faceplates.css';
 import '@abdsynths/shared/styles/components/global-lfo-modal.css';
 import '@abdsynths/shared/styles/components/compact-transport-bar.css';
 import '@abdsynths/shared/styles/components/compact-stereo-vu.css';
@@ -30,8 +32,13 @@ import { McxAppState } from './app/McxAppState'; import { bindGlobalShortcuts, b
 import { buildProbeDestinations, createBankDrawer, createProbeModal, createStudioModals, openSavePresetModal } from './app/McxModalsFactory';
 import { createMidiModals } from './app/McxMidiModalsFactory';
 import { hydrateSessionState, parseLibraryCatalogJson } from './app/McxSessionHydrator';
+import { bootstrapSoundBanks } from './app/McxSoundBankBootstrap';
 import { mountMultiEngineUi } from './app/McxMultiEngineWiring'; import { mountSongAndScenesUi } from './app/McxSongWiring';
 import { mountRackAndMasterUi } from './app/McxRackAndMasterWiring';
+import { McxExportModal } from './ui/McxExportModal';
+import { mountMidiLearnWiring } from './app/McxMidiLearnWiring';
+import { mountHistoryWiring } from './app/McxHistoryWiring';
+import { applyStarterTemplate, openProjectFromFilePicker, resetToEmptyProject, saveProjectToFile } from './app/McxProjectManager';
 
 const bridge = new McxHostBridge(), themeMgr = new ThemeManager(), state = new McxAppState(bridge);
 
@@ -41,39 +48,56 @@ function initApp(): void {
   const probeModal = createProbeModal(bridge, state);
   const settingsModal = new McxSettingsModal({
     bridge, onSettingsApplied: (s) => { state.globalSettings = s; state.updateLcdLine1(0); },
-    onGlobalTransposeChange: (st) => state.refs.globalDrawer?.setGlobalTranspose(st),
+    onGlobalTransposeChange: (st) => state.refs.liveTranspose?.setGlobalTranspose(st), onScaleChange: (r, ty) => state.refs.liveTranspose?.setScale(r, ty),
   });
   const bankDrawer = createBankDrawer(bridge, state), modals = createStudioModals(bridge, state), midiModals = createMidiModals(bridge, state);
   const globalDrawer = new McxGlobalDrawer({
     hostEl: document.body, bridge, setLcdLine2: state.setLcdLine2,
     onClose: () => byId('mcx-global-btn')?.classList.remove('is-active'), onOpenFxRack: () => modals.fxRackModal.toggle(),
-    onMasterVolumeChange: (v) => state.refs.masterPanel?.setVolume(v), onGlobalTransposeChange: (st) => settingsModal.syncGlobalTranspose(st),
+    onMasterVolumeChange: (v) => state.refs.masterPanel?.setVolume(v), onGlobalTransposeChange: (st) => state.refs.liveTranspose?.setGlobalTranspose(st),
   });
   const fileInput = byId('bank-file-input') as HTMLInputElement | null, navHost = byId('mcx-navbar-host');
   const onPanic = () => { bridge.allNotesOff(); state.setLcdLine2(t('mcx.allNotesOff')); };
   const onToggleProbe = () => probeModal?.toggle({ theme: document.documentElement.getAttribute('data-theme'), locale: getLocale(), sampleRate: bridge.getSampleRate(), frequencyHz: state.globalSettings.masterTuneHz || 440 });
-  state.refs = { ...state.refs, bankDrawer, settingsModal, globalDrawer, ...modals, ...midiModals, onPanic, onToggleProbe, onSavePreset: (multi) => openSavePresetModal(bridge, state, multi ? 'multi' : 'part'), onOpenBankFile: () => fileInput?.click() };
+  const exportModal = new McxExportModal({ bridge, state, getSongState: () => state.refs.getSongState?.() ?? null });
+  const midiLearn = mountMidiLearnWiring(bridge, state);
+  const onOpenExport = () => exportModal.open();
+  const onOpenMidiLearn = () => midiLearn.openDrawer(-1);
+  let history: ReturnType<typeof mountHistoryWiring> | null = null;
+  const onUndo = () => { history?.undo(); }, onRedo = () => { history?.redo(); };
+  const onToggleCompare = () => { history?.toggleCompare(); }, onCaptureCompare = () => { history?.captureBaseline(); };
+  state.refs = {
+    ...state.refs, bankDrawer, settingsModal, globalDrawer, ...modals, ...midiModals,
+    onPanic, onToggleProbe, onOpenExport, onOpenMidiLearn, onUndo, onRedo, onToggleCompare, onCaptureCompare,
+    onNewProject: () => resetToEmptyProject(state, bridge), onSaveProject: () => saveProjectToFile(state, 'MCX0X_Project'),
+    onOpenProject: () => openProjectFromFilePicker(state, bridge), onSavePreset: (multi) => openSavePresetModal(bridge, state, multi ? 'multi' : 'part'),
+    onOpenBankFile: () => fileInput?.click(),
+  };
   byId('mcx-solo-clear-btn')?.addEventListener('click', () => state.clearAllSolos());
   byId('mcx-unpin-bank-btn')?.addEventListener('click', () => state.togglePinActiveBank());
   byId('mcx-rename-bank-btn')?.addEventListener('click', () => state.openRenameBankDialog(state.bankLayout.activeBank));
   const navbar = navHost ? new McxNavbar(navHost, {
-    themeMgr,
+    themeMgr, onNewProject: () => resetToEmptyProject(state, bridge),
+    onNewFromTemplate: (tpl) => applyStarterTemplate(tpl, state, bridge),
+    onSaveProject: () => saveProjectToFile(state, 'MCX0X_Project'),
+    onUndo, onRedo, onToggleCompare, onCaptureCompare,
+    onSaveProjectAs: () => {
+      const name = window.prompt(getLocale() === 'es' ? 'Nombre del proyecto:' : 'Project name:', 'My_Track');
+      if (name) saveProjectToFile(state, name.trim());
+    },
+    onOpenProject: () => openProjectFromFilePicker(state, bridge),
     onConfigureFolder: () => (bridge.isNative ? bridge.chooseWorkingDir() : settingsModal.open()),
-    onOpenSettings: () => settingsModal.toggle(),
-    onOpenBankManager: () => bankDrawer.toggle(state.focusedPart),
-    onSavePartPreset: () => openSavePresetModal(bridge, state, 'part'),
-    onSaveMultiPreset: () => openSavePresetModal(bridge, state, 'multi'),
+    onOpenSettings: () => settingsModal.toggle(), onOpenBankManager: () => bankDrawer.toggle(state.focusedPart),
+    onSavePartPreset: () => openSavePresetModal(bridge, state, 'part'), onSaveMultiPreset: () => openSavePresetModal(bridge, state, 'multi'),
     onLoadBank: () => fileInput?.click(),
     onFactoryReset: () => { state.resetToFactoryLayout(); bridge.resetToFactory(); bridge.requestPartEngineState(state.focusedPart); bridge.requestPartPresets(state.focusedPart); state.setLcdLine2(t('mcx.factoryReset')); },
-    onPanic,
-    onEnableAudio: () => { void bridge.enableAudio(); },
-    onToggleProbe,
+    onPanic, onEnableAudio: () => { void bridge.enableAudio(); }, onToggleProbe, onOpenExport, onOpenMidiLearn,
     onOpenFxRack: () => modals.fxRackModal.toggle(), onOpenGlobalLfo: () => modals.globalLfoModal.toggle(),
     onOpenPianoRoll: () => { state.syncPianoRollForPart(state.focusedPart); modals.pianoRollModal.toggle(); },
     onOpenGroove: () => modals.grooveModal.open(-1), onOpenSong: () => state.refs.toggleSongDrawer?.(),
   }) : null;
   const dropZone = byId('mcx-workspace') || document.body;
-  if (fileInput) wireBankDropZone(dropZone, fileInput, bridge, state.setLcdLine2);
+  if (fileInput) wireBankDropZone(dropZone, fileInput, bridge, state.setLcdLine2, (items) => bankDrawer.setLibraryItems(items));
   const scopeCanvas = byId('mcx-scope-canvas') as HTMLCanvasElement | null;
   const scopeView = scopeCanvas ? new McxScopeCanvas(scopeCanvas) : null;
 
@@ -86,17 +110,14 @@ function initApp(): void {
       onClose: () => state.refreshPartList(), onChangePartChannel: (idx, ch) => panelCbs.onChangePartChannel(idx, ch),
       onToggleFollowTranspose: (idx) => panelCbs.onToggleFollowTranspose(idx), onToggleMute: (idx) => panelCbs.onToggleMute(idx),
       onToggleSolo: (idx) => panelCbs.onToggleSolo(idx), onRouteModeChange: () => state.refreshPartList(),
-      onOpenRouteModal: (idx) => state.refs.routeModal?.open(idx),
-      onOpenPianoRoll: (idx) => panelCbs.onOpenPianoRollForPart?.(idx),
-      onOpenGroove: (idx) => modals.grooveModal.open(idx),
-      onOpenSynth: (idx) => state.refs.synthModal?.open(idx),
+      onOpenRouteModal: (idx) => state.refs.routeModal?.open(idx), onOpenPianoRoll: (idx) => panelCbs.onOpenPianoRollForPart?.(idx),
+      onOpenGroove: (idx) => modals.grooveModal.open(idx), onOpenSynth: (idx) => state.refs.synthModal?.open(idx),
       onOpenArp: (idx) => midiModals.arpModal.toggle(idx), onOpenPads: (idx) => midiModals.padModal.toggle(idx),
       onPartChanged: () => state.notifyPartMetadataChanged(state.focusedPart),
     });
   }
 
   mountRackAndMasterUi(bridge, state, modals, globalDrawer);
-
   mountMultiEngineUi(bridge, state, themeMgr);
   mountSongAndScenesUi(bridge, state);
   if (!bridge.isNative) {
@@ -119,13 +140,10 @@ function initApp(): void {
   const railHost = byId('mcx-bank-rail');
   if (railHost) {
     state.refs.bankRail = new McxBankRail(railHost, {
-      onSelectBank: (bankIdx) => state.selectBank(bankIdx),
-      onAddBank: () => state.addNewBank(),
+      onSelectBank: (bankIdx) => state.selectBank(bankIdx), onAddBank: () => state.addNewBank(),
       onDropPartOnBank: (fromBank, fromSlot, targetBank) => state.movePartSlot(fromBank, fromSlot, targetBank, -1),
-      onToggleMuteBank: (bankIdx) => state.toggleLiveMuteBank(bankIdx),
-      onToggleSoloBank: (bankIdx) => state.toggleLiveSoloBank(bankIdx),
-      onClearAllSolos: () => state.clearAllSolos(),
-      onClearAllBankMutes: () => state.clearAllBankMutes(),
+      onToggleMuteBank: (bankIdx) => state.toggleLiveMuteBank(bankIdx), onToggleSoloBank: (bankIdx) => state.toggleLiveSoloBank(bankIdx),
+      onClearAllSolos: () => state.clearAllSolos(), onClearAllBankMutes: () => state.clearAllBankMutes(),
       onRequestRenameBank: (bankIdx) => state.openRenameBankDialog(bankIdx),
     });
   }
@@ -143,33 +161,31 @@ function initApp(): void {
     });
   }
 
-  themeMgr.onChange((_f, _sc, themeId) => { probeModal?.setTheme(themeId); settingsModal.syncTheme(); scopeView?.draw(); navbar?.sync(); });
+  themeMgr.onChange((_f, _sc, themeId) => {
+    probeModal?.setTheme(themeId); settingsModal.syncTheme(); scopeView?.draw();
+    navbar?.sync(); state.refs.routeModal?.syncTheme(); state.refs.synthModal?.syncTheme();
+  });
+  bridge.onPartPatternState((part, json) => state.loadRecordedPatternFromHost(part, json));
   bridge.onSessionState((dto) => hydrateSessionState(state, dto));
   bridge.onLibraryCatalog((json) => bankDrawer.setLibraryItems(parseLibraryCatalogJson(json)));
   bridge.onSystemSettings((s) => {
     state.globalSettings = s;
     if (s.themeFamily) themeMgr.setFamily(s.themeFamily as ThemeFamilyKey);
     settingsModal.syncFromHost(s);
-    if (s.standaloneBpm) { state.refs.masterPanel?.setBpm(s.standaloneBpm); modals.fxRackModal.setBpm(s.standaloneBpm); modals.globalLfoModal.setBpm(s.standaloneBpm); }
+    if (s.standaloneBpm) { state.refs.masterPanel?.setBpm(s.standaloneBpm); modals.fxRackModal.setBpm(s.standaloneBpm); modals.globalLfoModal.setBpm(s.standaloneBpm); midiModals.padModal.setBpm(s.standaloneBpm); }
     state.updateLcdLine1(0);
   });
   let lastMidiDevicesKey = '';
   bridge.onMidiDevices((dto) => {
-    state.midiDevices = dto;
-    settingsModal.setMidiDevices(dto);
-    state.refs.routeModal?.setMidiDevices(dto);
+    state.midiDevices = dto; settingsModal.setMidiDevices(dto); state.refs.routeModal?.setMidiDevices(dto);
     const nextKey = JSON.stringify(dto);
-    if (nextKey !== lastMidiDevicesKey) {
-      lastMidiDevicesKey = nextKey;
-      state.refreshPartList();
-    }
+    if (nextKey !== lastMidiDevicesKey) { lastMidiDevicesKey = nextKey; state.refreshPartList(); }
   });
   bridge.onAudioStatus((status, detail) => {
     navbar?.setAudioStatus(status, detail);
     if (status === 'ready') {
-      probeModal?.setSampleRate(bridge.getSampleRate());
-      bridge.refreshMidiDevices();
-      if (!bridge.isNative) state.syncBankLayoutToHost();
+      probeModal?.setSampleRate(bridge.getSampleRate()); bridge.refreshMidiDevices();
+      if (!bridge.isNative) { state.syncBankLayoutToHost(); const sc = bridge.loadLocalSidechainFallback(); if (sc) bridge.setSidechainConfig(sc); }
     }
     if (status === 'error' && detail) state.setLcdLine2(`WASM ERR: ${detail}`);
   });
@@ -186,7 +202,11 @@ function initApp(): void {
   });
   themeMgr.apply(); if (!bridge.isNative) bridge.updateSystemSettings(state.globalSettings); state.uploadInitialPatterns();
   bindGlobalShortcuts(state); mountKeyboardDock(bridge, state); bindTelemetry(bridge, state, scopeView);
+  history = mountHistoryWiring({ state, bridge, onStatusChange: (st) => navbar?.setHistoryStatus(st) });
   bridge.refreshMidiDevices();
+
+  void bootstrapSoundBanks(bridge, state, bankDrawer);
+
   bridge.notifyReady(); document.body.classList.add('is-ready');
 }
 

@@ -94,6 +94,10 @@ target_compile_features(ABDMCX0X_Core PUBLIC cxx_std_20)
 target_link_libraries(ABDMCX0X_Core PUBLIC
     ABDShared::SynthEngines
     ABDShared::StructuredRompler
+    ABDShared::Mcs48Synth
+    ABDShared::LinearArithmetic
+    ABDShared::Tb303Synth
+    ABDShared::EmaxSynth
     ABDShared::SynthCore
     ABDShared::DspCore
     ABDShared::DspEffects
@@ -160,6 +164,10 @@ add_test(NAME McxPhase12SixtyFourPartsTests COMMAND McxPhase12SixtyFourPartsTest
 
 add_executable(McxAudioRenderDemo Tests/McxAudioRenderDemo.cpp)
 target_link_libraries(McxAudioRenderDemo PRIVATE ABDMCX0X_Core)
+
+add_executable(McxSc55BankRenderDemo Tests/McxSc55BankRenderDemo.cpp)
+target_link_libraries(McxSc55BankRenderDemo PRIVATE ABDMCX0X_Core)
+add_test(NAME McxSc55BankRenderDemo COMMAND McxSc55BankRenderDemo "${CMAKE_CURRENT_SOURCE_DIR}/sc55_quick_test.abdbank")
 
 # ==============================================================================
 # 4. Full JUCE 9 Standalone + VST3 Plugin Targets (Phase 3C)

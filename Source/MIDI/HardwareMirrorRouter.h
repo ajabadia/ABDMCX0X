@@ -49,6 +49,16 @@ public:
                                     std::int32_t sampleOffset = 0,
                                     std::uint8_t portIndex = 0) noexcept;
 
+    static McxMidiOutMessage makeRolandDt1SysEx(std::uint8_t deviceId,
+                                               const std::uint8_t* modelId,
+                                               std::size_t modelIdLen,
+                                               const std::uint8_t* addr,
+                                               std::size_t addrLen,
+                                               const std::uint8_t* data,
+                                               std::size_t dataLen,
+                                               std::int32_t sampleOffset = 0,
+                                               std::uint8_t portIndex = 0) noexcept;
+
     void clear() noexcept { count_ = 0; }
     [[nodiscard]] std::size_t size() const noexcept { return count_; }
     [[nodiscard]] const McxMidiOutMessage& at(std::size_t idx) const noexcept { return buffer_[idx]; }

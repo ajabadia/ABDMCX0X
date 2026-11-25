@@ -1,6 +1,7 @@
 #include "../Source/DSP/FX/McxRackChassis.h"
 #include "../Source/DSP/FX/McxOutputAndFx.h"
 #include "../Source/DSP/Core/McxEngine.h"
+#include "McxRackExtTests.h"
 
 #include <cassert>
 #include <cmath>
@@ -241,6 +242,18 @@ void testT12_NewEnginesAndMasterGain()
         chassis.processSlot(0, inL.data(), inR.data(), outL.data(), outR.data(), 64);
         assert(std::abs(outL[16] - inL[16]) > 1e-4f);
     }
+    assert(abdmcx::normalizeRackEngineType(61) == abdmcx::McxRackEngineType::RolandBossReverb && abdmcx::normalizeRackEngineType(64) == abdmcx::McxRackEngineType::RolandToneEq);
+    for (auto eng : { abdmcx::McxRackEngineType::RolandBossReverb, abdmcx::McxRackEngineType::RolandMt32Reverb, abdmcx::McxRackEngineType::RolandMultiChorus, abdmcx::McxRackEngineType::RolandToneEq }) {
+        chassis.setSlotEngine(0, eng);
+        chassis.setSlotParamByKey(0, "p1", 0.9f);
+        chassis.setSlotParamByKey(0, "highGain", 0.85f);
+        float maxDiff = 0.0f, latePeak = 0.0f;
+        for (int b = 0; b < 64; ++b) {
+            chassis.processSlot(0, inL.data(), inR.data(), outL.data(), outR.data(), 64);
+            for (int i = 0; i < 64; ++i) { const auto u = static_cast<std::size_t>(i); if (std::abs(outL[u] - inL[u]) > maxDiff) maxDiff = std::abs(outL[u] - inL[u]); if (b >= 48 && std::abs(outL[u]) > latePeak) latePeak = std::abs(outL[u]); }
+        }
+        assert(std::isfinite(outL[16]) && std::isfinite(outR[16]) && maxDiff > 1e-4f && latePeak > 1e-4f);
+    }
 
     abdmcx::McxOutputAndFx outFx;
     outFx.prepare(44100.0);
@@ -278,6 +291,7 @@ int main()
     testT7_TelemetryAndClipHold(); testT8_JsonRoundtrip(); testT9_TrackInsertRouting();
     testT10_SendSlotRouting(); testT11_SlotChaining();
     testT12_NewEnginesAndMasterGain(); testT13_MoveRemoveRemapAndInsert();
-    std::cout << "=== All Phase 10 Studio Rack Tests PASSED (13/13) ===\n";
+    abdmcx::test_ext::runExtendedRackTests();
+    std::cout << "=== All Phase 10 Studio Rack Tests PASSED (17/17) ===\n";
     return 0;
 }

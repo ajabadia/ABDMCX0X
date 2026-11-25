@@ -1,31 +1,25 @@
 # INTEGRACION_TRANSPORTE — Guía de Integración en ABDMCX0X
 
 > **Motor Maestro C++20:** `Source/Sequencer/McxPatternSequencer.h`, `Source/MIDI/McxMidiClockEmitter.h`, `Source/Plugin/McxHostTransportSync.h`  
-> **Contenedor UI y Telemetría:** `ABDMCX0X/WebUI/src/ui/McxMasterPanel.ts`, `McxStepStrip.ts`, `src/app/McxAppState.ts`, `src/app/McxInputAndTelemetry.ts`  
+> **Contenedor UI y Telemetría:** `ABDMCX0X/WebUI/src/ui/McxNavbar.ts`, `McxMasterPanel.ts`, `McxStepStrip.ts`, `src/app/McxAppState.ts`, `src/app/McxInputAndTelemetry.ts`  
 > **Componente Canónico:** `@abdsynths/shared/components` (`CompactTransportBar` + `MetronomeClicker`)  
-> **Estilos:** `@abdsynths/shared/styles/components/compact-transport-bar.css`
+> **Estilos:** `@abdsynths/shared/styles/components/compact-transport-bar.css` + `compact-transport-navbar.css`
 
 ---
 
 ## 1. Arquitectura en ABDMCX0X
 
-En `ABDMCX0X`, la barra de transporte se ubica en la base de la columna derecha del mezclador (`McxMasterPanel.ts`), integrándose armónicamente bajo el potenciómetro maestro de volumen y el vúmetro estéreo.
+En `ABDMCX0X`, la barra de transporte (`CompactTransportBar`, `mode: 'navbar'`) se monta centrada en la **Navbar superior** (`McxNavbar.ts` → `.mcx-navbar-transport`), lo que libera todo el alto vertical del lateral derecho para mostrar lado a lado el **Armario Rack 19''** (`#mcx-rack-column`) y el panel **Master** (`#mcx-master-panel`) como dos columnas colapsables independientemente.
 
 ```
-┌─────────────────────────────────┐
-│          MASTER PANEL           │
-│  [ FX RACK ]   [ G-LFO ]  [LIM] │
-│                                 │
-│        [ STEREO VU METER ]      │
-│                                 │
-│         [ MASTER VOLUME ]       │
-│                                 │
-├─────────────────────────────────┤
-│     MCX TRANSPORT BAR (DRY)     │
-│  [ ▶ Play ] [ ■ Stop ] [ ● Rec ]│
-│  [ LOOP ]            [ METRO ]  │
-│  [ - ]  [ 120.0 BPM ]  [ + ]    │
-└─────────────────────────────────┘
+┌────────────────────────────── NAVBAR (.nav-center) ───────────────────────────────┐
+│  [ RTZ | ◀◀ | ▶ | ■ | ▶▶ | ● ] [ LOOP ] [ METRO ] [ 120.0 BPM ] [ TC ] [ SWG ]    │
+└───────────────────────────────────────────────────────────────────────────────────┘
+┌─────────────── RACK 19'' (colapsable) ───────────────┐┌── MASTER (colapsable) ──┐
+│  [ Bahías 1..8 FX + Patchbay ]                        ││  [ GLOBAL | G-LFO | LIM ]│
+│                                                       ││  [ STEREO VU METER ]    │
+│                                                       ││  [ MASTER VOLUME ]      │
+└───────────────────────────────────────────────────────┘└─────────────────────────┘
 ```
 
 ---

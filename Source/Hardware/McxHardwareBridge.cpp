@@ -26,12 +26,13 @@ void McxHardwareBridge::sendCc(std::uint8_t ch1to16, std::uint8_t cc, std::uint8
     outQueue_.push(HardwareMirrorRouter::makeCc(ch1to16, cc, val, 0, portIdx));
 }
 
-void McxHardwareBridge::sendNrpn(std::uint8_t ch1to16, std::uint8_t msb, std::uint8_t lsb, std::uint8_t val, std::uint8_t portIdx) noexcept
+void McxHardwareBridge::sendNrpn(std::uint8_t ch1to16, std::uint8_t msb, std::uint8_t lsb, std::uint8_t val, std::uint8_t portIdx, std::int16_t lsbVal) noexcept
 {
-    // Strict Roland ordering: CC99 (MSB) -> CC98 (LSB) -> CC6 (Data Entry MSB)
+    // Strict Roland ordering: CC99 (MSB) -> CC98 (LSB) -> CC6 (Data Entry MSB) [-> CC38 (LSB)]
     sendCc(ch1to16, 99, msb, portIdx);
     sendCc(ch1to16, 98, lsb, portIdx);
     sendCc(ch1to16, 6, val, portIdx);
+    if (lsbVal >= 0) sendCc(ch1to16, 38, static_cast<std::uint8_t>(lsbVal & 0x7Fu), portIdx);
 }
 
 void McxHardwareBridge::dispatchBinding(std::uint8_t partIdx,
@@ -46,90 +47,28 @@ void McxHardwareBridge::dispatchBinding(std::uint8_t partIdx,
         return;
     }
 
+    const bool isNrpn14 = (binding.method == abd::synth::ControlWireMethod::Nrpn14Bit);
     const float clamped = std::clamp(normalizedVal, 0.0f, 1.0f);
     const float scaled = binding.wireMin + clamped * (binding.wireMax - binding.wireMin);
-    const float wireNorm01 = std::clamp(scaled / 127.0f, 0.0f, 1.0f);
+    const float wireNorm01 = std::clamp(scaled / ((isNrpn14 && binding.wireMax > 127.0f) ? 16383.0f : 127.0f), 0.0f, 1.0f);
     const std::size_t slotId = (static_cast<std::size_t>(partIdx) * 13u
         + static_cast<std::size_t>(binding.controlNumber) * 3u
         + static_cast<std::size_t>(binding.subNumber)) % McxMidiModDecimator::kMaxSlots;
 
     if (binding.method == abd::synth::ControlWireMethod::MidiCc)
         (void)modDecimator_.submitCc(outQueue_, slotId, portIdx, ch, binding.controlNumber, wireNorm01);
-    else if (binding.method == abd::synth::ControlWireMethod::Nrpn7Bit ||
-             binding.method == abd::synth::ControlWireMethod::Nrpn14Bit)
-        (void)modDecimator_.submitNrpn(outQueue_, slotId, portIdx, ch, binding.controlNumber, binding.subNumber, wireNorm01);
-}
-
-void McxHardwareBridge::applyInternalSemanticParam(std::uint8_t partIdx,
-                                                   std::uint64_t roleHash,
-                                                   float normalizedVal) noexcept
-{
-    using namespace abd::synth::role;
-    if (partIdx >= McxEngine::kNumParts) return;
-
-    auto& p = engine_.part(partIdx);
-    const float n = std::clamp(normalizedVal, 0.0f, 1.0f);
-
-    if (roleHash == kPartVolume)
-        p.level = n;
-    else if (roleHash == kPartPan)
-        p.pan = std::clamp(n * 2.0f - 1.0f, -1.0f, 1.0f);
-    else if (roleHash == kPartReverbSend)
-        p.reverbSend = n;
-    else if (roleHash == kPartChorusSend)
-        p.chorusSend = n;
-    else if (roleHash == kFilterCutoff)
+    else if (binding.method == abd::synth::ControlWireMethod::Nrpn7Bit || isNrpn14)
+        (void)modDecimator_.submitNrpn(outQueue_, slotId, portIdx, ch, binding.controlNumber, binding.subNumber, wireNorm01, 0, isNrpn14);
+    else if (binding.method == abd::synth::ControlWireMethod::SysEx && binding.sysexAddrLen > 0)
     {
-        const float hz = 20.0f * std::pow(1000.0f, n);
-        for (auto& partial : p.partials) partial.cutoffHz = hz;
+        const auto& id = getPartProfile(partIdx).identity;
+        const std::uint8_t defModel = 0x14;
+        const auto* modPtr = id.modelIdBytes.empty() ? &defModel : id.modelIdBytes.data();
+        const std::size_t modLen = id.modelIdBytes.empty() ? 1u : id.modelIdBytes.size();
+        const auto val7 = static_cast<std::uint8_t>(std::clamp<int>(static_cast<int>(std::lround(scaled)), 0, 127));
+        const auto msg = HardwareMirrorRouter::makeRolandDt1SysEx(id.defaultDeviceId, modPtr, modLen, binding.sysexAddrBytes.data(), binding.sysexAddrLen, &val7, 1u, 0, portIdx);
+        if (msg.length > 0) (void)outQueue_.push(msg);
     }
-    else if (roleHash == kFilterResonance)
-    {
-        for (auto& partial : p.partials) partial.resonance = n;
-    }
-    else if (roleHash == kAmpEnvAttack)
-    {
-        const float ms = 1.0f + n * 2000.0f;
-        for (auto& partial : p.partials) partial.ampEnv.t1Ms = ms;
-    }
-    else if (roleHash == kAmpEnvDecay)
-    {
-        const float ms = 5.0f + n * 3000.0f;
-        for (auto& partial : p.partials) partial.ampEnv.t2Ms = ms;
-    }
-    else if (roleHash == kAmpEnvRelease)
-    {
-        const float ms = 5.0f + n * 4000.0f;
-        for (auto& partial : p.partials) partial.ampEnv.t4Ms = ms;
-    }
-    else if (roleHash == kVectorJoystickX)
-        p.vectorX = std::clamp(n * 2.0f - 1.0f, -1.0f, 1.0f);
-    else if (roleHash == kVectorJoystickY)
-        p.vectorY = std::clamp(n * 2.0f - 1.0f, -1.0f, 1.0f);
-}
-
-void McxHardwareBridge::applyInternalDrumParam(std::uint8_t partIdx,
-                                               std::uint8_t slotIdx,
-                                               std::uint64_t roleHash,
-                                               float normalizedVal,
-                                               int rawMidiByte) noexcept
-{
-    using namespace abd::synth::role;
-    if (partIdx >= McxEngine::kNumParts || slotIdx >= 128) return;
-
-    auto& slot = engine_.part(partIdx).drumSlots[slotIdx];
-    const float n = std::clamp(normalizedVal, 0.0f, 1.0f);
-
-    if (roleHash == kDrumKeyPitch)
-        slot.pitchKeyTrack = (rawMidiByte >= 0) ? (static_cast<float>(rawMidiByte - 64) * 0.5f) : ((n - 0.5f) * 24.0f);
-    else if (roleHash == kDrumKeyLevel)
-        slot.level = n;
-    else if (roleHash == kDrumKeyPan)
-        slot.pan = (rawMidiByte >= 0) ? (static_cast<float>(rawMidiByte - 64) / 64.0f) : std::clamp((n - 0.5f) * 2.0f, -1.0f, 1.0f);
-    else if (roleHash == kDrumKeyReverbSend)
-        slot.reverbSend = n;
-    else if (roleHash == kDrumKeyChorusSend)
-        slot.chorusSend = n;
 }
 
 void McxHardwareBridge::routeNoteOn(std::uint8_t partIdx, std::uint8_t note, float velocity, std::int32_t sampleOffset) noexcept
@@ -245,6 +184,7 @@ void McxHardwareBridge::routeDrumSlotParam(std::uint8_t partIdx,
         case 2: drumRole = kDrumKeyPan; break;
         case 3: drumRole = kDrumKeyReverbSend; break;
         case 4: drumRole = kDrumKeyChorusSend; break;
+        case 5: drumRole = kDrumKeyDelaySend; break;
         default: break;
     }
     routeDrumSemanticParam(partIdx, slotIdx, drumRole, normalizedValue);

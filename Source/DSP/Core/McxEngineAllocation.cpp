@@ -123,6 +123,7 @@ void McxEngine::routeMidiPortChannelNoteOn(int midiInPortIdx, int midiChannel1to
             && static_cast<int>(p.midiChannel) == ch && note >= p.keyLow && note <= p.keyHigh)
         {
             triggerPartNoteOn(i, note, velocity, sampleOffset);
+            recordLiveInputNoteOn(i, note, velocity);
         }
     }
 }
@@ -138,6 +139,7 @@ void McxEngine::routeMidiPortChannelNoteOff(int midiInPortIdx, int midiChannel1t
             && static_cast<int>(p.midiChannel) == ch && note >= p.keyLow && note <= p.keyHigh)
         {
             releasePartNoteOff(i, note, sampleOffset);
+            recordLiveInputNoteOff(i, note);
         }
     }
 }
@@ -274,41 +276,6 @@ bool McxEngine::getFxGate(int gateIdx) const noexcept
 float McxEngine::getFocusedLfoValue(int lfoIdx01) const noexcept
 {
     return (lfoIdx01 == 1) ? lfoValueBipolar_[1] : lfoValueBipolar_[0];
-}
-
-void McxEngine::advanceFocusedLfoTelemetry(int numSamples) noexcept
-{
-    if (numSamples <= 0 || sampleRate_ <= 100.0) return;
-    static constexpr float kSyncBeats[18] = {
-        128.0f, 64.0f, 32.0f, 16.0f, 8.0f, 4.0f, 3.0f, 2.0f, 1.5f,
-        1.0f, 0.75f, 0.5f, 1.0f / 3.0f, 0.375f, 0.25f, 1.0f / 6.0f, 0.125f, 0.0625f
-    };
-    const auto& fp = parts_[static_cast<std::size_t>(std::clamp(focusedPartIndex_, 0, kNumParts - 1))];
-    const float dt = static_cast<float>(numSamples) / static_cast<float>(sampleRate_);
-    const float bps = masterTempoBpm_ / 60.0f;
-
-    auto stepLfo = [&](int i, bool sync, std::uint8_t shape, float rate) {
-        const std::size_t u = static_cast<std::size_t>(i);
-        const float freqHz = sync
-            ? (bps / kSyncBeats[std::clamp(static_cast<int>(std::lround(rate)), 0, 17)])
-            : std::clamp(rate, 0.005f, 1280.0f);
-        float ph = lfoPhase01_[u] + freqHz * dt;
-        const bool wrapped = (ph >= 1.0f);
-        ph -= std::floor(ph);
-        lfoPhase01_[u] = ph;
-        if (shape == 0) lfoValueBipolar_[u] = std::sin(ph * 6.2831853f);
-        else if (shape == 1) lfoValueBipolar_[u] = 1.0f - 4.0f * std::abs(ph - 0.5f);
-        else if (shape == 2) lfoValueBipolar_[u] = (ph < 0.5f) ? 1.0f : -1.0f;
-        else if (shape == 3) lfoValueBipolar_[u] = ph * 2.0f - 1.0f;
-        else if (shape == 4) lfoValueBipolar_[u] = 1.0f - ph * 2.0f;
-        else if (shape == 7) lfoValueBipolar_[u] = (ph < 0.25f) ? 1.0f : -1.0f;
-        else if (wrapped || lfoValueBipolar_[u] == 0.0f) {
-            lfoRng_ = lfoRng_ * 1664525u + 1013904223u;
-            lfoValueBipolar_[u] = (static_cast<float>(lfoRng_ >> 16) / 32768.0f) - 1.0f;
-        }
-    };
-    stepLfo(0, fp.lfo1Sync, fp.lfo1Shape, fp.lfo1Rate);
-    stepLfo(1, fp.lfo2Sync, fp.lfo2Shape, fp.lfo2Rate);
 }
 
 } // namespace abdmcx

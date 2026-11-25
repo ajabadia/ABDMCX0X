@@ -39,7 +39,7 @@ export const THEME_FAMILIES: readonly ThemeFamilyMeta[] = [
 
 export class ThemeManager {
   private family: ThemeFamilyKey = 'ms2000';
-  private onChangeCb: ((family: ThemeFamilyKey, scheme: ColorSchemeMode, themeId: string) => void) | null = null;
+  private listeners: Set<(family: ThemeFamilyKey, scheme: ColorSchemeMode, themeId: string) => void> = new Set();
 
   constructor() {
     try {
@@ -53,8 +53,9 @@ export class ThemeManager {
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => this.apply());
   }
 
-  public onChange(cb: (family: ThemeFamilyKey, scheme: ColorSchemeMode, themeId: string) => void): void {
-    this.onChangeCb = cb;
+  public onChange(cb: (family: ThemeFamilyKey, scheme: ColorSchemeMode, themeId: string) => void): () => void {
+    this.listeners.add(cb);
+    return () => { this.listeners.delete(cb); };
   }
 
   public getFamily(): ThemeFamilyKey { return this.family; }
@@ -107,6 +108,8 @@ export class ThemeManager {
     const themeId = scheme === 'dark' ? fm.darkTheme : fm.lightTheme;
     document.documentElement.setAttribute('data-theme', themeId);
     document.body.setAttribute('data-theme', themeId);
-    this.onChangeCb?.(this.family, scheme, themeId);
+    this.listeners.forEach((listener) => {
+      try { listener(this.family, scheme, themeId); } catch (e) { console.error('Theme listener error:', e); }
+    });
   }
 }

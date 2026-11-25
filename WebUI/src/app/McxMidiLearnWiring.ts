@@ -8,9 +8,10 @@ import {
   MIDI_SOURCE_TYPES, attachMidiLearnUI, createMidiLearnDrawerContent, createMidiLearnStore,
 } from '@abdsynths/shared/components/midiLearn.js';
 import { bringToFront } from '@abdsynths/shared/diagnostic-probe/DiagnosticProbeI18n.js';
-import type { McxHostBridge, McxParamKey } from '../bridge/McxHostBridge';
+import type { McxHostBridge, McxMidiDevicesDto, McxParamKey } from '../bridge/McxHostBridge';
 import { webMidiService } from '../midi/McxWebMidiService';
 import type { McxAppState } from './McxAppState';
+import { createMidiLearnAutoDetector } from './McxMidiLearnAutoDetect';
 
 interface LearnParamDef { index: number; key: McxParamKey | 'masterVolume'; name: string; group: string; min: number; max: number; }
 
@@ -40,6 +41,7 @@ const LEARNABLE_PARAMS: LearnParamDef[] = [
 
 export function mountMidiLearnWiring(bridge: McxHostBridge, state: McxAppState) {
   let dialogEl: HTMLDialogElement | null = null;
+  const nrpnState = new Map<string, { msb: number; lsb: number }>();
   const byIdx = new Map(LEARNABLE_PARAMS.map((p) => [p.index, p]));
   const byKey = new Map<string, LearnParamDef>(LEARNABLE_PARAMS.map((p) => [p.key, p]));
 
@@ -62,6 +64,32 @@ export function mountMidiLearnWiring(bridge: McxHostBridge, state: McxAppState) 
     },
   });
 
+  const detector = createMidiLearnAutoDetector({
+    store,
+    bridge,
+    onApplied: (prof, reason) => {
+      state.setLcdLine2(`MIDI LEARN: ${prof.displayName} (${reason})`);
+      if (dialogEl?.open) openDrawer(-1);
+    },
+    onCatalogChanged: () => { if (dialogEl?.open) openDrawer(-1); },
+  });
+  bridge.onMidiLearnProfiles((json) => detector.setCatalogJson(json));
+  bridge.onMidiLearnAutoDetect((ev) => detector.handleNativeAutoDetect(ev));
+
+  const renderProfileBar = (host: HTMLElement) => {
+    const bar = document.createElement('div'); bar.className = 'mcx-ml-profile-bar';
+    const profiles = detector.getProfiles();
+    const optsHtml = profiles.length > 0
+      ? profiles.map((p) => `<option value="${p.device}"${p.device === detector.getLastAppliedDevice() ? ' selected' : ''}>${p.displayName} (${p.mappingCount})</option>`).join('')
+      : '<option value="">No disk profiles</option>';
+    bar.innerHTML = `<span class="mcx-ml-profile-lbl">PROFILE</span><select class="mcx-ml-profile-sel" aria-label="MIDI Learn Hardware Profile">${optsHtml}</select><button type="button" class="mcx-ml-profile-btn" data-act="ml-load">Load</button><label class="mcx-ml-auto-chk"><input type="checkbox" data-act="ml-auto"${detector.isAutoEnabled() ? ' checked' : ''} />Auto</label><button type="button" class="mcx-ml-profile-btn" data-act="ml-rescan">Rescan</button>`;
+    const sel = bar.querySelector<HTMLSelectElement>('.mcx-ml-profile-sel');
+    bar.querySelector('[data-act="ml-load"]')?.addEventListener('click', () => { if (sel?.value) detector.applyByDeviceId(sel.value); });
+    bar.querySelector<HTMLInputElement>('[data-act="ml-auto"]')?.addEventListener('change', (e) => detector.setAutoEnabled((e.target as HTMLInputElement).checked));
+    bar.querySelector('[data-act="ml-rescan"]')?.addEventListener('click', () => { void detector.refreshProfiles(); });
+    host.appendChild(bar);
+  };
+
   const openDrawer = (focusParamIndex = -1) => {
     if (!dialogEl) {
       dialogEl = document.createElement('dialog');
@@ -70,6 +98,8 @@ export function mountMidiLearnWiring(bridge: McxHostBridge, state: McxAppState) 
       document.body.appendChild(dialogEl);
     }
     dialogEl.innerHTML = '';
+    if (detector.getProfiles().length === 0) void detector.refreshProfiles();
+    renderProfileBar(dialogEl);
     const content = createMidiLearnDrawerContent({
       store,
       parameters: LEARNABLE_PARAMS,
@@ -93,11 +123,19 @@ export function mountMidiLearnWiring(bridge: McxHostBridge, state: McxAppState) 
     onOpenDrawer: (focusIdx?: number) => openDrawer(focusIdx ?? -1),
   });
 
-  const unsubMidi = webMidiService.onMidiInput((_port, bytes) => {
+  const unsubMidi = webMidiService.onMidiInput((port, bytes) => {
     if (!bytes || bytes.length < 2) return;
+    if (bytes[0] === 0xF0) { detector.handleSysEx(bytes); return; }
     const status = bytes[0] ?? 0, hi = status & 0xF0, ch = (status & 0x0F) + 1;
     const d1 = (bytes[1] ?? 0) & 0x7F, d2 = (bytes[2] ?? 0) & 0x7F;
     if (hi === 0xB0 && bytes.length >= 3) {
+      const nKey = `${port}:${ch}`, nrpn = nrpnState.get(nKey) ?? { msb: -1, lsb: -1 };
+      if (d1 === 99) { nrpn.msb = d2; nrpnState.set(nKey, nrpn); return; }
+      if (d1 === 98) { nrpn.lsb = d2; nrpnState.set(nKey, nrpn); return; }
+      if (d1 === 6 && nrpn.msb >= 0 && nrpn.lsb >= 0) {
+        store.handleIncomingMidi({ sourceType: MIDI_SOURCE_TYPES.NRPN, channel: ch, number: (nrpn.msb << 7) | nrpn.lsb, rawValue: d2 });
+        return;
+      }
       store.handleIncomingMidi({ sourceType: MIDI_SOURCE_TYPES.CC, channel: ch, number: d1, rawValue: d2 });
     } else if (hi === 0xD0) {
       store.handleIncomingMidi({ sourceType: MIDI_SOURCE_TYPES.AFTERTOUCH, channel: ch, number: 0, rawValue: d1 });
@@ -107,9 +145,12 @@ export function mountMidiLearnWiring(bridge: McxHostBridge, state: McxAppState) 
     }
   });
 
+  if (!bridge.isNative) void detector.refreshProfiles();
   return {
     store,
+    detector,
     openDrawer,
+    onMidiDevices: (dto: McxMidiDevicesDto) => detector.handleMidiDevices(dto),
     refreshUi: () => ui.refresh(),
     destroy: () => { unsubMidi(); ui.destroy(); dialogEl?.remove(); },
   };

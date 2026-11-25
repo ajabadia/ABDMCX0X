@@ -16,6 +16,7 @@ export function createMixerCallbacks(state: McxAppState, bridge: McxHostBridge):
     getBankLayout: () => state.bankLayout,
     getMidiDevices: () => state.midiDevices,
     getEngineCatalog: () => state.refs.routeModal?.getEngineCatalog() ?? [],
+    getQueuedPartMutes: () => state.refs.getQueuedPartMutes?.() ?? new Set<number>(),
     onTogglePin: (partId) => state.togglePartPin(partId),
     onDeletePart: (bankIdx, slotIdx, forceUnpin) => state.requestDeletePart(bankIdx, slotIdx, forceUnpin),
     onMovePart: (fromBank, fromSlot, toBank, toSlot) => state.movePartSlot(fromBank, fromSlot, toBank, toSlot),
@@ -42,7 +43,7 @@ export function createMixerCallbacks(state: McxAppState, bridge: McxHostBridge):
       state.refreshPartList();
       state.setLcdLine2(`P${String(idx + 1).padStart(2, '0')} TRANSPOSE: ${next ? 'ON' : 'OFF'}`);
     },
-    onToggleMute: (idx) => state.togglePartMute(idx),
+    onToggleMute: (idx, immediate) => state.togglePartMute(idx, immediate),
     onToggleSolo: (idx) => state.togglePartSolo(idx),
     onOpenSynthForPart: (idx) => { state.focusPart(idx); state.refs.synthModal?.open(idx); },
     onOpenBankForPart: (idx) => { state.focusPart(idx); state.refs.bankDrawer?.open(idx); },

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "McxQuantizedMuteState.h"
+
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -97,6 +99,9 @@ public:
     [[nodiscard]] McxSongBlock getActiveSongBlock(int idx) const noexcept;
     void publishTelemetry() noexcept;
 
+    [[nodiscard]] McxQuantizedMuteState& quantizedMute() noexcept { return quantizedMute_; }
+    [[nodiscard]] const McxQuantizedMuteState& quantizedMute() const noexcept { return quantizedMute_; }
+
 private:
     struct SongBuffer
     {
@@ -133,6 +138,7 @@ private:
     std::atomic<std::uint32_t> pubSceneApplySeq_ { 0 };
     std::atomic<std::uint64_t> pubAppliedMuteMask_ { 0 };
     std::atomic<int> pubAppliedTranspose_ { 0 };
+    McxQuantizedMuteState quantizedMute_ {};
 };
 
 } // namespace abdmcx

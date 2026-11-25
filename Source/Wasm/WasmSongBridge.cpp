@@ -93,6 +93,35 @@ const char* getSongScenesStateJson()
     return sSongJson.c_str();
 }
 
+void setMuteQuantizeToBar(int enabled)
+{
+    abdmcx::wasm_internal::engine().setMuteQuantizeToBar(enabled != 0);
+}
+
+void togglePartMuteQuantized(int partIdx, int immediate)
+{
+    abdmcx::wasm_internal::engine().togglePartMuteQuantized(partIdx, immediate != 0);
+}
+
+void toggleBankMuteQuantized(int bankIdx, int immediate)
+{
+    abdmcx::wasm_internal::engine().toggleBankMuteQuantized(bankIdx, immediate != 0);
+}
+
+void getQuantizedMuteTelemetry(int* out8Ints)
+{
+    if (out8Ints == nullptr) return;
+    const auto qm = abdmcx::wasm_internal::engine().songAndScenes().quantizedMute().readTelemetry();
+    out8Ints[0] = qm.quantizeEnabled ? 1 : 0;
+    out8Ints[1] = static_cast<int>(qm.muteApplySeq);
+    out8Ints[2] = static_cast<int>(qm.appliedBankMuteMask);
+    out8Ints[3] = static_cast<int>(qm.queuedBankMuteMask);
+    out8Ints[4] = static_cast<int>((qm.queuedPartMuteMask >> 0) & 0xFFFFull);
+    out8Ints[5] = static_cast<int>((qm.queuedPartMuteMask >> 16) & 0xFFFFull);
+    out8Ints[6] = static_cast<int>((qm.queuedPartMuteMask >> 32) & 0xFFFFull);
+    out8Ints[7] = static_cast<int>((qm.queuedPartMuteMask >> 48) & 0xFFFFull);
+}
+
 void setTransportPlaying(int playing, int resetOnStop)
 {
     abdmcx::wasm_internal::engine().setSequencerPlaying(playing != 0, resetOnStop != 0);

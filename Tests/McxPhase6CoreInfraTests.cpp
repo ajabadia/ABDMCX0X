@@ -1,12 +1,14 @@
 #include "../Source/Core/McxBankManagerBridge.h"
 #include "../Source/Core/McxCommandQueue.h"
 #include "../Source/Core/McxParamRouter.h"
+#include "../Source/Core/McxPadLayerSelector.h"
 #include "../Source/DSP/Core/McxEngine.h"
 #include "../Source/Hardware/McxHardwareBridge.h"
 #include "../Source/MIDI/McxMidiModDecimator.h"
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <memory>
 #include <vector>
@@ -287,6 +289,38 @@ int main()
         float cutVal = 0.0f;
         hb.processInboundMidiBuffer(jvDt1, sizeof(jvDt1), false, 0);
         check(e.getPartEngineParamByKey(3, "p1.cutoffHz", cutVal) && cutVal > 1400.0f && cutVal < 1600.0f, "Inbound DT1 SysEx updates active JV-880");
+    }
+
+    // 8. McxPadLayerSelector: RT-safe velocity zones, round-robin and deterministic random.
+    {
+        auto mk = [](std::uint8_t lo, std::uint8_t hi, std::uint8_t slot, McxPadPlayMode mode) {
+            McxPadLayer l {}; l.velMin = lo; l.velMax = hi; l.sampleSlot = slot; l.playMode = mode; return l;
+        };
+        std::uint32_t rr = 0, rng = 12345;
+        McxPadLayerConfig zones {};
+        zones.layerCount = 2;
+        zones.layers[0] = mk(0, 63, 1, McxPadPlayMode::VelocityZone);
+        zones.layers[1] = mk(64, 127, 2, McxPadPlayMode::VelocityZone);
+        check(selectPadSampleSlot(zones, 63, rr, rng) == 1 && selectPadSampleSlot(zones, 64, rr, rng) == 2
+              && selectPadSampleSlot(zones, -5, rr, rng) == 1 && rr == 0 && rng == 12345,
+              "Pad layers: inclusive velocity zones clamp 0..127 and leave counters untouched");
+        McxPadLayerConfig empty {};
+        check(selectPadLayer(empty, 64, rr, rng) == kInvalidPadLayer, "Pad layers: empty config misses");
+        McxPadLayerConfig rrCfg {};
+        rrCfg.layerCount = 2;
+        rrCfg.layers[0] = mk(0, 127, 5, McxPadPlayMode::RoundRobin);
+        rrCfg.layers[1] = mk(0, 127, 6, McxPadPlayMode::RoundRobin);
+        check(selectPadLayer(rrCfg, 80, rr, rng) == 0 && selectPadLayer(rrCfg, 80, rr, rng) == 1
+              && selectPadLayer(rrCfg, 80, rr, rng) == 0 && rr == 3,
+              "Pad layers: round robin cycles matches deterministically");
+        McxPadLayerConfig randomCfg = rrCfg;
+        randomCfg.layers[0].playMode = McxPadPlayMode::Random;
+        randomCfg.layers[1].playMode = McxPadPlayMode::Random;
+        std::uint32_t seedA = 777, seedB = 777, rrA = 0, rrB = 0;
+        const int pickA = selectPadLayer(randomCfg, 80, rrA, seedA);
+        const int pickB = selectPadLayer(randomCfg, 80, rrB, seedB);
+        check(pickA >= 0 && pickA == pickB && seedA != 777,
+              "Pad layers: random is deterministic per seed and advances state");
     }
 
     std::printf("\n=== Results: %d passed, %d failed ===\n", gPassed, gFailed);

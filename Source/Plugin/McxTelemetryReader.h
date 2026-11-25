@@ -50,6 +50,11 @@ struct McxTelemetrySnapshot
     std::uint32_t sceneApplySeq{0};
     std::uint64_t appliedMuteMask{0ull};
     int appliedTranspose{0};
+    bool muteQuantizeBar{false};
+    std::uint32_t muteApplySeq{0u};
+    std::uint8_t appliedBankMuteMask{0u};
+    std::uint8_t queuedBankMuteMask{0u};
+    std::uint64_t queuedPartMuteMask{0ull};
     std::array<float, 128> samplesL{};
     std::array<float, McxEngine::kNumParts> partPeaks{};
     std::array<float, McxEngine::kNumParts> partMidiPeaks{};
@@ -102,6 +107,12 @@ inline McxTelemetrySnapshot captureEngineTelemetry(
     snap.songLoop = song.songLoop; snap.songBlockIdx = song.songBlockIdx; snap.songBarInBlock = song.songBarInBlock;
     snap.songBlockCount = song.songBlockCount; snap.sceneApplySeq = song.sceneApplySeq;
     snap.appliedMuteMask = song.appliedMuteMask; snap.appliedTranspose = song.appliedTranspose;
+    const auto qm = engine.songAndScenes().quantizedMute().readTelemetry();
+    snap.muteQuantizeBar = qm.quantizeEnabled;
+    snap.muteApplySeq = qm.muteApplySeq;
+    snap.appliedBankMuteMask = qm.appliedBankMuteMask;
+    snap.queuedBankMuteMask = qm.queuedBankMuteMask;
+    snap.queuedPartMuteMask = qm.queuedPartMuteMask;
     for (std::size_t p = 0; p < static_cast<std::size_t>(McxEngine::kNumParts); ++p)
     {
         snap.partPeaks[p] = lastPartPeaks[p].load(std::memory_order_relaxed);

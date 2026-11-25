@@ -24,8 +24,9 @@ export interface McxMixerCallbacks {
   getFocusedPart: () => number; setFocusedPart: (idx: number) => void;
   getPartsState: () => McxPartUiState[]; getBankLayout?: () => McxBankLayoutData;
   getMidiDevices?: () => McxMidiDevicesDto; getEngineCatalog?: () => McxEngineDescriptorDto[];
+  getQueuedPartMutes?: () => ReadonlySet<number>;
   onTogglePartKind: (idx: number) => void; onChangePartChannel: (idx: number, ch: number) => void;
-  onToggleFollowTranspose: (idx: number) => void; onToggleMute: (idx: number) => void; onToggleSolo: (idx: number) => void;
+  onToggleFollowTranspose: (idx: number) => void; onToggleMute: (idx: number, immediate?: boolean) => void; onToggleSolo: (idx: number) => void;
   onTogglePin?: (partId: number) => void; onDeletePart?: (bankIdx: number, slotIdx: number, forceUnpin?: boolean) => void;
   onMovePart?: (fromBank: number, fromSlot: number, toBank: number, toSlot: number) => void;
   onAddPartInFirstFreeSlot?: (bankIdx: number) => void; onOpenRouteForPart?: (idx: number) => void;
@@ -90,6 +91,7 @@ export function updatePartMeter(container: HTMLElement, partIdx: number, peak: n
 export function renderMixerConsole(container: HTMLElement, cb: McxMixerCallbacks, bridge?: McxHostBridge): void {
   container.innerHTML = '';
   const focused = cb.getFocusedPart(), parts = cb.getPartsState(), catalog = cb.getEngineCatalog?.();
+  const queuedPartMutes = cb.getQueuedPartMutes?.();
   const layout = cb.getBankLayout?.() ?? createDefaultBankLayout(), devices = cb.getMidiDevices?.();
   const activeBank = layout.activeBank, bankColor = BANK_COLOR_VARS[activeBank] ?? BANK_COLOR_VARS[0];
   container.style.setProperty('--active-bank-color', bankColor);
@@ -136,7 +138,7 @@ export function renderMixerConsole(container: HTMLElement, cb: McxMixerCallbacks
       <button type="button" class="mcx-strip-sound-btn cat-${catId}" data-act="sound" title="${esc(`${bankLabel} · ${soundName}`)}"><span class="mcx-strip-cover-trigger" data-act="cover-popup" role="button" tabindex="0" aria-label="${esc(`${soundName} · ${engMeta.displayName}`)}" title="${esc(`Ver carátula e info (${engMeta.displayName})`)}">${coverUrl ? `<img src="${esc(coverUrl)}" class="mcx-strip-cover-thumb" alt="" />` : `<span class="mcx-strip-cat-icon">${getCategoryIconSvg(catId)}</span>`}</span><span class="mcx-strip-sound-texts"><span class="mcx-strip-bank-name">${esc(bankLabel)}</span><span class="mcx-strip-sound-name">${esc(soundName)}</span></span></button>
       <div class="mcx-strip-drawers-row"><button type="button" class="mcx-strip-drawer-btn is-tone" data-act="open-part" title="${esc(t('mcx.toneDrawerBtn'))}">${t('mcx.toneShort') || 'PART'}</button><button type="button" class="mcx-strip-drawer-btn is-pads" data-act="pads" title="${esc(t('mcx.padsDrawerBtn'))}">${t('mcx.padsShort') || 'PADS'}</button><button type="button" class="mcx-strip-drawer-btn is-seq" data-act="seq" title="${esc(t('mcx.seqDrawerBtn'))}">SEQ</button><button type="button" class="mcx-strip-drawer-btn is-arp" data-act="arp" title="${esc(t('mcx.arpDrawerBtn'))}">${t('mcx.arpShort')}</button></div>
       <div class="mcx-strip-fader-section"><div class="mcx-strip-fader-row"><input type="range" class="mcx-strip-fader" data-param-index="6" min="0" max="1" step="0.01" value="${level}" aria-label="${esc(slotLabel)} ${esc(soundName)} ${esc(t('mcx.partVolumeHint'))}" aria-valuetext="${Math.round(level * 100)}%" style="--control-value:${level};--attr-min:0;--attr-max:1" title="${esc(t('mcx.partVolumeHint'))}" /><div class="mcx-strip-vumeter" data-vu-part="${partId}" aria-hidden="true">${'<span class="mcx-vu-seg is-low"></span>'.repeat(4)}${'<span class="mcx-vu-seg is-mid"></span>'.repeat(2)}<span class="mcx-vu-seg is-hot"></span><span class="mcx-vu-seg is-peak"></span></div></div><span class="mcx-strip-lvl-val">${Math.round(level * 100)}%</span></div>
-      <div class="mcx-strip-ms-row"><button type="button" class="mcx-strip-ms-btn${ps.solo ? ' is-solo' : ''}" data-act="solo" title="${esc(t('mcx.solo'))}">S</button><button type="button" class="mcx-strip-ms-btn${ps.mute ? ' is-mute' : ''}" data-act="mute" title="${esc(t('mcx.mute'))}">M</button></div>`;
+      <div class="mcx-strip-ms-row"><button type="button" class="mcx-strip-ms-btn${ps.solo ? ' is-solo' : ''}" data-act="solo" title="${esc(t('mcx.solo'))}">S</button><button type="button" class="mcx-strip-ms-btn${ps.mute ? ' is-mute' : ''}${queuedPartMutes?.has(partId) ? ' is-mute-queued' : ''}" data-act="mute" title="${esc(t('mcx.mute'))}">M</button></div>`;
     if (!isPinned) wireStripDrag(strip, container, activeBank, slotIdx, slotLabel);
     wireDropTarget(strip, activeBank, slotIdx, cb);
     wireTrackCoverPopup(strip.querySelector<HTMLElement>('[data-act="cover-popup"]'), { partId, slotLabel, ps, catId, soundName, routeTag: badge.routeTag, midiFullLabel: midiInfo.fullLabel, resolved });
@@ -149,7 +151,7 @@ export function renderMixerConsole(container: HTMLElement, cb: McxMixerCallbacks
       if (act === 'pin') cb.onTogglePin?.(partId);
       else if (act === 'move' && tgt && !isPinned) openMovePartPopover(tgt, layout, activeBank, slotIdx, soundName, (toB, toS) => cb.onMovePart?.(activeBank, slotIdx, toB, toS));
       else if (act === 'delete' && !isPinned) cb.onDeletePart?.(activeBank, slotIdx, false);
-      else if (act === 'mute') cb.onToggleMute(partId);
+      else if (act === 'mute') { if (ev.shiftKey) cb.onToggleMute(partId, true); else cb.onToggleMute(partId); }
       else if (act === 'solo') cb.onToggleSolo(partId);
       else if (act in focusActs) { cb.setFocusedPart(partId); focusActs[act]?.(partId); }
     });

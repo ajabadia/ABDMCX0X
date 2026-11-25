@@ -8,7 +8,9 @@ import type { McxHostBridge, McxTelemetry } from '../bridge/McxHostBridge';
 import { McxSongBridge, type McxSongScenesStateDto } from '../bridge/McxSongBridge';
 import { McxSceneBar } from '../ui/McxSceneBar';
 import { McxSongDrawer } from '../ui/McxSongDrawer';
+import { setBankMuted, setBankSoloed } from '../ui/McxBankLayout';
 import type { McxAppState } from './McxAppState';
+import { McxQuantizedMuteController } from './McxQuantizedMuteController';
 
 function createDefaultSongState(): McxSongScenesStateDto {
   const names = ['Full', 'Drums+Bass', 'Breakdown', 'Lift +5', 'Bridge +7', 'Minor -3', 'Solo Drums', 'Drop'];
@@ -28,6 +30,26 @@ function createDefaultSongState(): McxSongScenesStateDto {
 
 export function mountSongAndScenesUi(bridge: McxHostBridge, state: McxAppState): void {
   const songBridge = new McxSongBridge(bridge);
+  const qMute = new McxQuantizedMuteController({
+    songBridge,
+    getBankLayout: () => state.bankLayout,
+    getPartsState: () => state.partsState,
+    setBankMutedLocal: (b, m) => setBankMuted(state.bankLayout, b, m),
+    setBankSoloedLocal: (b, s) => setBankSoloed(state.bankLayout, b, s),
+    onImmediatePartMute: (p) => state.togglePartMute(p, true),
+    onImmediateBankMute: (b) => state.toggleLiveMuteBank(b, true),
+    onUiRefresh: (lcd) => {
+      state.refreshPartList();
+      if (state.refs.toneDrawer?.isOpen()) state.refs.toneDrawer.syncPart(state.focusedPart, state.partsState[state.focusedPart]);
+      if (lcd) state.setLcdLine2(lcd);
+    },
+  });
+  state.refs.queuePartMute = (p) => qMute.togglePartMute(p, false);
+  state.refs.queueBankMute = (b) => qMute.toggleBankMute(b, false);
+  state.refs.onToggleMuteQuantized = () => qMute.setEnabled(!qMute.isEnabled());
+  state.refs.isMuteQuantized = () => qMute.isEnabled();
+  state.refs.getQueuedPartMutes = () => qMute.getQueuedParts();
+  state.refs.getQueuedBankMutes = () => qMute.getQueuedBanks();
   let songState: McxSongScenesStateDto = createDefaultSongState();
   let lastApplySeq = 0;
   let lastLiveKey = '';
@@ -103,6 +125,7 @@ export function mountSongAndScenesUi(bridge: McxHostBridge, state: McxAppState):
   };
 
   state.refs.onSongTelemetry = (tel: McxTelemetry) => {
+    qMute.onTelemetry(tel);
     if (tel.activeScene === undefined) return;
     songState.activeScene = tel.activeScene;
     songState.queuedScene = tel.queuedScene ?? -1;
@@ -137,6 +160,8 @@ export function mountSongAndScenesUi(bridge: McxHostBridge, state: McxAppState):
     }
   };
 
-  bridge.onAudioStatus((status) => { if (status === 'ready') songBridge.requestState(); });
+  bridge.onAudioStatus((status) => {
+    if (status === 'ready') { songBridge.requestState(); qMute.syncHostQuantizeSetting(); }
+  });
   songBridge.requestState();
 }

@@ -53,6 +53,7 @@ export class McxHostBridge {
   private midiDevicesCb: ((dto: McxMidiDevicesDto) => void) | null = null;
   private partPatternCb: ((part: number, patternJson: string) => void) | null = null;
   private exportCompleteCb: ((dto: McxExportCompleteDto) => void) | null = null;
+  private midiLearnProfilesCb: ((catalogJson: string) => void) | null = null; private midiLearnAutoDetectCb: ((ev: { device: string; displayName: string; reason: string; portName: string; profileJson: string }) => void) | null = null;
 
   constructor() {
     const juceBackend = (window as any).__JUCE__?.backend;
@@ -64,6 +65,7 @@ export class McxHostBridge {
       onSongScenesState: (j) => this.songScenesStateCb?.(j), onSessionState: (dto) => this.sessionStateCb?.(dto),
       onLibraryCatalog: (j) => this.libraryCatalogCb?.(j), onRackState: (j) => this.rackStateCb?.(j),
       onSystemSettings: (s) => this.settingsCb?.(s), onMidiDevices: (dto) => this.midiDevicesCb?.(dto),
+      onMidiLearnProfiles: (j) => this.midiLearnProfilesCb?.(j), onMidiLearnAutoDetect: (ev) => this.midiLearnAutoDetectCb?.(ev),
       onPartPatternState: (p, j) => this.partPatternCb?.(p, j), onExportComplete: (dto) => this.exportCompleteCb?.(dto),
       onWavRendered: (dto) => { const r = dto.requestId !== undefined ? this.wavPending.get(dto.requestId) : undefined; if (r && dto.requestId !== undefined) { this.wavPending.delete(dto.requestId); r(dto); } },
     };
@@ -97,12 +99,11 @@ export class McxHostBridge {
   public onPartPresets(cb: (dto: McxPartPresetsDto) => void): void { this.partPresetsCb = cb; }
   public onPartEngineState(cb: (dto: McxPartEngineStateDto) => void): void { this.partEngineStateCb = cb; }
   public onSongScenesState(cb: (stateJson: string) => void): void { this.songScenesStateCb = cb; }
-  public onSessionState(cb: (dto: McxSessionStateDto) => void): void { this.sessionStateCb = cb; }
-  public onLibraryCatalog(cb: (catalogJson: string) => void): void { this.libraryCatalogCb = cb; }
-  public onRackState(cb: (rackJson: string) => void): void { this.rackStateCb = cb; }
-  public onMidiDevices(cb: (dto: McxMidiDevicesDto) => void): void { this.midiDevicesCb = cb; }
-  public onPartPatternState(cb: (part: number, patternJson: string) => void): void { this.partPatternCb = cb; }
-  public onExportComplete(cb: (dto: McxExportCompleteDto) => void): void { this.exportCompleteCb = cb; }
+  public onSessionState(cb: (dto: McxSessionStateDto) => void): void { this.sessionStateCb = cb; } public onLibraryCatalog(cb: (catalogJson: string) => void): void { this.libraryCatalogCb = cb; }
+  public onRackState(cb: (rackJson: string) => void): void { this.rackStateCb = cb; } public onMidiDevices(cb: (dto: McxMidiDevicesDto) => void): void { this.midiDevicesCb = cb; }
+  public onPartPatternState(cb: (part: number, patternJson: string) => void): void { this.partPatternCb = cb; } public onExportComplete(cb: (dto: McxExportCompleteDto) => void): void { this.exportCompleteCb = cb; }
+  public onMidiLearnProfiles(cb: (catalogJson: string) => void): void { this.midiLearnProfilesCb = cb; }
+  public onMidiLearnAutoDetect(cb: (ev: { device: string; displayName: string; reason: string; portName: string; profileJson: string }) => void): void { this.midiLearnAutoDetectCb = cb; }
   public refreshMidiDevices(): void { if (this.isNative) this.postNative({ type: 'refreshMidiDevices' }); else void webMidiService.init().then(() => this.emitWebMidiDevices()); }
   public setMidiDeviceEnabled(direction: 'input' | 'output', id: string, enabled: boolean): void { if (this.isNative) this.postNative({ type: 'setMidiDeviceEnabled', direction, id, enabled }); }
   public setPartMidiDevice(part: number, direction: 'input' | 'output', portIndex: number, deviceName = ''): void {

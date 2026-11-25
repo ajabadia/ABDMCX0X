@@ -50,6 +50,16 @@ inline juce::var buildTelemetryPayload(const McxTelemetrySnapshot& snap)
     mask64.add(static_cast<int>((snap.appliedMuteMask >> 48) & 0xFFFFull));
     payload->setProperty("appliedMuteMask64", mask64);
     payload->setProperty("appliedTranspose", snap.appliedTranspose);
+    payload->setProperty("muteQuantizeBar", snap.muteQuantizeBar);
+    payload->setProperty("muteApplySeq", static_cast<int>(snap.muteApplySeq));
+    payload->setProperty("appliedBankMuteMask", static_cast<int>(snap.appliedBankMuteMask));
+    payload->setProperty("queuedBankMuteMask", static_cast<int>(snap.queuedBankMuteMask));
+    juce::Array<juce::var> qMask64;
+    qMask64.add(static_cast<int>((snap.queuedPartMuteMask >> 0) & 0xFFFFull));
+    qMask64.add(static_cast<int>((snap.queuedPartMuteMask >> 16) & 0xFFFFull));
+    qMask64.add(static_cast<int>((snap.queuedPartMuteMask >> 32) & 0xFFFFull));
+    qMask64.add(static_cast<int>((snap.queuedPartMuteMask >> 48) & 0xFFFFull));
+    payload->setProperty("queuedPartMuteMask64", qMask64);
 
     juce::Array<juce::var> mutes;
     for (bool m : snap.sendBusMutes) mutes.add(m);

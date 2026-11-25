@@ -8,7 +8,7 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
     this.outLPtr = 0; this.outRPtr = 0; this.peakLPtr = 0; this.peakRPtr = 0; this.activeVoicesPtr = 0;
     this.partPeaksPtr = 0; this.partMidiPeaksPtr = 0; this.seqStatePtr = 0; this.seqExtPtr = 0; this.songStatePtr = 0;
     this.keyBufPtr = 0; this.layoutBufPtr = 0; this.midiBufPtr = 0; this.rackPeaksPtr = 0; this.rackFlagsPtr = 0;
-    this.fxTelPtr = 0; this.fxMutePtr = 0; this.telemetryCounter = 0; this.gcCounter = 0; this.sr = 44100;
+    this.fxTelPtr = 0; this.fxMutePtr = 0; this.qMutePtr = 0; this.telemetryCounter = 0; this.gcCounter = 0; this.sr = 44100;
     this.handlers = this._buildHandlers();
     this.port.onmessage = (event) => this.handleMessage(event.data);
   }
@@ -102,6 +102,7 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
       SET_BANK_LAYOUT: (w, d) => w.setBankLayoutJson?.(this._writeText(this.layoutBufPtr, 2048, d.layoutJson || '')), MIDI_IN: (w, d) => w.routeMidiInBytes?.(d.portIndex | 0, d.status | 0, d.data1 | 0, d.data2 | 0),
       SET_SONG_MODE: (w, d) => { w.setSongModeEnabled?.(d.enabled ? 1 : 0); this._emitSongState(); }, SET_SONG_LOOP: (w, d) => w.setSongLoopEnabled?.(d.loop ? 1 : 0),
       JUMP_SONG_BLOCK: (w, d) => w.jumpSongBlock?.(d.blockIndex | 0, d.immediate ? 1 : 0), SET_SONG_ARRANGEMENT: (_w, d) => this._applySong(d), GET_SONG_STATE: () => this._emitSongState(),
+      SET_MUTE_QUANTIZE: (w, d) => w.setMuteQuantizeToBar?.(d.enabled ? 1 : 0), TOGGLE_PART_MUTE_Q: (w, d) => w.togglePartMuteQuantized?.(d.partIdx | 0, d.immediate ? 1 : 0), TOGGLE_BANK_MUTE_Q: (w, d) => w.toggleBankMuteQuantized?.(d.bankIdx | 0, d.immediate ? 1 : 0),
       SET_RACK_SLOT: (w, d) => w.setRackSlotEngine?.(d.slot | 0, d.engine | 0, this._writeKey(d.name || '')), SET_RACK_NAME: (w, d) => w.setRackSlotName?.(d.slot | 0, this._writeKey(d.name || '')),
       REMOVE_RACK_SLOT: (w, d) => w.removeRackSlot?.(d.slot | 0), MOVE_RACK_SLOT: (w, d) => w.moveRackSlot?.(d.from | 0, d.to | 0),
       SET_RACK_BYPASS: (w, d) => w.setRackSlotBypass?.(d.slot | 0, d.bypass ? 1 : 0), SET_RACK_PRESET: (w, d) => w.setRackSlotPreset?.(d.slot | 0, d.preset | 0),
@@ -165,7 +166,7 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
       this.outLPtr = alloc(2048); this.outRPtr = alloc(2048); this.peakLPtr = alloc(4); this.peakRPtr = alloc(4); this.activeVoicesPtr = alloc(4);
       this.partPeaksPtr = alloc(256); this.partMidiPeaksPtr = alloc(256); this.seqStatePtr = alloc(16); this.seqExtPtr = alloc(12); this.songStatePtr = alloc(56);
       this.keyBufPtr = alloc(64); this.layoutBufPtr = alloc(2048); this.midiBufPtr = alloc(512); this.rackPeaksPtr = alloc(64); this.rackFlagsPtr = alloc(64);
-      this.fxTelPtr = alloc(28); this.fxMutePtr = alloc(16);
+      this.fxTelPtr = alloc(28); this.fxMutePtr = alloc(16); this.qMutePtr = alloc(32);
       if (this.HEAPF32.buffer !== this.wasm.memory.buffer) this._updateMemoryViews();
       this.isReady = true; this.port.postMessage({ type: 'WASM_READY', sampleRate: sr }); this._emitSongState();
     } catch (err) { this.port.postMessage({ type: 'WASM_ERROR', message: String(err?.message || err) }); }
@@ -188,8 +189,9 @@ class Mcx0xWorkletProcessor extends AudioWorkletProcessor {
       if (this.seqExtPtr && this.wasm.getSequencerExtState) { this.wasm.getSequencerExtState(this.seqExtPtr); const eO = this.seqExtPtr >> 2; seqTel.seqPaused = this.HEAP32[eO] !== 0; seqTel.seqCountInTicks = this.HEAP32[eO + 1]; seqTel.seqRecRev = this.HEAP32[eO + 2] >>> 0; }
       if (this.songStatePtr && this.wasm.getSongSceneTelemetry) { const g = this.songStatePtr >> 2, h = this.HEAP32; this.wasm.getSongSceneTelemetry(this.songStatePtr); songTel = { activeScene: h[g], queuedScene: h[g + 1], songMode: h[g + 2] !== 0, songLoop: h[g + 3] !== 0, songBlockIdx: h[g + 4], songBarInBlock: h[g + 5], songBlockCount: h[g + 6], sceneApplySeq: h[g + 7] >>> 0, appliedMuteMask: h[g + 8] & 0xFFFF, appliedMuteMask64: [h[g + 10] & 0xFFFF, h[g + 11] & 0xFFFF, h[g + 12] & 0xFFFF, h[g + 13] & 0xFFFF], appliedTranspose: h[g + 9] }; }
       if (this.fxTelPtr && this.wasm.getMasterFxTelemetry) { const ft = this.fxTelPtr >> 2, fm = this.fxMutePtr >> 2, f = this.HEAPF32, h = this.HEAP32; this.wasm.getMasterFxTelemetry(this.fxTelPtr, this.fxMutePtr); fxTel = { peakSendA: f[ft], peakSendB: f[ft + 1], peakSendC: f[ft + 2], peakSendD: f[ft + 3], limiterGrDb: f[ft + 4], lfoPhase: f[ft + 5], lfo2Phase: f[ft + 6], sendBusMutes: [0, 1, 2, 3].map(k => h[fm + k] !== 0) }; }
+      let qmTel = {}; if (this.qMutePtr && this.wasm.getQuantizedMuteTelemetry) { const q = this.qMutePtr >> 2, h = this.HEAP32; this.wasm.getQuantizedMuteTelemetry(this.qMutePtr); qmTel = { muteQuantizeBar: h[q] !== 0, muteApplySeq: h[q + 1] >>> 0, appliedBankMuteMask: h[q + 2] & 0xFF, queuedBankMuteMask: h[q + 3] & 0xFF, queuedPartMuteMask64: [h[q + 4] & 0xFFFF, h[q + 5] & 0xFFFF, h[q + 6] & 0xFFFF, h[q + 7] & 0xFFFF] }; }
       const scopeCopy = new Float32Array(n); scopeCopy.set(outL);
-      this.port.postMessage({ type: 'TELEMETRY', peakL: this.HEAPF32[this.peakLPtr >> 2], peakR: this.HEAPF32[this.peakRPtr >> 2], activeVoices, partPeaks, partMidiPeaks, rackPeakIn: rPkIn, rackPeakOut: rPkOut, rackClipIn: rClIn, rackClipOut: rClOut, ...seqTel, ...songTel, ...fxTel, samplesL: scopeCopy }, [scopeCopy.buffer]);
+      this.port.postMessage({ type: 'TELEMETRY', peakL: this.HEAPF32[this.peakLPtr >> 2], peakR: this.HEAPF32[this.peakRPtr >> 2], activeVoices, partPeaks, partMidiPeaks, rackPeakIn: rPkIn, rackPeakOut: rPkOut, rackClipIn: rClIn, rackClipOut: rClOut, ...seqTel, ...songTel, ...qmTel, ...fxTel, samplesL: scopeCopy }, [scopeCopy.buffer]);
     }
     return true;
   }

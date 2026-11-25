@@ -56,6 +56,7 @@ void McxSongAndScenes::reset() noexcept
     songDirty_.store(false, std::memory_order_relaxed);
     pubAppliedMuteMask_.store(0u, std::memory_order_relaxed);
     pubAppliedTranspose_.store(0, std::memory_order_relaxed);
+    quantizedMute_.reset();
     publishTelemetry();
 }
 

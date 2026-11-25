@@ -23,17 +23,12 @@ export interface McxTelemetry {
   activeScene?: number; queuedScene?: number; songMode?: boolean; songLoop?: boolean;
   songBlockIdx?: number; songBarInBlock?: number; songBlockCount?: number; sceneApplySeq?: number;
   appliedMuteMask?: number; appliedMuteMask64?: number[]; appliedTranspose?: number;
+  muteQuantizeBar?: boolean; muteApplySeq?: number; appliedBankMuteMask?: number;
+  queuedBankMuteMask?: number; queuedPartMuteMask64?: number[];
   rackPeakIn?: number[]; rackPeakOut?: number[]; rackClipIn?: boolean[]; rackClipOut?: boolean[];
 }
-
-export interface McxSidechainConfigDto {
-  sourcePart: number; hpfEnabled: boolean; hpfHz: number;
-  depthDb: number; attackMs: number; releaseMs: number; releaseSyncDiv: number;
-}
-export interface McxWavRenderOptionsDto {
-  scope: 'master' | 'part' | 'bank' | 'stems';
-  part?: number; bank?: number; bars?: number; tailSec?: number; useSongMode?: boolean; filename?: string;
-}
+export interface McxSidechainConfigDto { sourcePart: number; hpfEnabled: boolean; hpfHz: number; depthDb: number; attackMs: number; releaseMs: number; releaseSyncDiv: number; }
+export interface McxWavRenderOptionsDto { scope: 'master' | 'part' | 'bank' | 'stems'; part?: number; bank?: number; bars?: number; tailSec?: number; useSongMode?: boolean; filename?: string; }
 export interface McxWavRenderedDto {
   ok: boolean; requestId?: number; sampleRate: number; left: Float32Array; right: Float32Array;
 }
@@ -136,6 +131,7 @@ export function parseTelemetryPayload(raw: any): McxTelemetry {
     appliedMuteMask: raw.appliedMuteMask !== undefined ? Number(raw.appliedMuteMask) : undefined,
     appliedMuteMask64: Array.isArray(raw.appliedMuteMask64) ? raw.appliedMuteMask64.map((v: any) => Number(v) & 0xFFFF) : undefined,
     appliedTranspose: raw.appliedTranspose !== undefined ? Number(raw.appliedTranspose) : undefined,
+    muteQuantizeBar: raw.muteQuantizeBar !== undefined ? Boolean(raw.muteQuantizeBar) : undefined, muteApplySeq: raw.muteApplySeq !== undefined ? Number(raw.muteApplySeq) : undefined, appliedBankMuteMask: raw.appliedBankMuteMask !== undefined ? (Number(raw.appliedBankMuteMask) & 0xFF) : undefined, queuedBankMuteMask: raw.queuedBankMuteMask !== undefined ? (Number(raw.queuedBankMuteMask) & 0xFF) : undefined, queuedPartMuteMask64: Array.isArray(raw.queuedPartMuteMask64) ? raw.queuedPartMuteMask64.map((v: any) => Number(v) & 0xFFFF) : undefined,
     rackPeakIn: Array.isArray(raw.rackPeakIn) ? raw.rackPeakIn.map(Number) : undefined,
     rackPeakOut: Array.isArray(raw.rackPeakOut) ? raw.rackPeakOut.map(Number) : undefined,
     rackClipIn: Array.isArray(raw.rackClipIn) ? raw.rackClipIn.map(Boolean) : undefined,

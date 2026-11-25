@@ -1,0 +1,84 @@
+/* ABDMCX0X -- MIDI Learn Disk Auto-Detect Bar & Bar-Quantized Mute Feedback */
+
+.mcx-ml-profile-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-panel-border);
+  background: color-mix(in oklab, var(--color-panel-surface) 88%, transparent);
+  font-size: var(--text-xs);
+  color: var(--color-text-main);
+}
+.mcx-ml-profile-lbl {
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+.mcx-ml-profile-sel {
+  flex: 1;
+  min-width: 170px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-panel-border);
+  background: var(--color-bg-deep);
+  color: var(--color-text-main);
+  font-size: var(--text-xs);
+}
+.mcx-ml-profile-btn {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-panel-border);
+  background: color-mix(in oklab, var(--color-accent) 18%, var(--color-panel-surface));
+  color: var(--color-text-main);
+  font-weight: 700;
+  cursor: pointer;
+}
+.mcx-ml-auto-chk {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.mcx-qmute-btn {
+  appearance: none;
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-panel-border);
+  background: color-mix(in oklab, var(--color-panel-surface) 80%, transparent);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.mcx-qmute-btn.is-active {
+  border-color: var(--color-warning);
+  background: color-mix(in oklab, var(--color-warning) 26%, var(--color-panel-surface));
+  color: var(--color-text-main);
+  box-shadow: inset 0 0 0 1px var(--color-warning);
+}
+@keyframes mcx-mute-queue-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 1px var(--color-warning), 0 0 8px color-mix(in oklab, var(--color-warning) 55%, transparent); }
+  50% { box-shadow: inset 0 0 0 1px var(--color-danger), 0 0 2px transparent; }
+}
+.mcx-bank-btn.is-mute-queued,
+.mcx-strip-ms-btn.is-mute-queued {
+  border-color: var(--color-warning);
+  animation: mcx-mute-queue-pulse 0.55s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mcx-bank-btn.is-mute-queued,
+  .mcx-strip-ms-btn.is-mute-queued {
+    animation: none;
+    outline: 1px dashed var(--color-warning);
+  }
+}

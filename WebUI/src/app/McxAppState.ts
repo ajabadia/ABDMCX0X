@@ -69,6 +69,12 @@ export interface McxUiRefs {
   liveTranspose?: McxLiveTransposeHandle | null;
   onUndo?: () => void; onRedo?: () => void; onToggleCompare?: () => void; onCaptureCompare?: () => void;
   onSongTelemetry?: (tel: McxTelemetry) => void;
+  queuePartMute?: (partIdx: number) => boolean;
+  queueBankMute?: (bankIdx: number) => boolean;
+  onToggleMuteQuantized?: () => void;
+  isMuteQuantized?: () => boolean;
+  getQueuedPartMutes?: () => ReadonlySet<number>;
+  getQueuedBankMutes?: () => ReadonlySet<number>;
   triggerLiveScene?: (idx: number, immediate?: boolean) => void;
   toggleSongDrawer?: () => void; refreshSongLocale?: () => void;
   onSavePreset?: (isMulti: boolean) => void; onOpenBankFile?: () => void; onPanic?: () => void;
@@ -351,8 +357,9 @@ export class McxAppState {
     }
   }
 
-  public toggleLiveMuteBank(bankIdx: number): void {
+  public toggleLiveMuteBank(bankIdx: number, immediate = false): void {
     if (bankIdx < 0 || bankIdx >= this.bankLayout.bankCount) return;
+    if (!immediate && this.refs.queueBankMute?.(bankIdx)) return;
     const nextMuted = !isBankMuted(this.bankLayout, bankIdx);
     setBankMuted(this.bankLayout, bankIdx, nextMuted);
     const bit = 1 << bankIdx;
@@ -397,9 +404,10 @@ export class McxAppState {
     this.setLcdLine2(t('mcx.allBankMutesCleared'));
   }
 
-  public togglePartMute(partIdx: number): void {
+  public togglePartMute(partIdx: number, immediate = false): void {
     const ps = this.partsState[partIdx];
     if (!ps) return;
+    if (!immediate && this.refs.queuePartMute?.(partIdx)) return;
     const nextMuted = !ps.mute;
     ps.mute = nextMuted;
     this.bridge.setParam(partIdx, 'partMute', nextMuted ? 1 : 0);

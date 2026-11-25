@@ -50,11 +50,14 @@ export interface McxBankRailCallbacks {
   onSelectBank: (bankIdx: number) => void;
   onAddBank: () => void;
   onDropPartOnBank: (fromBank: number, fromSlot: number, targetBank: number) => void;
-  onToggleMuteBank?: (bankIdx: number) => void;
+  onToggleMuteBank?: (bankIdx: number, immediate?: boolean) => void;
   onToggleSoloBank?: (bankIdx: number) => void;
   onClearAllSolos?: () => void;
   onClearAllBankMutes?: () => void;
   onRequestRenameBank?: (bankIdx: number) => void;
+  isMuteQuantized?: () => boolean;
+  onToggleMuteQuantized?: () => void;
+  getQueuedBankMutes?: () => ReadonlySet<number>;
 }
 
 const supportsNativeFocusGroup = (): boolean =>
@@ -99,9 +102,14 @@ export class McxBankRail {
     this.lastParts = parts;
     this.bankCount = layout.bankCount;
 
+    const qBarOn = Boolean(this.cbs.isMuteQuantized?.());
+    const queuedBanks = this.cbs.getQueuedBankMutes?.();
     const headerHtml = `
       <div class="mcx-bank-rail-hdr">
         <span class="mcx-bank-rail-title">${t('mcx.banksTitle')}</span>
+        <button type="button" class="mcx-qmute-btn${qBarOn ? ' is-active' : ''}" data-bank-qmute="1"
+          aria-pressed="${qBarOn ? 'true' : 'false'}"
+          title="Quantize Track &amp; Bank Mute to Bar (Shift+Click for immediate)">Q·BAR</button>
         <span class="mcx-bank-rail-count">${layout.bankCount}/${MAX_BANKS}</span>
       </div>`;
 
@@ -166,12 +174,14 @@ export class McxBankRail {
             : '',
       ].filter(Boolean).join('');
 
+      const isMuteQueued = queuedBanks?.has(b) ?? false;
       const btnClasses = [
         'mcx-bank-btn',
         isActive ? 'is-active' : '',
         bankMuted ? 'is-muted' : childMutedCount > 0 ? 'is-muted-partial' : '',
         bankSoloed ? 'is-solo' : childSoloCount > 0 ? 'is-solo-partial' : '',
         silencedBySolo ? 'is-solo-silenced' : '',
+        isMuteQueued ? 'is-mute-queued' : '',
       ].filter(Boolean).join(' ');
 
       const isModePressed = this.mode === 'mute' ? bankMuted : this.mode === 'solo' ? bankSoloed : isActive;
@@ -253,11 +263,13 @@ export class McxBankRail {
         }
         return;
       }
+      const qBtn = (ev.target as HTMLElement).closest<HTMLElement>('[data-bank-qmute]');
+      if (qBtn) { this.cbs.onToggleMuteQuantized?.(); return; }
       const bankBtn = (ev.target as HTMLElement).closest<HTMLButtonElement>('[data-bank-idx]');
       if (bankBtn) {
         if (bankBtn.disabled) return;
         const bankIdx = Number(bankBtn.dataset.bankIdx);
-        if (this.mode === 'mute') { this.cbs.onToggleMuteBank?.(bankIdx); return; }
+        if (this.mode === 'mute') { if (ev.shiftKey) this.cbs.onToggleMuteBank?.(bankIdx, true); else this.cbs.onToggleMuteBank?.(bankIdx); return; }
         if (this.mode === 'solo') { this.cbs.onToggleSoloBank?.(bankIdx); return; }
         this.cbs.onSelectBank(bankIdx);
         return;

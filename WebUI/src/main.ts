@@ -142,9 +142,12 @@ function initApp(): void {
     state.refs.bankRail = new McxBankRail(railHost, {
       onSelectBank: (bankIdx) => state.selectBank(bankIdx), onAddBank: () => state.addNewBank(),
       onDropPartOnBank: (fromBank, fromSlot, targetBank) => state.movePartSlot(fromBank, fromSlot, targetBank, -1),
-      onToggleMuteBank: (bankIdx) => state.toggleLiveMuteBank(bankIdx), onToggleSoloBank: (bankIdx) => state.toggleLiveSoloBank(bankIdx),
+      onToggleMuteBank: (bankIdx, immediate) => state.toggleLiveMuteBank(bankIdx, immediate), onToggleSoloBank: (bankIdx) => state.toggleLiveSoloBank(bankIdx),
       onClearAllSolos: () => state.clearAllSolos(), onClearAllBankMutes: () => state.clearAllBankMutes(),
       onRequestRenameBank: (bankIdx) => state.openRenameBankDialog(bankIdx),
+      isMuteQuantized: () => Boolean(state.refs.isMuteQuantized?.()),
+      onToggleMuteQuantized: () => state.refs.onToggleMuteQuantized?.(),
+      getQueuedBankMutes: () => state.refs.getQueuedBankMutes?.() ?? new Set<number>(),
     });
   }
   state.refreshPartList();
@@ -178,6 +181,7 @@ function initApp(): void {
   let lastMidiDevicesKey = '';
   bridge.onMidiDevices((dto) => {
     state.midiDevices = dto; settingsModal.setMidiDevices(dto); state.refs.routeModal?.setMidiDevices(dto);
+    midiLearn.onMidiDevices(dto);
     const nextKey = JSON.stringify(dto);
     if (nextKey !== lastMidiDevicesKey) { lastMidiDevicesKey = nextKey; state.refreshPartList(); }
   });

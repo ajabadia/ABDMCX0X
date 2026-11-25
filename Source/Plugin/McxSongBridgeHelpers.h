@@ -124,6 +124,32 @@ inline bool handleSongAndScenesJsEvent(McxAudioProcessor& proc,
             web->emitEventIfBrowserIsVisible("onNativeTelemetry", buildSongAndScenesStatePayload(proc.engine()));
         return true;
     }
+    if (type == "setMuteQuantize")
+    {
+        McxUiCommand cmd {};
+        cmd.type = McxUiCommand::Type::SetMuteQuantize;
+        cmd.argU8 = static_cast<std::uint8_t>(static_cast<bool>(obj.getProperty("enabled")) ? 1 : 0);
+        proc.enqueueUiCommand(cmd);
+        return true;
+    }
+    if (type == "togglePartMuteQuantized")
+    {
+        McxUiCommand cmd {};
+        cmd.type = McxUiCommand::Type::TogglePartMuteQuantized;
+        cmd.partIdx = static_cast<std::uint8_t>(std::clamp<int>(static_cast<int>(obj.getProperty("partIdx")), 0, McxEngine::kNumParts - 1));
+        cmd.argU8 = static_cast<std::uint8_t>(static_cast<bool>(obj.getProperty("immediate")) ? 1 : 0);
+        proc.enqueueUiCommand(cmd);
+        return true;
+    }
+    if (type == "toggleBankMuteQuantized")
+    {
+        McxUiCommand cmd {};
+        cmd.type = McxUiCommand::Type::ToggleBankMuteQuantized;
+        cmd.argU8 = static_cast<std::uint8_t>(std::clamp<int>(static_cast<int>(obj.getProperty("bankIdx")), 0, 7));
+        cmd.argU8b = static_cast<std::uint8_t>(static_cast<bool>(obj.getProperty("immediate")) ? 1 : 0);
+        proc.enqueueUiCommand(cmd);
+        return true;
+    }
     return false;
 }
 

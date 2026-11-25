@@ -27,6 +27,7 @@ private:
     std::unique_ptr<juce::FileChooser> exportChooser_;
     bool isUiReady_{false};
     int gcTickCounter_{0};
+    std::string lastDetectedHwProfileId_{"generic_midi"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(McxAudioProcessorEditor)
 };

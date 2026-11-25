@@ -198,6 +198,10 @@ public:
     void setSongModeEnabled(bool enabled) noexcept;
     void setSongLoopEnabled(bool loop) noexcept;
     void jumpSongBlock(int blockIndex, bool immediate = false) noexcept;
+    void setMuteQuantizeToBar(bool enabled) noexcept;
+    void togglePartMuteQuantized(int partIdx, bool forceImmediate = false) noexcept;
+    void toggleBankMuteQuantized(int bankIdx, bool forceImmediate = false) noexcept;
+    void flushQueuedMutesNow() noexcept;
     [[nodiscard]] McxMidiClockEmitter& midiClock() noexcept { return midiClock_; }
     [[nodiscard]] const McxMidiClockEmitter& midiClock() const noexcept { return midiClock_; }
     void setSequencerPlaying(bool playing, bool resetToZero = true) noexcept;

@@ -76,6 +76,24 @@ export class McxSongBridge {
     this.host.sendCommand({ type: 'getSongScenesState' }, { type: 'GET_SONG_STATE' });
   }
 
+  public setMuteQuantize(enabled: boolean): void {
+    this.host.sendCommand({ type: 'setMuteQuantize', enabled }, { type: 'SET_MUTE_QUANTIZE', enabled });
+  }
+
+  public togglePartMuteQuantized(partIdx: number, immediate = false): void {
+    this.host.sendCommand(
+      { type: 'togglePartMuteQuantized', partIdx, immediate },
+      { type: 'TOGGLE_PART_MUTE_Q', partIdx, immediate },
+    );
+  }
+
+  public toggleBankMuteQuantized(bankIdx: number, immediate = false): void {
+    this.host.sendCommand(
+      { type: 'toggleBankMuteQuantized', bankIdx, immediate },
+      { type: 'TOGGLE_BANK_MUTE_Q', bankIdx, immediate },
+    );
+  }
+
   public onState(cb: (state: McxSongScenesStateDto) => void): void {
     this.host.onSongScenesState((json) => {
       const parsed = parseSongScenesStateJson(json);

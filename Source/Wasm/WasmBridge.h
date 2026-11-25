@@ -138,6 +138,10 @@ extern "C"
     WASM_EXPORT void commitSongBlocks(int loopEnabled);
     WASM_EXPORT void getSongSceneTelemetry(int* out14Ints);
     WASM_EXPORT const char* getSongScenesStateJson();
+    WASM_EXPORT void setMuteQuantizeToBar(int enabled);
+    WASM_EXPORT void togglePartMuteQuantized(int partIdx, int immediate);
+    WASM_EXPORT void toggleBankMuteQuantized(int bankIdx, int immediate);
+    WASM_EXPORT void getQuantizedMuteTelemetry(int* out8Ints);
 
     /** Visual 8x8 Bank Layout persistence & WebMIDI port-scoped inbound routing */
     WASM_EXPORT int setBankLayoutJson(const char* jsonText);

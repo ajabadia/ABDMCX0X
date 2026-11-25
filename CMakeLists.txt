@@ -162,12 +162,21 @@ add_executable(McxPhase12SixtyFourPartsTests Tests/McxPhase12SixtyFourPartsTests
 target_link_libraries(McxPhase12SixtyFourPartsTests PRIVATE ABDMCX0X_Core)
 add_test(NAME McxPhase12SixtyFourPartsTests COMMAND McxPhase12SixtyFourPartsTests)
 
+add_executable(McxPhase15LivePerfTests Tests/McxPhase15LivePerfTests.cpp)
+target_link_libraries(McxPhase15LivePerfTests PRIVATE ABDMCX0X_Core)
+target_compile_definitions(McxPhase15LivePerfTests PRIVATE
+    MCX_MIDILEARN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/MidiLearn"
+)
+add_test(NAME McxPhase15LivePerfTests COMMAND McxPhase15LivePerfTests)
+
 add_executable(McxAudioRenderDemo Tests/McxAudioRenderDemo.cpp)
 target_link_libraries(McxAudioRenderDemo PRIVATE ABDMCX0X_Core)
 
 add_executable(McxSc55BankRenderDemo Tests/McxSc55BankRenderDemo.cpp)
 target_link_libraries(McxSc55BankRenderDemo PRIVATE ABDMCX0X_Core)
-add_test(NAME McxSc55BankRenderDemo COMMAND McxSc55BankRenderDemo "${CMAKE_CURRENT_SOURCE_DIR}/sc55_quick_test.abdbank")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/sc55_quick_test.abdbank")
+    add_test(NAME McxSc55BankRenderDemo COMMAND McxSc55BankRenderDemo "${CMAKE_CURRENT_SOURCE_DIR}/sc55_quick_test.abdbank")
+endif()
 
 # ==============================================================================
 # 4. Full JUCE 9 Standalone + VST3 Plugin Targets (Phase 3C)
@@ -194,6 +203,7 @@ if(NOT MCX_HEADLESS_ONLY AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Source/Plugin/P
     )
     target_compile_definitions(ABDMCX0X PRIVATE
         ABDSHARED_CONTRACTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../ABDShared/Contracts"
+        MCX_MIDILEARN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/MidiLearn"
         ABDMCX0X_PROJECT_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
         JUCE_WEB_BROWSER=1
         JUCE_USE_CURL=0

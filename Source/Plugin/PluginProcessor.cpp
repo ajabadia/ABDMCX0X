@@ -246,12 +246,29 @@ McxTelemetrySnapshot McxAudioProcessor::readTelemetrySnapshot() const noexcept {
         scopeBuffers_[static_cast<std::size_t>(readIdx)], lastPartPeaks_, lastPartMidiPeaks_);
 }
 
+void McxAudioProcessor::rescanMidiLearnProfiles() {
+    std::string factoryDir;
+#ifdef MCX_MIDILEARN_DIR
+    const juce::File compiledDir(MCX_MIDILEARN_DIR);
+    if (compiledDir.isDirectory()) factoryDir = compiledDir.getFullPathName().toStdString();
+#endif
+    if (factoryDir.empty()) {
+        const auto sib = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getParentDirectory().getChildFile("MidiLearn");
+        if (sib.isDirectory()) factoryDir = sib.getFullPathName().toStdString();
+    }
+    const std::string workingMl = settings_.workingDirectory.empty()
+        ? std::string()
+        : (std::filesystem::path(settings_.workingDirectory) / "MidiLearn").string();
+    (void)midiLearnLibrary_.scanDirectories(workingMl, factoryDir, true);
+}
+
 void McxAudioProcessor::updateSystemSettings(const McxSystemSettings& next) {
     settings_ = next;
     settings_.maxPolyphony = std::clamp(settings_.maxPolyphony, 8, 64);
     settings_.masterTuneHz = std::clamp(settings_.masterTuneHz, 415.0f, 466.0f);
     settings_.standaloneBpm = std::clamp(settings_.standaloneBpm, 40.0f, 240.0f);
     if (!settings_.workingDirectory.empty()) { McxSystemSettings::ensureWorkingDirScaffold(settings_.workingDirectory); libraryService_.scanWorkingDir(settings_.workingDirectory); }
+    rescanMidiLearnProfiles();
     {
         const juce::ScopedLock sl(engineMutex_);
         engine_.setMaxPolyphony(settings_.maxPolyphony);

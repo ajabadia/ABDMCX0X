@@ -26,8 +26,8 @@
 ## Cola Siguiente Priorizada (Pendientes Apuntados)
 
 1. **`Undo/Redo (Ctrl+Z / Ctrl+Y)` + `Compare (A/B)` ✅ CUMPLIDO:** `McxHistoryManager.ts` + `McxHistoryWiring.ts` cableados a `McxNavbar` (botones `↶`, `↷`, `A/B` + menú Edición + atajos `Ctrl+Z` / `Ctrl+Y` / `Ctrl+Shift+B`) y sincronización automática con `McxHostBridge` (`10/10` tests entre `8/8` `McxHistoryManager.test.ts` y `2/2` `McxHistoryWiring.test.ts`).
-2. **Autodetección MIDI Learn desde disco** (Bloque 5): perfiles JSON ya creados (`ABDMCX0X/MidiLearn/*.json`: `roland_mc303`, `boss_dr5`, `roland_tb303`, `emu_emax2`, `generic_cc`); pendiente enlazar el puente nativo JUCE (`<WorkingDir>/MidiLearn/`) y la autodetección de puerto/SysEx.
-3. **Performance Avanzada en Directo — Bloque 5**: `3a` Track/Bank Mute cuantizado al compás → `3b` Q-Links contextuales → `3c` Megamix cuantizado → `3d` Velocity Zones / Round-Robin por pad.
+2. **Autodetección MIDI Learn desde disco ✅ IMPLEMENTADO (Bloque 5):** `McxMidiLearnDiskLibrary.h` (`<WorkingDir>/MidiLearn/` seeding + scan + `matchPortName` + `matchHardwareProfileId`), `McxMidiLearnBridgeHelpers.h`, `PluginEditor` polling Identity Reply + `vite.config.ts` `/midilearn/index.json` + `McxMidiLearnAutoDetect.ts` + selector de perfiles en `McxMidiLearnWiring.ts` (`3/3` Vitest + `McxPhase15LivePerfTests` listo para compilación C++).
+3. **Performance Avanzada en Directo — Bloque 5:** **`3a` Track/Bank Mute cuantizado al compás ✅ IMPLEMENTADO** (`McxQuantizedMuteState.h` + `McxEngine` + SPSC + WASM/worklet + `McxQuantizedMuteController.ts` + botón `Q·BAR` y pulsación visual en `McxBankRail`/`McxMixerConsole`, `2/2` Vitest + `McxPhase15LivePerfTests`) → Siguiente: `3b` Q-Links contextuales → `3c` Megamix cuantizado → `3d` Velocity Zones / Round-Robin por pad.
 
 ---
 
@@ -267,11 +267,11 @@
   - Carga selectiva on-demand vía `RomplerBankIndex` (`McxLibraryService` indexa disco con `0` bytes PCM decodificados y carga solo las ondas del Tone/Kit elegido con GC diferido `collectUnusedWaves()`).
 
 ### Bloque 5 — Performance Avanzada, Multi-Motor, Multi-Out y Hardware vía MIDI Learn
-- [ ] **Performance en directo:** **Megamix** por parte cuantizado al compás, **Escenas / Hotcues (`1..8`)**, capas por pad (*Velocity Zones / Round-Robin*), Track/Pad Mute cuantizado y Q-Links contextuales.
+- [ ] **Performance en directo:** **Track/Pad/Bank Mute cuantizado al compás ✅ (`3a`)** (`McxQuantizedMuteState.h` + `McxQuantizedMuteController.ts` + `Q·BAR`); pendiente **Megamix** cuantizado al compás, **Q-Links contextuales** y capas por pad (*Velocity Zones / Round-Robin*).
 - [ ] **Guardado Dual DAW + Multi-Out VST3 + Nuevos Motores:** chunk referencial ligero vs bundle portable `.abdbank` con *tree-shaking*; salidas estéreo auxiliares opcionales en VST3; ampliación de motores por parte (`VA`, `FM`, `Spectral/DDSP`).
-- [ ] **Hardware Externo como Controlador de Entrada (`MIDI Learn`):**
-  - [x] **Aprendizaje N:M y Mapeo CC Runtime (`McxMidiLearnWiring.ts` — ✅ VERIFICADO):** `createMidiLearnStore`, `attachMidiLearnUI` y matriz `createMidiLearnDrawerContent` sobre parámetros de mezcla (`Part Level`, `Part Pan`, envíos `A..D`, filtro, envolvente, drive, EQ, LFOs y `Master Volume`) con persistencia (`abdmcx0x.midiLearn.v1`) y despacho WebMIDI.
-  - [ ] Autodetección desde disco (`ABDShared::HardwareMidiDetect` / `<WorkingDir>/MidiLearn/<device>.json`): ya creados y validados contra `midiLearnStore.js` los 5 perfiles JSON en `ABDMCX0X/MidiLearn/` (`roland_mc303.json`, `boss_dr5.json`, `roland_tb303.json`, `emu_emax2.json`, `generic_cc.json`); pendiente enlazar el escaneo nativo desde disco y la autodetección por puerto/SysEx.
+- [x] **Hardware Externo como Controlador de Entrada (`MIDI Learn`):**
+  - [x] **Aprendizaje N:M y Mapeo CC Runtime (`McxMidiLearnWiring.ts` — ✅ VERIFICADO):** `createMidiLearnStore`, `attachMidiLearnUI` y matriz `createMidiLearnDrawerContent` sobre parámetros de mezcla (`Part Level`, `Part Pan`, envíos `A..D`, filtro, envolvente, drive, EQ, LFOs y `Master Volume`) con persistencia (`abdmcx0x.midiLearn.v1`) y despacho WebMIDI (incl. NRPN `CC99/CC98/CC6`).
+  - [x] Autodetección desde disco (`McxMidiLearnDiskLibrary.h` / `<WorkingDir>/MidiLearn/<device>.json` + `McxMidiLearnAutoDetect.ts`): perfiles `roland_mc303`, `boss_dr5`, `roland_tb303`, `emu_emax2` y `generic_cc` escaneados en JUCE y navegador con matching por puerto MIDI y Universal Identity Reply (`F0 7E ... 06 02 ... F7`).
 
 ---
 

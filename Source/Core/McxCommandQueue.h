@@ -69,7 +69,10 @@ struct McxUiCommand
         SeqSeekBars,
         SeqReturnToZero,
         SetSeqRecordConfig,
-        SetSidechainConfig
+        SetSidechainConfig,
+        SetMuteQuantize,
+        TogglePartMuteQuantized,
+        ToggleBankMuteQuantized
     };
 
     Type type { Type::AllNotesOff };

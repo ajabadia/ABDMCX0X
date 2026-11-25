@@ -12,6 +12,7 @@
 #include "../Core/McxBankManagerBridge.h"
 #include "../Core/McxCommandQueue.h"
 #include "../Core/McxLibraryService.h"
+#include "../Core/McxMidiLearnDiskLibrary.h"
 #include "../Core/McxMultiBankManager.h"
 #include "../Core/McxSystemSettings.h"
 #include "../State/ParameterRegistry.gen.h"
@@ -81,6 +82,9 @@ public:
     [[nodiscard]] McxNativeMidiRouter& nativeMidiRouter() noexcept { return nativeMidiRouter_; }
     void setPartMidiDevice(int partIdx, bool isOutput, int portIndex, const std::string& deviceName);
     [[nodiscard]] McxLibraryService& libraryService() noexcept { return libraryService_; }
+    [[nodiscard]] McxMidiLearnDiskLibrary& midiLearnLibrary() noexcept { return midiLearnLibrary_; }
+    [[nodiscard]] const McxMidiLearnDiskLibrary& midiLearnLibrary() const noexcept { return midiLearnLibrary_; }
+    void rescanMidiLearnProfiles();
     [[nodiscard]] const juce::CriticalSection& engineLock() const noexcept { return engineMutex_; }
     /** @brief Drains queued UI commands into the engine; caller MUST hold engineLock(). */
     void flushPendingUiCommandsLocked() noexcept;
@@ -110,6 +114,7 @@ private:
     McxNativeMidiRouter nativeMidiRouter_;
     McxMultiBankManager multiBankManager_;
     McxLibraryService libraryService_{};
+    McxMidiLearnDiskLibrary midiLearnLibrary_{};
     McxSystemSettings settings_{};
     McxCommandQueue<1024> uiCommandQueue_;
     std::atomic<std::uint64_t> pendingEngineStateMask_{0ull};

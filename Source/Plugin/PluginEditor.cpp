@@ -4,6 +4,7 @@
 #include "McxSongBridgeHelpers.h"
 #include "McxRackBridgeHelpers.h"
 #include "McxExportBridgeHelpers.h"
+#include "McxMidiLearnBridgeHelpers.h"
 #include "McxSessionStateBuilder.h"
 #include "McxEditorWebViewHelpers.h"
 
@@ -73,6 +74,14 @@ void McxAudioProcessorEditor::timerCallback() {
         gcTickCounter_ = 0;
         (void)processor_.collectUnusedWaves();
     }
+    const auto hwId = processor_.hardwareBridge().getProfile().id;
+    if (!hwId.empty() && hwId != lastDetectedHwProfileId_) {
+        lastDetectedHwProfileId_ = hwId;
+        if (const auto* prof = processor_.midiLearnLibrary().matchHardwareProfileId(hwId)) {
+            webComponent_->emitEventIfBrowserIsVisible(
+                "onNativeTelemetry", buildMidiLearnAutoDetectPayload(*prof, "identity_reply", hwId));
+        }
+    }
     webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildTelemetryPayload(snap));
 }
 
@@ -110,6 +119,7 @@ void McxAudioProcessorEditor::handleJsEvent(const juce::var& msg) {
         webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildSongAndScenesStatePayload(processor_.engine()));
         webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildSessionStatePayload(processor_.engine()));
         webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildLibraryCatalogPayload(processor_.libraryService()));
+        webComponent_->emitEventIfBrowserIsVisible("onNativeTelemetry", buildMidiLearnProfilesPayload(processor_.midiLearnLibrary()));
         return;
     }
     if (handleSequencerJsEvent(processor_, type, *obj)) {
@@ -122,6 +132,9 @@ void McxAudioProcessorEditor::handleJsEvent(const juce::var& msg) {
         return;
     }
     if (handleRackJsEvent(processor_, type, *obj)) {
+        return;
+    }
+    if (handleMidiLearnJsEvent(processor_, webComponent_.get(), type, *obj)) {
         return;
     }
     if (handleExportJsEvent(processor_, webComponent_.get(), exportChooser_, type, *obj)) {

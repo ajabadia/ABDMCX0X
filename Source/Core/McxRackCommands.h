@@ -130,6 +130,15 @@ inline void executeRackOrSystemCommand(const Cmd& cmd,
             engine.setSidechainConfig(cfg);
             break;
         }
+        case Type::SetMuteQuantize:
+            engine.setMuteQuantizeToBar(cmd.argU8 != 0);
+            break;
+        case Type::TogglePartMuteQuantized:
+            engine.togglePartMuteQuantized(static_cast<int>(cmd.partIdx), cmd.argU8 != 0);
+            break;
+        case Type::ToggleBankMuteQuantized:
+            engine.toggleBankMuteQuantized(static_cast<int>(cmd.argU8), cmd.argU8b != 0);
+            break;
         default:
             break;
     }

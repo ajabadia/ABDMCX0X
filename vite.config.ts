@@ -9,6 +9,7 @@ const sharedRoot = path.resolve(__dirname, '..', 'ABDShared');
 const sharedAssetsRoot = path.resolve(sharedRoot, 'Assets');
 const sharedAssetsDir = path.resolve(sharedAssetsRoot, 'assets');
 const banksPublicDir = path.resolve(__dirname, 'WebUI', 'public', 'banks');
+const midiLearnDir = path.resolve(__dirname, 'MidiLearn');
 const FX_MODELS = [
   're201', 'zita', 'bbd_chorus', 'fair_comp', 'midas_eq', 'mood_filter', 'flanger', 'saturation', 'stereo_delay',
   'generic', 'vocoder_svc350', 'dimension_d', 'plate_emt140', 'lexicon_224', 'leslie_rotary', 'solina_ensemble',
@@ -64,6 +65,19 @@ function buildDynamicBanksIndex(banksDir: string) {
   });
 }
 
+function buildMidiLearnIndex(dir: string) {
+  if (!fs.existsSync(dir)) return { profiles: [] };
+  const profiles = fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.json')).sort().flatMap((fn) => {
+    try {
+      const p = JSON.parse(fs.readFileSync(path.join(dir, fn), 'utf8'));
+      if (p?.schema !== 'abd.midiLearn.v1' || !Array.isArray(p?.mappings)) return [];
+      const dev = String(p.device || fn.replace(/\.json$/i, ''));
+      return [{ device: dev, displayName: String(p.displayName || dev), portMatchHints: Array.isArray(p.portMatchHints) ? p.portMatchHints : [], mappingCount: p.mappings.length, source: 'factory', profile: p }];
+    } catch { return []; }
+  });
+  return { profiles };
+}
+
 export default defineConfig({
   root: path.resolve(__dirname, 'WebUI'),
   base: './',
@@ -74,6 +88,10 @@ export default defineConfig({
         server.middlewares.use('/banks/index.json', (_req, res) => {
           res.setHeader('Content-Type', 'application/json; charset=utf-8');
           res.end(JSON.stringify(buildDynamicBanksIndex(banksPublicDir), null, 2));
+        });
+        server.middlewares.use('/midilearn/index.json', (_req, res) => {
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(JSON.stringify(buildMidiLearnIndex(midiLearnDir), null, 2));
         });
         server.middlewares.use('/assets', (req, res, next) => {
           const rel = decodeURIComponent((req.url || '/').split('?')[0]).replace(/^\/+/, '');
@@ -118,6 +136,9 @@ export default defineConfig({
         const distBanksIdx = path.resolve(__dirname, 'WebUI', 'dist', 'banks', 'index.json');
         fs.mkdirSync(path.dirname(distBanksIdx), { recursive: true });
         fs.writeFileSync(distBanksIdx, JSON.stringify(buildDynamicBanksIndex(banksPublicDir), null, 2));
+        const distMlIdx = path.resolve(__dirname, 'WebUI', 'dist', 'midilearn', 'index.json');
+        fs.mkdirSync(path.dirname(distMlIdx), { recursive: true });
+        fs.writeFileSync(distMlIdx, JSON.stringify(buildMidiLearnIndex(midiLearnDir), null, 2));
         const srcWasmDir = path.resolve(__dirname, 'WebUI', 'src', 'wasm');
         if (!fs.existsSync(srcWasmDir)) return;
         const targets = [

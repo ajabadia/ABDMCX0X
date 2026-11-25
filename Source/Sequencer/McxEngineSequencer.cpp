@@ -76,7 +76,15 @@ bool seqOnBarBoundary(void* ctx, std::int32_t sampleOffset) noexcept
         return false;
     }
     if (act.applied)
+    {
+        eng->songAndScenes().quantizedMute().clearQueued();
         eng->applySceneStateNow(act.muteMask, act.transposeSemitones);
+        eng->songAndScenes().quantizedMute().recordApplied(eng->bankLayout().bankMuteMask);
+    }
+    else
+    {
+        eng->flushQueuedMutesNow();
+    }
     return true;
 }
 
@@ -179,6 +187,71 @@ void McxEngine::jumpSongBlock(int blockIndex, bool immediate) noexcept
     if (act.applied) applySceneStateNow(act.muteMask, act.transposeSemitones);
 }
 
+void McxEngine::setMuteQuantizeToBar(bool enabled) noexcept
+{
+    if (!songAndScenes_) return;
+    songAndScenes_->quantizedMute().setQuantizeEnabled(enabled);
+    if (!enabled) flushQueuedMutesNow();
+}
+
+void McxEngine::togglePartMuteQuantized(int partIdx, bool forceImmediate) noexcept
+{
+    if (partIdx < 0 || partIdx >= kNumParts || !songAndScenes_) return;
+    auto& qm = songAndScenes_->quantizedMute();
+    if (!qm.isQuantizeEnabled() || forceImmediate || !isSequencerRunning())
+    {
+        auto& p = parts_[static_cast<std::size_t>(partIdx)];
+        p.mute = !p.mute;
+        if (p.mute) p.solo = false;
+        qm.clearPartBit(partIdx);
+        songAndScenes_->recordAppliedState(captureCurrentMuteMask(), transposer_.getTransposeSemitones());
+        qm.recordApplied(bankLayout_.bankMuteMask);
+        return;
+    }
+    (void)qm.queuePartToggle(partIdx);
+}
+
+void McxEngine::toggleBankMuteQuantized(int bankIdx, bool forceImmediate) noexcept
+{
+    if (bankIdx < 0 || bankIdx >= McxBankLayoutState::kMaxBanks || !songAndScenes_) return;
+    auto& qm = songAndScenes_->quantizedMute();
+    if (!qm.isQuantizeEnabled() || forceImmediate || !isSequencerRunning())
+    {
+        const bool nextMuted = !bankLayout_.isBankMuted(bankIdx);
+        bankLayout_.setBankMuted(bankIdx, nextMuted);
+        if (nextMuted) bankLayout_.setBankSoloed(bankIdx, false);
+        qm.clearBankBit(bankIdx);
+        songAndScenes_->recordAppliedState(captureCurrentMuteMask(), transposer_.getTransposeSemitones());
+        qm.recordApplied(bankLayout_.bankMuteMask);
+        return;
+    }
+    (void)qm.queueBankToggle(bankIdx);
+}
+
+void McxEngine::flushQueuedMutesNow() noexcept
+{
+    if (!songAndScenes_) return;
+    std::uint64_t qPart = 0ull;
+    std::uint8_t qBank = 0u;
+    if (!songAndScenes_->quantizedMute().consumePending(qPart, qBank)) return;
+    for (int i = 0; i < kNumParts; ++i)
+    {
+        if ((qPart & (1ull << static_cast<unsigned>(i))) == 0ull) continue;
+        auto& p = parts_[static_cast<std::size_t>(i)];
+        p.mute = !p.mute;
+        if (p.mute) p.solo = false;
+    }
+    for (int b = 0; b < McxBankLayoutState::kMaxBanks; ++b)
+    {
+        if ((qBank & static_cast<std::uint8_t>(1u << static_cast<unsigned>(b))) == 0u) continue;
+        const bool nextMuted = !bankLayout_.isBankMuted(b);
+        bankLayout_.setBankMuted(b, nextMuted);
+        if (nextMuted) bankLayout_.setBankSoloed(b, false);
+    }
+    songAndScenes_->recordAppliedState(captureCurrentMuteMask(), transposer_.getTransposeSemitones());
+    songAndScenes_->quantizedMute().recordApplied(bankLayout_.bankMuteMask);
+}
+
 void McxEngine::setSequencerPlaying(bool playing, bool resetToZero) noexcept
 {
     if (!sequencer_) return;
@@ -199,6 +272,7 @@ void McxEngine::setSequencerPlaying(bool playing, bool resetToZero) noexcept
         if (resetToZero)
         {
             sequencer_->stop(makeSeqCallbacks(this), 0);
+            if (songAndScenes_) songAndScenes_->quantizedMute().clearQueued();
         }
         else
         {
@@ -210,6 +284,7 @@ void McxEngine::setSequencerPlaying(bool playing, bool resetToZero) noexcept
     else if (!playing && resetToZero)
     {
         sequencer_->stop(makeSeqCallbacks(this), 0);
+        if (songAndScenes_) songAndScenes_->quantizedMute().clearQueued();
     }
 }
 

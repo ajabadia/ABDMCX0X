@@ -43,6 +43,8 @@ export interface NativeBridgeCallbacks {
   onPartPatternState?: ((part: number, patternJson: string) => void) | null;
   onExportComplete?: ((dto: McxExportCompleteDto) => void) | null;
   onWavRendered?: ((dto: McxWavRenderedDto) => void) | null;
+  onMidiLearnProfiles?: ((catalogJson: string) => void) | null;
+  onMidiLearnAutoDetect?: ((ev: { device: string; displayName: string; reason: string; portName: string; profileJson: string }) => void) | null;
 }
 
 export function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -86,6 +88,14 @@ export function routeNativeBridgeEvent(data: any, cbs: NativeBridgeCallbacks): v
       isStandalone: Boolean(data.isStandalone),
       inputs: Array.isArray(data.inputs) ? data.inputs : [],
       outputs: Array.isArray(data.outputs) ? data.outputs : [],
+    });
+  } else if (data.type === 'midiLearnProfiles') {
+    cbs.onMidiLearnProfiles?.(String(data.catalogJson ?? '{"profiles":[]}'));
+  } else if (data.type === 'midiLearnAutoDetect') {
+    cbs.onMidiLearnAutoDetect?.({
+      device: String(data.device ?? ''), displayName: String(data.displayName ?? ''),
+      reason: String(data.reason ?? ''), portName: String(data.portName ?? ''),
+      profileJson: String(data.profileJson ?? ''),
     });
   } else if (data.type === 'systemSettings') {
     cbs.onSystemSettings?.({
